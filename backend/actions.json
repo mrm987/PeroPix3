@@ -165,6 +165,52 @@
       }
     },
     {
+      "id": "remove_character",
+      "desc": "★**캐릭터 칸(`characters` 항목)을 지운다** — 칸을 비우는 것이 아니라 **없앤다.** «캐릭터를 하나로 줄여»·«두 번째 인물 빼» 가 이것이다. 남길 인물을 고치는 것과 나머지를 지우는 것은 **다른 두 일**이다: 빈 칸을 남겨 두지 말고 이것으로 지워라. ★id 는 `get_workspace` 의 `characters[].id` 다. 이름은 하나에만 걸릴 때 받는다.",
+      "args": {
+        "character": {
+          "type": "string",
+          "desc": "캐릭터 칸 — **id** (이름도 받지만 겹치면 거절한다)",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "stack_character",
+      "desc": "★**덱의 캐릭터 카드를 어느 캐릭터 칸의 스택(순차 생성 대기줄)에 얹는다.** 화면에서 카드를 칸 위에 끌어다 놓는 것과 같다 — 생성 한 장이 끝날 때마다 다음 카드로 돌아간다. «키키 다음에 미나도 번갈아» 가 이것이다. ★새 칸을 만드는 것이 아니다 — 새 칸은 `apply_card` 다.",
+      "args": {
+        "character": {
+          "type": "string",
+          "desc": "얹을 캐릭터 칸 — **id** (`get_workspace` 의 `characters[].id`)",
+          "required": true
+        },
+        "card": {
+          "type": "string",
+          "desc": "덱의 캐릭터 카드 — 이름 또는 id (`list_cards`)",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "delete_scene_card",
+      "desc": "★**씬 카드(씬 칸 묶음)를 통째로 지운다** — 그 안의 씬과 **그림도 함께 휴지통으로** 간다. 씬 하나만 지우는 것은 `delete_scene` 이다. 카드 id 는 `get_workspace` 의 `cards[].id` 다.",
+      "args": {
+        "card": {
+          "type": "string",
+          "desc": "씬 카드 — **id** (이름은 겹칠 수 있다)",
+          "required": true
+        },
+        "sceneGroup": {
+          "type": "string",
+          "desc": "어느 씬 그룹에서 — 비우면 지금 보고 있는 씬 그룹 (**id** 가 정확하다)"
+        },
+        "tab": {
+          "type": "string",
+          "desc": "어느 탭의 씬 그룹인지 — 씬 그룹을 이름으로 줄 때 함께 준다"
+        }
+      }
+    },
+    {
       "id": "create_workspace",
       "desc": "★**새 워크스페이스를 만들고 그리로 옮겨 간다.** 워크스페이스는 최상위 작업 공간이라 생성 옵션·바이브가 넘어가지 않는다 — «새 작업 시작하자» 같은 요청에서 쓴다.",
       "args": {

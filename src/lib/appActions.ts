@@ -23,6 +23,7 @@ import { useQueue } from "../store/queue";
 import { useUi } from "../store/ui";
 import { useGen } from "../store/gen";
 import { useLlm } from "../store/llm";
+import { usePrompt, thumbFromCard } from "../store/prompt";
 import { costNow, countNow } from "./costNow.ts";
 import { t } from "../i18n";
 
@@ -487,6 +488,138 @@ defineAction({
     };
   },
 });
+
+/* ── 캐릭터 칸 — 지우기·스택 (사용자 지적 2026-08-30) ─────────────────────────────
+   ★★**지우는 도구가 없어서** 조수가 「캐릭터 다섯을 하나로」를 받으면 넷을 **빈 칸으로 비우고**
+     남은 하나에 적었다 — 칸은 그대로 다섯이었다. 블록 `remove` 가 생기기 전과 같은 우회다
+     (`store/queue` 의 ★★주). 스택도 화면에서는 끌어다 놓으면 되는데 조수에게는 길이 없었다. */
+
+/** 캐릭터 칸 하나를 고른다 — id 가 먼저, 이름은 하나에만 걸릴 때 */
+function pickChar(key: string): { hit: { id: string; name: string } } | ReturnType<typeof err> {
+  const chars = usePrompt.getState().chars;
+  const byId = chars.find((c) => c.id === key);
+  if (byId) return { hit: byId };
+  const same = chars.filter((c) => c.name === key);
+  if (same.length > 1)
+    return err("ambiguous", `「${key}」 이름의 캐릭터 칸이 ${same.length}개입니다. id 로 골라 주세요.`, {
+      what: "character", given: key, candidates: same.map((c) => `${c.id}: ${c.name}`),
+    });
+  if (!same.length)
+    return err("not_found", `그런 캐릭터 칸이 없습니다: ${key}`, {
+      what: "character", given: key, candidates: nearBy(key, chars.map((c) => c.name)),
+    });
+  return { hit: same[0] };
+}
+
+defineAction({
+  id: "remove_character",
+  title: "캐릭터 칸을 지웁니다",
+  desc: "★**캐릭터 칸(`characters` 항목)을 지운다** — 칸을 비우는 것이 아니라 **없앤다.** "
+    + "«캐릭터를 하나로 줄여»·«두 번째 인물 빼» 가 이것이다. 남길 인물을 고치는 것과 나머지를 "
+    + "지우는 것은 **다른 두 일**이다: 빈 칸을 남겨 두지 말고 이것으로 지워라. "
+    + "★id 는 `get_workspace` 의 `characters[].id` 다. 이름은 하나에만 걸릴 때 받는다.",
+  args: {
+    character: { type: "string", desc: "캐릭터 칸 — **id** (이름도 받지만 겹치면 거절한다)", required: true },
+  },
+  confirm: "ask",
+  preview: (a) => {
+    const f = pickChar(String(a.character ?? "").trim());
+    return "error" in f ? f.error.message : `캐릭터 칸 「${f.hit.name}」 이 사라집니다 (프롬프트·UC·스택 포함).`;
+  },
+  run: async (a) => {
+    const f = pickChar(String(a.character ?? "").trim());
+    if ("error" in f) return f;
+    usePrompt.getState().removeChar(f.hit.id);
+    return {
+      ok: true, did: `캐릭터 칸 「${f.hit.name}」 을 지움`,
+      at: { kind: "prompt", workspace: useWs.getState().current ?? undefined },
+      undoable: false,
+      why: "지운 캐릭터 칸은 되돌리기로 못 돌아옵니다. 필요하면 카드에서 다시 꽂습니다 (apply_card).",
+    };
+  },
+});
+
+defineAction({
+  id: "stack_character",
+  title: "캐릭터 카드를 스택에 얹습니다",
+  desc: "★**덱의 캐릭터 카드를 어느 캐릭터 칸의 스택(순차 생성 대기줄)에 얹는다.** "
+    + "화면에서 카드를 칸 위에 끌어다 놓는 것과 같다 — 생성 한 장이 끝날 때마다 다음 카드로 "
+    + "돌아간다. «키키 다음에 미나도 번갈아» 가 이것이다. "
+    + "★새 칸을 만드는 것이 아니다 — 새 칸은 `apply_card` 다.",
+  args: {
+    character: { type: "string", desc: "얹을 캐릭터 칸 — **id** (`get_workspace` 의 `characters[].id`)", required: true },
+    card: { type: "string", desc: "덱의 캐릭터 카드 — 이름 또는 id (`list_cards`)", required: true },
+  },
+  confirm: "none",
+  run: async (a) => {
+    const f = pickChar(String(a.character ?? "").trim());
+    if ("error" in f) return f;
+    const { useCards } = await import("../store/cards");
+    const list = useCards.getState().characters as
+      { id: string; name: string; color: [string, string]; thumb?: unknown }[];
+    const key = String(a.card ?? "").trim();
+    const same = list.filter((c) => c.name === key);
+    if (!list.some((c) => c.id === key) && same.length > 1)
+      return err("ambiguous", `「${key}」 이름의 카드가 여럿입니다. id 로 골라 주세요.`, {
+        what: "characters", given: key, candidates: same.map((c) => `${c.name}#${c.id}`),
+      });
+    const card = list.find((c) => c.id === key) ?? same[0];
+    if (!card)
+      return err("not_found", `그런 캐릭터 카드가 없습니다: ${key}`, {
+        what: "characters", given: key, candidates: nearBy(key, list.map((c) => c.name)),
+      });
+    usePrompt.getState().stackChar(f.hit.id, { ref: card.id, name: card.name, color: card.color, thumb: thumbFromCard(card.thumb) });
+    return {
+      ok: true, did: `캐릭터 칸 「${f.hit.name}」 의 스택에 「${card.name}」 을 얹음`,
+      at: { kind: "prompt", workspace: useWs.getState().current ?? undefined },
+    };
+  },
+});
+
+/* ── 씬 카드 지우기 (사용자 지적 2026-08-30: 씬 칸은 지워도 카드는 못 지웠다) ────── */
+defineAction({
+  id: "delete_scene_card",
+  title: "씬 카드를 지웁니다",
+  desc: "★**씬 카드(씬 칸 묶음)를 통째로 지운다** — 그 안의 씬과 **그림도 함께 휴지통으로** 간다. "
+    + "씬 하나만 지우는 것은 `delete_scene` 이다. 카드 id 는 `get_workspace` 의 `cards[].id` 다.",
+  args: {
+    card: { type: "string", desc: "씬 카드 — **id** (이름은 겹칠 수 있다)", required: true },
+    sceneGroup: { type: "string", desc: "어느 씬 그룹에서 — 비우면 지금 보고 있는 씬 그룹 (**id** 가 정확하다)" },
+    tab: { type: "string", desc: "어느 탭의 씬 그룹인지 — 씬 그룹을 이름으로 줄 때 함께 준다" },
+  },
+  confirm: "hard",
+  preview: (a) => {
+    const f = pickSceneCard(a);
+    return "error" in f ? f.error.message : previewRemove(f.target);
+  },
+  run: async (a) => {
+    const f = pickSceneCard(a);
+    return "error" in f ? f : doRemove(f.target);
+  },
+});
+
+/** 씬 카드를 고른다 — 씬 그룹을 안 주면 지금 보고 있는 것에서 */
+function pickSceneCard(a: Record<string, any>): { target: DelTarget } | ReturnType<typeof err> {
+  const ws = useWs.getState();
+  const want = String(a.sceneGroup ?? "").trim();
+  const found = want ? findSet(want, String(a.tab ?? "")) : { hit: ws.activeSceneGroup(), miss: null };
+  const set = found.hit;
+  if (!set || set.kind !== "sceneGroup")
+    return found.miss ?? err("not_found", "열려 있는 씬 그룹이 없습니다.", { retry: "never" });
+  const key = String(a.card ?? "").trim();
+  const byId = set.cards.find((k) => k.id === key);
+  const same = set.cards.filter((k) => k.name === key);
+  if (!byId && same.length > 1)
+    return err("ambiguous", `「${key}」 이름의 씬 카드가 ${same.length}개입니다. id 로 골라 주세요.`, {
+      what: "sceneCard", given: key, candidates: same.map((k) => `${k.id}: ${k.name} (씬 ${k.cells.length})`),
+    });
+  const card = byId ?? same[0];
+  if (!card)
+    return err("not_found", `그런 씬 카드가 없습니다: ${key}`, {
+      what: "sceneCard", given: key, candidates: nearBy(key, set.cards.map((k) => k.name)),
+    });
+  return { target: { kind: "sceneCard", groupId: set.id, cardId: card.id } };
+}
 
 defineAction({
   id: "create_workspace",

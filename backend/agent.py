@@ -1423,6 +1423,11 @@ Principles:
   find such tags sitting in a character entry, that is where a fix goes wrong later - move
   them to `base` when you are editing that entry anyway, and say so.
   (User rule 2026-08-30.)
+- ★★**"Fewer characters" means remove the entries, not empty them.** `remove_character`
+  deletes a `characters` entry; leaving four blank entries behind and writing into the fifth
+  is not "one character" - the picture still has five slots. Same for scene cards:
+  `delete_scene_card` removes a whole card, `delete_scene` one scene. To queue a second
+  card on the same entry use `stack_character`. (User rule 2026-08-30.)
 - ★★**Always end a task with a short report of what you did** - which blocks or cards changed,
   in one or two lines - even when every tool call succeeded and there is nothing to ask.
   A turn that ends in silence after tool calls looks like it was cut off, and the user cannot
