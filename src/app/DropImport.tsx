@@ -124,8 +124,12 @@ function Sheet({
 }) {
   const t = useI18n((s) => s.t);
   const [busy, setBusy] = useState(false);
-  /** 무엇을 가져올까 — 공홈과 같은 갈래 (`ImportPicks`) */
-  const [pick, setPick] = useState<MetaPick>(PICK_DROP);
+  /** 무엇을 가져올까 — 공홈과 같은 갈래 (`ImportPicks`).
+   *  ★★**설정에 남는다** (사용자 지시 2026-08-30: 체크한 것을 기억할 것). 옛 저장본에는
+   *    `model` 이 없을 수 있어 기본값 위에 얹어 읽는다. */
+  const saved = useUi((u) => u.importPick);
+  const pick: MetaPick = { ...PICK_DROP, ...saved };
+  const setPick = useUi((u) => u.setImportPick);
   const vibeFile = read.kind === "vibefile" ? read.vibe : null;
   const m = read.kind === "image" ? read.meta : null;
   const name = read.name;
@@ -456,6 +460,8 @@ function ImportPicks({ pick, onPick }: { pick: MetaPick; onPick: (p: MetaPick) =
   };
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+      {/* ★모델이 **맨 앞**이다 — 가장 먼저 적용된다 (`lib/metaApply` 의 `MetaPick` ★★주) */}
+      <Row k="model" label={t("drop.pickModel")} />
       <Row k="prompt" label={t("drop.pickPrompt")} />
       <Row k="uc" label={t("drop.pickUc")} />
       <Row k="characters" label={t("drop.pickChars")} />

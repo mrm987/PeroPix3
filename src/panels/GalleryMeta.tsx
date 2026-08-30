@@ -13,7 +13,7 @@ import { useSceneFocus } from "../store/sceneFocus";
 import { useWs } from "../store/workspace";
 import { api } from "../lib/backend";
 import { toast } from "../store/toast";
-import { metaParams } from "../lib/metaApply";
+import { metaParams, PICK_ALL, type MetaPick } from "../lib/metaApply";
 
 /** 그림 정보 — 우 패널. 고른 **한 장**의 메타데이터를 보여주고, 프롬프트로 되돌린다.
  *
@@ -135,26 +135,8 @@ export async function cloneMetaToNewTab(m: ImageMeta, file: string) {
  *  ★`append` 는 **캐릭터에만** 걸린다 — 지금 있는 인물 뒤에 덧붙인다(끄면 갈아 끼운다).
  *    프롬프트·UC 는 덧붙일 자리가 없다 (한 덩이라 합치면 무엇이 원래 것인지 사라진다).
  *  ★고르지 않은 것은 **손대지 않는다.** 「없는 값을 기본값으로 되돌리지 않는다」와 같은 규칙이다. */
-export type MetaPick = {
-  prompt: boolean;
-  uc: boolean;
-  characters: boolean;
-  append: boolean;
-  settings: boolean;
-  seed: boolean;
-};
-
-/** 「전부」 — 예전 `applyMeta(m, "all")` 과 같은 뜻이다 (갤러리의 불러오기·복제가 쓴다) */
-export const PICK_ALL: MetaPick = {
-  prompt: true, uc: true, characters: true, append: false, settings: true, seed: true,
-};
-
-/** 드롭 시트의 **처음 상태** — 공홈과 같다 (프롬프트·캐릭터만 켜져 있다).
- *  ★설정·시드가 꺼져 있는 까닭: 남의 그림을 가져올 때 대개 원하는 것은 **글**이고,
- *    해상도·스텝·시드까지 갈아 끼우면 잡아 둔 작업 조건이 말없이 뒤집힌다. */
-export const PICK_DROP: MetaPick = {
-  prompt: true, uc: false, characters: true, append: false, settings: false, seed: false,
-};
+/** 고르는 항목·기본값은 `lib/metaApply` 에 있다 (설정 스토어가 저장한다) — 여기서는 다시 내보낼 뿐 */
+export { PICK_ALL, PICK_DROP, type MetaPick } from "../lib/metaApply";
 
 export function applyMetaParams(m: ImageMeta, seed = true) {
   const g = useGen.getState();
@@ -164,7 +146,9 @@ export function applyMetaParams(m: ImageMeta, seed = true) {
   //   한꺼번에 바뀌어서, 그때마다 화면이 움직이면 무엇이 바뀌었는지 오히려 못 본다.
   useUi.getState().reveal("left", "params", false);
   useUi.getState().reveal("left", "size", false);
-  useGen.setState({ params: { ...g.params, ...metaParams(m) } });
+  // ★★**모델이 먼저다** (사용자 지시 2026-08-30) — 나머지 값은 그 모델의 규격 위에 얹는다
+  if (m.nai_model) g.set("model", m.nai_model);
+  useGen.setState({ params: { ...useGen.getState().params, ...metaParams(m) } });
   if (m.width !== undefined) g.set("width", m.width);
   if (m.height !== undefined) g.set("height", m.height);
   /* ★시드는 **따로 고를 수 있다** (`MetaPick.seed`, 2026-08-25) — 설정은 가져오되 시드는
@@ -283,6 +267,11 @@ export function applyMeta(m: ImageMeta, what: "prompt" | "all" | MetaPick = "all
 
 function applyMetaInner(m: ImageMeta, pick: MetaPick) {
   const p = usePrompt.getState();
+  /* ★★**모델부터 바꾼다** (사용자 지시 2026-08-30: 생성한 모델로 일단 변경한 뒤 데이터를 덮을 것).
+     모델마다 규격이 달라서(캐릭터 상한 6/32 · 자유 좌표 · 퀄리티 프리셋 · 바이브 유무) 옛 모델
+     위에 새 모델의 프롬프트·캐릭터를 얹으면 상한에 걸려 꺼지거나 없는 스위치가 남는다.
+     「생성 설정」을 안 골라도 모델은 이 체크 하나로 따로 간다. */
+  if (pick.model && m.nai_model) useGen.getState().set("model", m.nai_model);
 
   const block = (label: string, body?: string) =>
     /* ★★`src` 를 함께 담는다 — 그 그림이 실제로 쓴 글자다. 칩을 안 건드리면 다시 뽑을 때

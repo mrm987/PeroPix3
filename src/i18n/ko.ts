@@ -378,6 +378,7 @@ export const ko: Dict = {
     onlyOne: "한 번에 한 장만 받습니다. 첫 장을 열었습니다.",
     vibeCached: "인코딩이 들어 있어 Anlas가 안 나갑니다",
     vibeRaw: "인코딩이 없어 생성할 때 굽습니다 (바이브당 2 Anlas)",
+    pickModel: "모델 (먼저 바꾼 뒤 나머지를 덮습니다)",
     pickPrompt: "프롬프트",
     pickUc: "Undesired Content",
     pickChars: "캐릭터",

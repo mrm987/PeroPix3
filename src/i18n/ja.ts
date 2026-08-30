@@ -366,6 +366,7 @@ export const ja: Dict = {
     onlyOne: "一度に1枚だけ受け取ります。最初の1枚を開きました。",
     vibeCached: "エンコードが入っているので Anlas はかかりません",
     vibeRaw: "エンコードがないので生成時に焼きます (バイブ1枚につき2 Anlas)",
+    pickModel: "モデル（先に切り替えてから残りを上書き）",
     pickPrompt: "プロンプト",
     pickUc: "Undesired Content",
     pickChars: "キャラクター",

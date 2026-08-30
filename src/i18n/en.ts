@@ -368,6 +368,7 @@ export const en = {
     onlyOne: "Only one file at a time. Opened the first one.",
     vibeCached: "The encoding is included, so no Anlas is spent",
     vibeRaw: "No encoding yet; it is encoded on generate (2 Anlas per vibe)",
+    pickModel: "Model (switched first, then the rest)",
     pickPrompt: "Prompt",
     pickUc: "Undesired Content",
     pickChars: "Characters",

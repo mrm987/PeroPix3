@@ -16,6 +16,35 @@ import type { GenParams } from "../store/gen";
  *    갤러리는 그 그림을 재현하려고 시드까지 되살리지만, 강화는 v2 와 같이 **화면의 시드**로
  *    다시 그린다 (`index.html:24476`: 원본 시드 그대로면 같은 그림이 나와 강화의 뜻이 없다).
  *    해상도도 강화에서는 원본 크기 × 배율이라 메타데이터의 값이 아니다. */
+/** 가져올 때 **무엇을** 가져오나 — 드롭 시트의 체크 여섯 (공홈과 같은 갈래) + 모델.
+ *
+ *  ★★**`model` 이 맨 앞**이다 (사용자 지시 2026-08-30: 생성한 모델로 먼저 바꾼 뒤 나머지를
+ *    덮어라). 모델마다 규격이 달라(캐릭터 상한 6/32 · 자유 좌표 · 퀄리티 프리셋 · 바이브 유무)
+ *    옛 모델 위에 새 모델의 값을 얹으면 상한에 걸려 꺼지거나 없는 스위치가 남는다.
+ *  ★체크 상태는 설정에 남는다 (`useUi.importPick`, 사용자 지시 2026-08-30) — 시트를 열 때마다
+ *    같은 것을 다시 고르지 않는다. */
+export type MetaPick = {
+  model: boolean;
+  prompt: boolean;
+  uc: boolean;
+  characters: boolean;
+  append: boolean;
+  settings: boolean;
+  seed: boolean;
+};
+
+/** 「전부」 — 예전 `applyMeta(m, "all")` 과 같은 뜻이다 (갤러리의 불러오기·복제가 쓴다) */
+export const PICK_ALL: MetaPick = {
+  model: true, prompt: true, uc: true, characters: true, append: false, settings: true, seed: true,
+};
+
+/** 드롭 시트의 **처음 상태** — 공홈과 같다 (프롬프트·캐릭터만 켜져 있다) + 모델.
+ *  ★설정·시드가 꺼져 있는 까닭: 남의 그림을 가져올 때 대개 원하는 것은 **글**이고,
+ *    해상도·스텝·시드까지 갈아 끼우면 잡아 둔 작업 조건이 말없이 뒤집힌다. */
+export const PICK_DROP: MetaPick = {
+  model: true, prompt: true, uc: false, characters: true, append: false, settings: false, seed: false,
+};
+
 export function metaParams(m: ImageMeta): Partial<GenParams> {
   const p: Partial<GenParams> = {};
   if (m.steps !== undefined) p.steps = m.steps;
