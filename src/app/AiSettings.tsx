@@ -164,7 +164,7 @@ function GuideBox() {
       <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
         <span
           data-guide-len
-          style={{ fontSize: "var(--text-2xs)", color: over ? "var(--err)" : "var(--ink-faint)" }}
+          style={{ fontSize: "var(--text-2xs)", color: over ? "var(--err-ink)" : "var(--ink-faint)" }}
         >
           {text.length} / {max}
         </span>
@@ -178,7 +178,7 @@ function GuideBox() {
           {t("settings.save")}
         </button>
       </div>
-      {err && <span style={{ fontSize: "var(--text-2xs)", color: "var(--err)" }}>{err}</span>}
+      {err && <span style={{ fontSize: "var(--text-2xs)", color: "var(--err-ink)" }}>{err}</span>}
     </Group>
   );
 }
@@ -500,7 +500,7 @@ export function AiSettings() {
               data-llm-verdict={verdict === "ok" ? "ok" : "fail"}
               style={{
                 fontSize: "var(--text-2xs)",
-                color: verdict === "ok" ? "var(--ok)" : "var(--err)",
+                color: verdict === "ok" ? "var(--ok)" : "var(--err-ink)",
                 wordBreak: "break-all",
               }}
             >

@@ -433,7 +433,7 @@ function SceneActions() {
                      툴팁이 존재해? 그럼 언어 대응이 안 되는 거 아니야?"*). 조각은 번역돼도
                      **잇는 기호와 어순은 코드에 박혀** 언어를 안 탄다. 갈래마다 열쇠 하나씩이다. */
                 data-tip={many > 1 ? tr("canvas.hideManyHint", { n: many }) : tr("canvas.hideHint")}
-                style={{ ...rowBtn, color: "var(--danger, var(--err))", minWidth: 28, justifyContent: "center" }}
+                style={{ ...rowBtn, color: "var(--err-ink)", minWidth: 28, justifyContent: "center" }}
               >
                 {Icon.trash}
               </button>

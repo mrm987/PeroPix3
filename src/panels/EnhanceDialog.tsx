@@ -435,7 +435,7 @@ export function EnhanceDialog({
             (v2 `index.html:24419-24438`. 인핸스는 언제나 한 장이라 그대로 개별 비용 기준).
             배율을 올리면 해상도가 뛰어 여기서 자주 걸린다 */}
         {cost.overLimit && (
-          <span data-enhance-over-limit style={{ fontSize: "var(--text-2xs)", color: "var(--err)" }}>
+          <span data-enhance-over-limit style={{ fontSize: "var(--text-2xs)", color: "var(--err-ink)" }}>
             {t("gen.overLimit", { a: MAX_PER_IMAGE })}
           </span>
         )}

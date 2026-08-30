@@ -277,7 +277,7 @@ function Toolbar({
           <button onClick={onMove} disabled={!dest} style={{ ...linkBtn, opacity: dest ? 1 : 0.4 }}>
             →
           </button>
-          <button onClick={onRemove} style={{ ...linkBtn, color: "var(--err)" }}>
+          <button onClick={onRemove} style={{ ...linkBtn, color: "var(--err-ink)" }}>
             {t("gallery.remove")}
           </button>
         </>
@@ -574,7 +574,7 @@ function Big({
                 data-gallery-big-del
                 onClick={() => void onDelete()}
                 data-tip={t("gallery.remove")}
-                style={{ ...iconBtn, color: "var(--err)" }}
+                style={{ ...iconBtn, color: "var(--err-ink)" }}
               >
                 {Icon.trash}
               </button>

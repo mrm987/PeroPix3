@@ -282,7 +282,7 @@ export function ConvertTool() {
                         화살표로 가리키고 글자를 밝게 둔다. */}
                     <span style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
                       {row?.error ? (
-                        <span style={{ color: "var(--err)" }}>{t("tools.rowFailed")}</span>
+                        <span style={{ color: "var(--err-ink)" }}>{t("tools.rowFailed")}</span>
                       ) : (
                         <>
                           <span style={{ color: "var(--ink-ghost)" }}>→</span>

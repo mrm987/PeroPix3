@@ -322,7 +322,7 @@ export function WorkspaceGate({ onClose }: { onClose?: () => void } = {}) {
               marginTop: "var(--sp-4)",
               flexShrink: 0,
               fontSize: "var(--text-xs)",
-              color: "var(--err)",
+              color: "var(--err-ink)",
             }}
           >
             {err}

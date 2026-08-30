@@ -237,7 +237,7 @@ export function Settings({
                         data-token-delete
                         onClick={() => void removeToken()}
                         disabled={busy}
-                        style={{ ...btn, color: "var(--err)" }}
+                        style={{ ...btn, color: "var(--err-ink)" }}
                       >
                         {t("common.delete")}
                       </button>

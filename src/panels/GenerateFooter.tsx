@@ -200,7 +200,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
           ? t("queue.stPartial")
           : `${progress.completed}/${progress.total}`;
   const stateInk =
-    phase === "failed" ? "var(--err)" : phase === "partial" ? "var(--warn)" : phase === "done" ? "var(--ok)" : "var(--accent-ink)";
+    phase === "failed" ? "var(--err-ink)" : phase === "partial" ? "var(--warn)" : phase === "done" ? "var(--ok)" : "var(--accent-ink)";
   /** 끝났으면 100% 로 채워 둔다 (v2 `progressFill.style.width = '100%'`) */
   const pct =
     phase === "done" || phase === "failed" || phase === "partial"
@@ -300,7 +300,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
             textAlign: "center",
             /* ★★`CQ` 두 글자는 좁은 레일에서 넘쳤다 (사용자 지적 2026-08-19) — 한 글자다.
                ★받은 뒤에는 흐려지고 안 눌린다. */
-            color: running && !cancelled ? "var(--err)" : "var(--ink-ghost)",
+            color: running && !cancelled ? "var(--err-ink)" : "var(--ink-ghost)",
             borderColor: running && !cancelled ? "var(--err)" : "var(--line)",
           }}
         >
@@ -336,7 +336,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
         gap: "var(--sp-2)",
       }}
     >
-      {error && <span style={{ fontSize: "var(--text-2xs)", color: "var(--err)" }}>{error}</span>}
+      {error && <span style={{ fontSize: "var(--text-2xs)", color: "var(--err-ink)" }}>{error}</span>}
 
       {/* ★★생성할 씬이 없으면 **누르기 전에** 말해 준다 (사용자 지시 2026-08-22).
           툴팁만으로는 마우스를 올려야 보이므로, 토큰 안내와 **같은 모양의 줄**로 낸다.
@@ -512,7 +512,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
       {/* ★막았으면 **왜 막혔는지**를 같은 자리에서 말한다. v2 는 눌렀을 때 토스트였는데,
           버튼이 잠긴 채 이유가 없으면 무엇을 고쳐야 하는지 알 수 없다 */}
       {blocked && (
-        <span data-gen-over-limit style={{ fontSize: "var(--text-2xs)", color: "var(--err)" }}>
+        <span data-gen-over-limit style={{ fontSize: "var(--text-2xs)", color: "var(--err-ink)" }}>
           {t("gen.overLimit", { a: MAX_PER_IMAGE })}
         </span>
       )}
@@ -558,7 +558,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
             style={{
               ...qbtn,
               padding: "0 var(--sp-2)",
-              color: cancelled ? "var(--ink-ghost)" : "var(--err)",
+              color: cancelled ? "var(--ink-ghost)" : "var(--err-ink)",
               borderColor: cancelled ? "var(--line)" : "var(--err)",
             }}
           >

@@ -984,7 +984,7 @@ function Row({ line }: { line: Line }) {
       <div
         style={{
           fontSize: "var(--text-2xs)",
-          color: "var(--err)",
+          color: "var(--err-ink)",
           background: "color-mix(in srgb, var(--err) 10%, transparent)",
           border: "1px solid color-mix(in srgb, var(--err) 35%, var(--line))",
           borderRadius: "var(--r-2)",

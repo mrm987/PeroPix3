@@ -78,6 +78,10 @@
   --minus: #a8433b;       /* 음수 가중치 */
   --ok: #2d8a52;
   --err: #a8433b;
+  /* ★글자·아이콘용 빨강 — `--accent-ink` 와 같은 사정 (사용자 지시 2026-08-30): 어두운 판 위의
+     글자로는 `--err` 가 어둡다. 다크에서 한 단 밝게. `--err`·`--minus` 는 배경·테두리·막대에만. */
+  --err-ink: #a8433b;
+  --minus-ink: #a8433b;
 
   /* ── 모드 색 (하단 네비 표시선) ── */
   --mode-single: #2f6fa8;
@@ -241,6 +245,10 @@
     --minus: #e05555;
     --ok: #22c55e;
     --err: #e05555;
+  --err-ink: #f08a8a;
+  --minus-ink: #f08a8a;
+    --err-ink: #f08a8a;
+    --minus-ink: #f08a8a;
 
     --mode-single: #7c6cf0;
     --mode-set: #22c55e;

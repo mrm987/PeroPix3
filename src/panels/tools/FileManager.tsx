@@ -259,7 +259,7 @@ export function FileManager({ onConvert }: { onConvert: () => void }) {
                 padding: "3px var(--sp-2)",
                 borderRadius: "var(--r-1)",
                 fontSize: "var(--text-2xs)",
-                color: "var(--err)",
+                color: "var(--err-ink)",
               }}
             >
               {t("common.delete")}
@@ -370,7 +370,7 @@ export function FileManager({ onConvert }: { onConvert: () => void }) {
                   {t("files.rename")}
                 </button>
               )}
-              <button data-fm-delete onClick={() => void remove()} style={{ ...box, color: "var(--err)" }}>
+              <button data-fm-delete onClick={() => void remove()} style={{ ...box, color: "var(--err-ink)" }}>
                 {t("common.delete")}
               </button>
             </>

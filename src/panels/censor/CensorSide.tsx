@@ -257,7 +257,7 @@ export function CensorSide() {
       {/* 액션은 스크롤 밖에 고정. 위의 것이 늘고 줄어도 버튼 자리는 그대로다 */}
       <div style={{ paddingTop: "var(--sp-3)", display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
         {c.error && (
-          <span data-censor-error style={{ fontSize: "var(--text-2xs)", color: "var(--err)" }}>{c.error}</span>
+          <span data-censor-error style={{ fontSize: "var(--text-2xs)", color: "var(--err-ink)" }}>{c.error}</span>
         )}
         {c.progress && (
           <span data-censor-progress style={{ fontSize: "var(--text-2xs)", color: "var(--ink-soft)" }}>
