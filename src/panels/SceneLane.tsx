@@ -1501,15 +1501,10 @@ function CardGroup(p: GroupProps) {
               {Icon.grip}
             </span>
             {/* ★★이름을 **카드 안에서** 고친다 (사용자 지시 2026-08-19) — 프롬프트 카드·덱 카드와
-                같은 방식이다 (두 번 누르거나 연필 단추, 다시 누르면 저장하고 끝난다). */}
+                같은 방식이다. ★여는 것은 **연필 단추 하나**다 (사용자 지시 2026-08-30: 편집 단추가
+                있는 이름은 더블클릭으로 안 바꾼다 — 블록 이름과 같은 규칙). */}
             {!rename.editing ? (
-              <b
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  rename.toggle();
-                }}
-                style={{ ...TYPE.cardName, cursor: "text" }}
-              >
+              <b style={{ ...TYPE.cardName }}>
                 {p.card.name}
               </b>
             ) : (
@@ -2221,10 +2216,7 @@ function NameCell({
         />
       ) : (
         <span
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            rename.toggle();
-          }}
+          /* ★씬 이름도 **편집 단추**로만 바꾼다 (사용자 지시 2026-08-30) — 더블클릭은 걷었다 */
           style={{
             flex: 1,
             minWidth: 0,

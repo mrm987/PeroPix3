@@ -561,7 +561,7 @@ export const en = {
       wheelTake: { k: "Wheel over the big image", v: "Previous / next image" },
       wheelZoom: { k: "Ctrl + wheel over the big image", v: "Zoom" },
       wheelLane: { k: "Ctrl + wheel over the scene lane", v: "Cell size" },
-      sceneRename: { k: "Double-click a name", v: "Renames a scene, scene group or tab" },
+      sceneRename: { k: "Double-click a name", v: "Renames a scene group or tab" },
       sceneTab: { k: "Tab while editing scene text", v: "Next scene (Shift for previous)" },
       dragGroup: { k: "Drag a scene group", v: "Moves it to another tab" },
       dragTab: { k: "Drag a tab", v: "Moves it to another workspace" },

@@ -580,7 +580,7 @@ export const ko: Dict = {
       wheelTake: { k: "큰 그림 위 휠", v: "앞뒤 장으로" },
       wheelZoom: { k: "큰 그림 위 Ctrl + 휠", v: "확대·축소" },
       wheelLane: { k: "씬 줄 위 Ctrl + 휠", v: "칸 크기" },
-      sceneRename: { k: "이름 더블클릭", v: "씬·씬 그룹·탭 이름을 바꿉니다" },
+      sceneRename: { k: "이름 더블클릭", v: "씬 그룹·탭 이름을 바꿉니다" },
       sceneTab: { k: "씬 글 편집 중 Tab", v: "다음 씬으로 (Shift 는 이전)" },
       dragGroup: { k: "씬 그룹 끌기", v: "다른 탭으로 옮깁니다" },
       dragTab: { k: "탭 끌기", v: "다른 워크스페이스로 옮깁니다" },
