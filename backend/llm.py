@@ -483,12 +483,19 @@ async def _openai_compat(key, model, system, messages, tools, max_tokens, url,
             }
             for t in tools
         ]
+    headers = {"Authorization": f"Bearer {key}", "content-type": "application/json"}
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
-        r = await c.post(
-            url,
-            headers={"Authorization": f"Bearer {key}", "content-type": "application/json"},
-            json=body,
-        )
+        r = await c.post(url, headers=headers, json=body)
+        # ★★공식 OpenAI 의 추론 모델은 `/v1/chat/completions` 에서 **도구와 추론을 함께 못 쓴다**
+        #   (실측 2026-08-30, gpt-5.6-terra: "Function tools with reasoning_effort are not supported
+        #   … use /v1/responses or set reasoning_effort to 'none'"). 우리는 이 창구에 효과 단계를
+        #   안 보내는데도 모델 기본값이 추론이라 400 이 났다. 그 400 에 한해 **추론을 끄고 한 번
+        #   더** 보낸다 — 모델마다 'none' 을 받는지 다르므로 미리 붙이지 않고, 거절당했을 때만
+        #   붙인다. 추론이 꺼지는 대가가 있다: 제대로는 `/v1/responses` 로 옮겨야 한다.
+        if (r.status_code == 400 and tools and "reasoning_effort" in r.text
+                and "reasoning_effort" not in body):
+            body["reasoning_effort"] = "none"
+            r = await c.post(url, headers=headers, json=body)
     if r.status_code >= 400:
         return {"error": _err(r)}
     d = r.json()
