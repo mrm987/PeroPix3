@@ -425,7 +425,7 @@ export function AiSettings() {
                 </option>
               ))}
             </select>
-            <button data-llm-models onClick={() => void loadModels()} disabled={loading} style={btn}>
+            <button data-llm-models onClick={() => void loadModels(undefined, true)} disabled={loading} style={btn}>
               {loading ? t("settings.loading") : t("settings.refresh")}
             </button>
           </Line>
@@ -482,7 +482,7 @@ export function AiSettings() {
                      넣었다가 맞는 키로 바꿔 저장해도 오류 문구가 그대로였다). 목록은 공급자·
                      「키 있음」이 바뀔 때만 다시 받는데, 틀린 키도 「있음」이라 바뀐 것이 없었다 —
                      키의 **내용**이 바뀐 것은 여기서만 안다. */
-                void saveLlm({ key: next, model }).then(() => loadModels());
+                void saveLlm({ key: next, model }).then(() => loadModels(undefined, true));
               }}
               disabled={!key.trim()}
               style={btn}

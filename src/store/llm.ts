@@ -265,8 +265,11 @@ type S = {
    *  두 곳에서 따로 받아 오면 한쪽만 갱신돼 서로 다른 목록을 보여 준다 */
   models: ModelInfo[];
   modelsErr: string;
+  /** 공급자마다 받아 둔 목록 — 칩을 바꿀 때 다시 받지 않는다 (`loadModels` 의 ★★주) */
+  modelsBy: Record<string, { models: ModelInfo[]; err: string }>;
   modelsLoading: boolean;
-  loadModels: (provider?: string) => Promise<void>;
+  /** `force` 면 받아 둔 것이 있어도 다시 받는다 (키 저장·새로고침 단추) */
+  loadModels: (provider?: string, force?: boolean) => Promise<void>;
 
   loadConfig: () => Promise<void>;
   saveConfig: (c: Partial<LlmConfig> & { key?: string }) => Promise<void>;
@@ -290,13 +293,11 @@ let specs: ToolSpec[] = [];
 let abort = false;
 const newId = () => "chat_" + Date.now().toString(36);
 
-/** 모델 목록 요청 번호 — 늦게 온 응답을 가려내는 열쇠 (`loadModels` 의 ★★주) */
-let modelsSeq = 0;
-
 export const useLlm = create<S>((set, get) => ({
   cfg: null,
   models: [],
   modelsErr: "",
+  modelsBy: {},
   modelsLoading: false,
   id: newId(),
   title: "",
@@ -324,36 +325,38 @@ export const useLlm = create<S>((set, get) => ({
     }
   },
 
-  async loadModels(provider) {
+  async loadModels(provider, force) {
     const pid = provider ?? get().cfg?.provider;
     if (!pid) return;
-    /* ★★**늦게 온 응답은 버린다** (사용자 지적 2026-08-30: OpenAI 목록을 받는 데 시간이 걸리는
-       사이에 오픈라우터로 옮기면, 끝난 시점에 그 목록이 지금 화면의 드롭다운에 떴다).
-       요청마다 번호를 붙이고, 응답이 왔을 때 **그 사이에 다른 요청이 나갔거나 공급자가
-       바뀌었으면** 아무것도 적지 않는다. 옛 목록을 먼저 비우는 것만으로는 막지 못했다. */
-    const seq = ++modelsSeq;
-    const stale = () => seq !== modelsSeq || get().cfg?.provider !== pid;
-    /* ★★**옛 목록을 먼저 비운다** (사용자 지적 2026-08-30: 키 없는 오픈라우터로 바꿨는데 목록이
-       보였다). 예전에는 응답이 올 때까지 이전 공급자의 목록이 그대로 남아, 그 사이에 그것이
-       새 공급자의 목록처럼 보였다. 공급자가 다르면 옛 목록은 어차피 쓸 수 없다. */
-    set({ models: [], modelsLoading: true, modelsErr: "" });
+    /* ★★**공급자마다 한 번만 받는다** (사용자 지시 2026-08-30: 칩을 바꿀 때마다 다시 받을 일이
+       아니다 — 앱을 켠 뒤 한 번, 키를 바꿨을 때 한 번이면 된다). 받은 것은 `modelsBy[pid]` 에
+       두고, 칩을 바꾸면 그 칸을 보여 준다. 다시 받는 것은 `force`(키 저장·새로고침 단추)뿐이다.
+       ★★늦게 온 응답은 **버리지 않고 제 칸에 넣는다** (같은 날 지적). OpenAI 목록을 받는 사이에
+         오픈라우터로 옮겨도, 도착한 OpenAI 목록은 OpenAI 칸으로 가고 화면은 지금 공급자의 칸만
+         본다 — 그래서 다시 OpenAI 로 돌아오면 기다리지 않고 그 목록이 보인다. */
+    const got = get().modelsBy[pid];
+    if (got && !force) {
+      if (get().cfg?.provider === pid) set({ models: got.models, modelsErr: got.err, modelsLoading: false });
+      return;
+    }
+    if (get().cfg?.provider === pid) set({ models: [], modelsLoading: true, modelsErr: "" });
+    let entry: { models: ModelInfo[]; err: string };
     try {
       const r = await api<{ models: ModelInfo[]; error?: string; fixed?: boolean }>(
         `/api/llm/models?provider=${encodeURIComponent(pid)}`,
       );
-      if (stale()) return;
-      set({ models: r.models ?? [], modelsErr: r.error ?? (r.fixed ? t("settings.modelFixed") : "") });
-      /* ★★고른 모델이 없으면 **목록의 첫 항목**을 고른다 (사용자 지적 2026-08-30: 힌트(gpt-5-mini)가
-         고른 것처럼 보였는데 실제로는 빈 값이라 「모델이 선택되지 않았다」가 떴다). 목록은
-         백엔드가 추천 순(최신이 앞)으로 주므로 첫 항목이 곧 기본값이다. */
-      const c = get().cfg;
-      if (c && c.provider === pid && !c.model && r.models?.length) await get().saveConfig({ model: r.models[0].id });
+      entry = { models: r.models ?? [], err: r.error ?? (r.fixed ? t("settings.modelFixed") : "") };
     } catch (e) {
-      if (stale()) return;
-      set({ models: [], modelsErr: String((e as Error).message ?? e) });
-    } finally {
-      if (!stale()) set({ modelsLoading: false });
+      entry = { models: [], err: String((e as Error).message ?? e) };
     }
+    set({ modelsBy: { ...get().modelsBy, [pid]: entry } });
+    if (get().cfg?.provider !== pid) return;   // 제 칸에는 넣었다 — 화면은 지금 공급자 것만 본다
+    set({ models: entry.models, modelsErr: entry.err, modelsLoading: false });
+    /* ★★고른 모델이 없으면 **목록의 첫 항목**을 고른다 (사용자 지적 2026-08-30: 힌트(gpt-5-mini)가
+       고른 것처럼 보였는데 실제로는 빈 값이라 「모델이 선택되지 않았다」가 떴다). 목록은
+       백엔드가 추천 순(최신이 앞)으로 주므로 첫 항목이 곧 기본값이다. */
+    const c = get().cfg;
+    if (c && c.provider === pid && !c.model && entry.models.length) await get().saveConfig({ model: entry.models[0].id });
   },
 
   async saveConfig(c) {
