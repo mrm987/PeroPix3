@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { wheelIsOver } from "../lib/wheelAt";
-import { COLOR_HEX, fmtW, weightLevel, type Tag } from "../lib/blocks";
+import { COLOR_HEX, fmtW, weightTone, type Tag } from "../lib/blocks";
 import { useUi } from "../store/ui";
 
 /** 돌리는 동안 얼려 둘 칩 폭 — **바꾸기 전에** 계산한다.
@@ -77,7 +77,7 @@ export function Chip({
 }) {
   /** 가중치 강조를 켜 두나 (설정) — 끄면 **평범한 칩**으로 보인다 (겹침 표시는 남는다) */
   const hl = useUi((u) => u.weightHl);
-  const lv = hl ? weightLevel(tag.w) : 0;
+  const tone0 = hl ? weightTone(tag.w) : { sign: 0 as const, s: 0 };
 
   /** ★★가중치는 **Alt + 휠**이다 (사용자 지시 2026-08-21).
    *
@@ -166,21 +166,19 @@ export function Chip({
     };
   }, [readOnly]);
 
-  // 강조 수준 → 배경·테두리 세기. ★부호가 색을 가른다 — 양수는 파랑, 음수는 빨강 (`weightLevel`)
-  const tone =
-    lv === 0
-      ? { bg: "var(--chip-bg)", bd: "var(--line)", fg: "var(--ink)" }
-      : lv > 0
-        ? {
-            bg: `color-mix(in srgb, var(--accent) ${lv === 2 ? 22 : 12}%, var(--chip-bg))`,
-            bd: `color-mix(in srgb, var(--accent) ${lv === 2 ? 70 : 40}%, var(--line))`,
-            fg: "var(--ink)",
-          }
-        : {
-            bg: `color-mix(in srgb, var(--minus) ${lv === -2 ? 20 : 10}%, var(--chip-bg))`,
-            bd: `color-mix(in srgb, var(--minus) ${lv === -2 ? 65 : 35}%, var(--line))`,
-            fg: "var(--ink)",
-          };
+  // ★부호가 색을 가르고, 세기는 값이 오를수록 한결같이 진해진다 (`weightTone`):
+  //   배경 6~28% · 테두리 25~80% 를 세기(0~1)로 잇는다
+  const tone = (() => {
+    if (tone0.sign === 0) return { bg: "var(--chip-bg)", bd: "var(--line)", fg: "var(--ink)" };
+    const hue = tone0.sign > 0 ? "var(--accent)" : "var(--minus)";
+    const bg = Math.round(6 + 22 * tone0.s);
+    const bd = Math.round(25 + 55 * tone0.s);
+    return {
+      bg: `color-mix(in srgb, ${hue} ${bg}%, var(--chip-bg))`,
+      bd: `color-mix(in srgb, ${hue} ${bd}%, var(--line))`,
+      fg: "var(--ink)",
+    };
+  })();
 
   return (
     <span
