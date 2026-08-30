@@ -14,7 +14,9 @@ import { useUi } from "../store/ui";
  *  @returns 지금 **덱으로 끌고 있는가** — 부르는 쪽이 패널을 강조하는 데 쓴다 */
 export function useDeckPeek(): boolean {
   // `dir: "save"` = 프롬프트 카드·씬 세트 머리를 덱으로 (덱이 받는 유일한 방향)
-  const saving = useDrag((s) => s.drag?.dir === "save");
+  // ★블록(`blocklib`)은 같은 방향이지만 **덱이 받지 않는다** — 블록 저장소·다른 카드가 받는다.
+  //   그래서 엿보기에서 뺀다 (사용자 지적 2026-08-30: 블록 손잡이를 끌면 덱 패널이 열렸다).
+  const saving = useDrag((s) => s.drag?.dir === "save" && s.drag.kind !== "blocklib");
   const peeked = useRef(false);
 
   useEffect(() => {

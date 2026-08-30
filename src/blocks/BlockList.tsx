@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { dupSet, makeBlock, parseSegs, type Block } from "../lib/blocks";
 import { useReorder } from "../lib/useReorder";
@@ -119,9 +119,32 @@ export function BlockList({
         if (me) onChange([{ ...me, tags: [...me.tags, ...b.tags] }]);
         return;
       }
-      onChange([...blocks, b]);
+      /* ★★**놓은 자리에 끼운다** (사용자 지시 2026-08-30: 다른 카드로 옮길 때도 정확한 자리를
+         고를 수 있게). 끝에 붙이던 것을, 놓는 순간의 포인터로 틈을 재서 그 자리에 넣는다 —
+         같은 목록 안의 순서 바꾸기와 같은 셈이다. */
+      const p = useDrag.getState().pos;
+      const g = crossGap(p.x, p.y);
+      const next = blocks.slice();
+      next.splice(g, 0, b);
+      onChange(next);
     },
   });
+  /** 포인터가 이 목록의 몇 번째 틈에 있나 (0..n) — 줄의 세로 중앙을 기준으로 (`useReorder.gapAt` 과 같다) */
+  const crossGap = (x: number, y: number) => {
+    const rows = box.current ? [...box.current.querySelectorAll<HTMLElement>(":scope [data-block-row]")] : [];
+    let gap = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i].getBoundingClientRect();
+      gap = y < r.top + r.height / 2 ? i : i + 1;
+      if (y < r.top + r.height) break;
+    }
+    void x;
+    return gap;
+  };
+  /** 다른 카드의 블록이 **이 목록 위에** 있는 동안의 틈 — 그 줄에만 끼움선을 긋는다.
+   *  ★목록 전체를 밝히면 「갈아 끼운다」로 읽힌다 (사용자 지적 2026-08-30) — 자리 하나만 보인다. */
+  const crossPos = useDrag((s) => (s.over === `blockmove-${libZone ?? "none"}` && s.drag?.srcZone !== libZone ? s.pos : null));
+  const crossOver = useMemo(() => (crossPos && !single ? crossGap(crossPos.x, crossPos.y) : null), [crossPos, single]);
   /** 지금 끌리는 블록이 **이 목록에서** 나왔나 — 제 자리는 받을 자리로 안 빛난다 */
   const fromMe = useDrag((s) => s.drag?.srcZone === libZone);
   const dup = dupSet(blocks);
@@ -286,8 +309,10 @@ export function BlockList({
         // ★`fill` 이면 품이 준 자리를 그대로 아래로 흘린다 (`BlockBody` 의 `fill` 주석)
         ...(fill ? { flex: 1, minHeight: 0 } : {}),
         // 저장소에서 끄는 중에만 자리를 알린다 — 1단계 점선, 2단계(지금 떼면 여기) 실선
-        // ★서랍에서 오는 것도, 다른 카드에서 오는 블록도 같은 표시다 (제 것은 빼고)
-        ...(libZone && (zone.active || (moveIn.active && !fromMe))
+        // ★다른 카드에서 오는 **블록**은 여기서 안 밝힌다 — 끼울 줄 하나에만 선을 긋는다
+        //   (`crossOver`). 목록 전체를 칠하면 갈아 끼우는 것처럼 보였다 (사용자 지적 2026-08-30).
+        //   ★씬 칸(`single`)은 블록 하나에 태그가 붙는 자리라 전처럼 통째로 밝힌다.
+        ...(libZone && (zone.active || (moveIn.active && !fromMe && single))
           ? {
               borderRadius: "var(--r-3)",
               outline: `1px ${zone.over || moveIn.over ? "solid" : "dashed"} var(--accent)`,
@@ -309,7 +334,7 @@ export function BlockList({
           style={fill ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : undefined}
         >
           {!single && (
-            <DropLine active={dragIdx != null && overIdx === i && i !== dragIdx && i !== dragIdx + 1} />
+            <DropLine active={(dragIdx != null && overIdx === i && i !== dragIdx && i !== dragIdx + 1) || crossOver === i} />
           )}
           {/* ★★표식이 곧 **놓을 자리의 목록**이다 — 칩 끌기가 화면 전체에서 이것을 훑어
               카드 너머의 줄까지 찾는다 (`useTagDrag` 의 ★주). */}
@@ -363,7 +388,7 @@ export function BlockList({
 
       {!single && (
         <>
-          <DropLine active={dragIdx != null && overIdx === blocks.length && dragIdx !== blocks.length - 1} />
+          <DropLine active={(dragIdx != null && overIdx === blocks.length && dragIdx !== blocks.length - 1) || crossOver === blocks.length} />
           <div style={{ display: "flex", gap: "var(--sp-2)", marginLeft: 16, marginTop: 6 }}>
             <button
               data-block-add
