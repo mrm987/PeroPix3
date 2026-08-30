@@ -475,9 +475,14 @@ export function AiSettings() {
             <button
               data-llm-save
               onClick={() => {
-                void saveLlm({ key: key.trim(), model });
+                const next = key.trim();
                 setKey("");
                 setVerdict("");
+                /* ★★저장이 끝나면 **모델 목록을 다시 받는다** (사용자 지적 2026-08-30: 틀린 키를
+                     넣었다가 맞는 키로 바꿔 저장해도 오류 문구가 그대로였다). 목록은 공급자·
+                     「키 있음」이 바뀔 때만 다시 받는데, 틀린 키도 「있음」이라 바뀐 것이 없었다 —
+                     키의 **내용**이 바뀐 것은 여기서만 안다. */
+                void saveLlm({ key: next, model }).then(() => loadModels());
               }}
               disabled={!key.trim()}
               style={btn}
