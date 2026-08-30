@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useI18n, LOCALES } from "../i18n";
 import { api } from "../lib/backend";
 import { useTheme } from "../store/theme";
@@ -474,6 +474,7 @@ export function Settings({
             )}
 
             {tab === "llm" && <AiSettings />}
+            {tab === "keys" && <KeyGuide />}
           </div>
         </div>
       </div>
@@ -488,7 +489,61 @@ const TABS = [
   ["general", "settings.tabGeneral"],
   ["look", "settings.look"],
   ["llm", "settings.llm"],
+  ["keys", "settings.keysTab"],
 ] as const satisfies readonly (readonly [TabId, string])[];
+
+/** **조작 안내** — 겉으로 안 드러나는 조작들 (사용자 지시 2026-08-30: 우클릭 삭제·Alt+휠 가중치처럼
+ *  화면에 힌트가 없는 것을 한 자리에). ★목록은 **코드에서 실제로 처리하는 것만** 적는다 — 없는 조작을
+ *  적으면 안내가 곧 거짓말이 된다. 조작을 더하거나 걷으면 여기도 같이 고친다.
+ *  ★설명은 i18n 에 산다 (`settings.keyGuide.*`) — 여기서는 어느 무리에 무엇이 드는지만 정한다. */
+const KEY_GROUPS: readonly (readonly [string, readonly string[]])[] = [
+  ["prompt", ["chipDelete", "chipWeight", "chipWeightBig", "chipReset", "chipDrag", "blockDrag", "blockRename", "blockText",
+              "editEnter", "editShiftEnter", "editTab", "editEsc", "editUndo"]],
+  ["scene", ["pickMulti", "pickRange", "pickDelete", "pickClear", "arrowTake", "arrowScene", "wheelTake", "wheelZoom",
+             "wheelLane", "sceneRename", "sceneTab", "dragGroup", "dragTab", "undo"]],
+  ["gallery", ["galArrows", "galStar", "galMulti", "galRename", "galClose"]],
+  ["censor", ["cenTools", "cenDelete", "cenRight", "cenArrows"]],
+  ["files", ["fileMulti"]],
+  ["window", ["titleDbl"]],
+];
+
+function KeyGuide() {
+  const t = useI18n((s) => s.t);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+      <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-dim)" }}>{t("settings.keyGuide.intro")}</span>
+      {KEY_GROUPS.map(([g, items]) => (
+        <Group key={g} label={t(`settings.keyGuide.group.${g}`)}>
+          <div style={{ display: "grid", gridTemplateColumns: "max-content 1fr", columnGap: "var(--sp-4)", rowGap: "var(--sp-2)" }}>
+            {items.map((k) => (
+              <Fragment key={k}>
+                <code
+                  data-key-guide={k}
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "var(--text-2xs)",
+                    color: "var(--ink)",
+                    background: "var(--code-bg)",
+                    border: "1px solid var(--line)",
+                    borderRadius: "var(--r-1)",
+                    padding: "1px var(--sp-2)",
+                    whiteSpace: "nowrap",
+                    alignSelf: "start",
+                  }}
+                >
+                  {t(`settings.keyGuide.${k}.k`)}
+                </code>
+                <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-soft)", lineHeight: 1.5 }}>
+                  {t(`settings.keyGuide.${k}.v`)}
+                </span>
+              </Fragment>
+            ))}
+          </div>
+        </Group>
+      ))}
+    </div>
+  );
+}
 
 /** ★키를 **문자열로 이어 만들지 않는다** — i18n 회귀 테스트가 "실재하지 않는 그룹"으로 잡고,
  *  무엇보다 키가 조용히 빠져도 아무도 모른다 */
