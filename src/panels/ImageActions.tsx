@@ -110,6 +110,10 @@ export function ImageActions({
   /** ★쿼리를 하나 붙여 받는다 — 같은 주소를 `<img>` 가 no-cors 로 먼저 캐시해 두면
    *  그 뒤의 `fetch` 가 CORS 로 막힌다 (실측으로 밟았다, 2026-08-04). */
   const asBase64 = async () => {
+    /* ★★**미저장 그림은 주소가 `data:` 다** (자동 저장을 끈 결과 — `Canvas` 가 `takeSrc` 와 같은 꼴로
+       준다). 거기에 `?b64=1` 을 붙이면 base64 가 깨져 i2i·인페인트가 실패했다 (사용자 지적
+       2026-08-30). 이미 바이트를 들고 있으니 그대로 꺼낸다 — 서버에 물을 것이 없다. */
+    if (url.startsWith("data:")) return url.split(",")[1] ?? "";
     const r = await fetch(url + (url.includes("?") ? "&" : "?") + "b64=1");
     if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
     const blob = await r.blob();
