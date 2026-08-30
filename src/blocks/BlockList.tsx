@@ -82,6 +82,10 @@ export function BlockList({
 }) {
   const t = useI18n((s) => s.t);
   const startDrag = useDragSource();
+  /** 목록의 상자 — 받는 자리 둘(`zone`·`moveIn`)·끼울 틈 재기(`crossGap`)·순서 바꾸기의 `within` 이
+   *  함께 쓴다. ★맨 위에 선언한다 — 아래 `crossOver` 가 렌더 중에 읽으므로, 뒤에 두면 다른 카드 위에
+   *  올린 순간 초기화 전 접근으로 화면이 통째로 죽었다 (사용자 지적 2026-08-30). */
+  const box = useRef<HTMLDivElement>(null);
   // ★존은 **언제나 등록한다** — 조건부 훅은 규칙 위반이고, 끄는 중이 아니면 판정도 안 돈다
   const zone = useDropZone({
     id: `blocklib-${libZone ?? "none"}`,
@@ -200,8 +204,6 @@ export function BlockList({
     onChange(n);
   };
 
-  /** 목록의 상자 — 받는 자리 셋(`zone`·`moveIn`)과 순서 바꾸기의 `within` 이 함께 쓴다 */
-  const box = useRef<HTMLDivElement>(null);
   const { register, handleProps, dragIdx, overIdx, ghost } = useReorder(blocks.length, move, { within: box });
   /** ★★손잡이 끌기 **하나**가 순서 바꾸기·서랍 넣기·다른 카드로 옮기기를 다 맡는다 (사용자 지시
    *  2026-08-30: 이름을 끌어야 저장되는 것이 비직관적이었다). 누르는 순간 두 제스처를 함께 시작한다 —
