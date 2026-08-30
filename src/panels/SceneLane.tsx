@@ -794,6 +794,9 @@ export function SceneLane() {
         >
           {t("scenes.destLabel")}
           <span
+            /* ★무엇을 고르는 자리인지 툴팁으로 (사용자 지시 2026-08-30) — 「베이스에 삽입」만으로는
+               씬 프롬프트가 어디에 끼는지 처음 보는 사람이 모른다 */
+            data-tip={t("scenes.destHint")}
             style={{
               position: "relative",
               display: "flex",
@@ -806,7 +809,8 @@ export function SceneLane() {
               /* ★★세로 모드에서는 **안쪽 여백도 축을 따라간다** (사용자 지적 2026-08-22:
                  세로 모드에서만 상자가 너무 두꺼웠다). 가로쓰기에서 좌우로 주던 여백을
                  그대로 두면 그 값이 곧 **띠의 두께**가 된다 — 글이 서는 쪽으로 옮긴다. */
-              padding: vert ? "var(--sp-2) 1px" : "1px var(--sp-2)",
+              /* ★좌우는 한 단 넓게 (사용자 지적 2026-08-30: 글이 꽉 차 보였다) */
+              padding: vert ? "var(--sp-3) 1px" : "1px var(--sp-3)",
             }}
           >
             {/* ★보이는 글은 **지금 고른 것 하나뿐**이라, 자리도 그만큼만 차지한다 */}
