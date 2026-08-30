@@ -290,6 +290,9 @@ let specs: ToolSpec[] = [];
 let abort = false;
 const newId = () => "chat_" + Date.now().toString(36);
 
+/** 모델 목록 요청 번호 — 늦게 온 응답을 가려내는 열쇠 (`loadModels` 의 ★★주) */
+let modelsSeq = 0;
+
 export const useLlm = create<S>((set, get) => ({
   cfg: null,
   models: [],
@@ -324,6 +327,12 @@ export const useLlm = create<S>((set, get) => ({
   async loadModels(provider) {
     const pid = provider ?? get().cfg?.provider;
     if (!pid) return;
+    /* ★★**늦게 온 응답은 버린다** (사용자 지적 2026-08-30: OpenAI 목록을 받는 데 시간이 걸리는
+       사이에 오픈라우터로 옮기면, 끝난 시점에 그 목록이 지금 화면의 드롭다운에 떴다).
+       요청마다 번호를 붙이고, 응답이 왔을 때 **그 사이에 다른 요청이 나갔거나 공급자가
+       바뀌었으면** 아무것도 적지 않는다. 옛 목록을 먼저 비우는 것만으로는 막지 못했다. */
+    const seq = ++modelsSeq;
+    const stale = () => seq !== modelsSeq || get().cfg?.provider !== pid;
     /* ★★**옛 목록을 먼저 비운다** (사용자 지적 2026-08-30: 키 없는 오픈라우터로 바꿨는데 목록이
        보였다). 예전에는 응답이 올 때까지 이전 공급자의 목록이 그대로 남아, 그 사이에 그것이
        새 공급자의 목록처럼 보였다. 공급자가 다르면 옛 목록은 어차피 쓸 수 없다. */
@@ -332,6 +341,7 @@ export const useLlm = create<S>((set, get) => ({
       const r = await api<{ models: ModelInfo[]; error?: string; fixed?: boolean }>(
         `/api/llm/models?provider=${encodeURIComponent(pid)}`,
       );
+      if (stale()) return;
       set({ models: r.models ?? [], modelsErr: r.error ?? (r.fixed ? t("settings.modelFixed") : "") });
       /* ★★고른 모델이 없으면 **목록의 첫 항목**을 고른다 (사용자 지적 2026-08-30: 힌트(gpt-5-mini)가
          고른 것처럼 보였는데 실제로는 빈 값이라 「모델이 선택되지 않았다」가 떴다). 목록은
@@ -339,9 +349,10 @@ export const useLlm = create<S>((set, get) => ({
       const c = get().cfg;
       if (c && c.provider === pid && !c.model && r.models?.length) await get().saveConfig({ model: r.models[0].id });
     } catch (e) {
+      if (stale()) return;
       set({ models: [], modelsErr: String((e as Error).message ?? e) });
     } finally {
-      set({ modelsLoading: false });
+      if (!stale()) set({ modelsLoading: false });
     }
   },
 
