@@ -209,7 +209,7 @@ export function AiChat({ onOpenSettings }: { onOpenSettings: () => void }) {
           data-ai-list
           onClick={() => setShowList((v) => !v)}
           data-tip={t("ai.history")}
-          style={{ color: showList ? "var(--accent)" : "var(--ink-faint)", display: "grid" }}
+          style={{ color: showList ? "var(--accent-ink)" : "var(--ink-faint)", display: "grid" }}
         >
           {Icon.folder}
         </button>
@@ -613,7 +613,7 @@ function ModelChip({ onOpenSettings }: { onOpenSettings?: () => void }) {
                 setOpen(false);
                 onOpenSettings?.();
               }}
-              style={{ justifySelf: "start", fontSize: "var(--text-2xs)", color: "var(--accent)", textDecoration: "underline" }}
+              style={{ justifySelf: "start", fontSize: "var(--text-2xs)", color: "var(--accent-ink)", textDecoration: "underline" }}
             >
               {t("settings.title")}
             </button>
@@ -804,7 +804,7 @@ function AskCard({ ask }: { ask: Ask }) {
       }}
     >
       {ask.header && (
-        <span style={{ ...TYPE.eyebrow, color: "var(--accent)" }}>
+        <span style={{ ...TYPE.eyebrow, color: "var(--accent-ink)" }}>
           {ask.header}
         </span>
       )}

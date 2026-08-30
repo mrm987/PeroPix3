@@ -195,7 +195,7 @@ export function Dropdown({
                     lineHeight: 1.4,
                     whiteSpace: "nowrap",
                     cursor: "pointer",
-                    color: on ? "var(--accent)" : "var(--ink)",
+                    color: on ? "var(--accent-ink)" : "var(--ink)",
                     background: hot ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "transparent",
                   }}
                 >

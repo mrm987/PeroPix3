@@ -304,8 +304,8 @@ export const ko: Dict = {
      *  「초과분은 무시됩니다」로 알리고 말면 그대로 생성했을 때 뒤쪽이 조용히 빠진다. */
     charLimitHit: "이 모델은 캐릭터 {max}명까지 켤 수 있습니다.",
     charLimitClamped: "이 모델은 캐릭터 {max}명까지입니다. 뒤 {n}명을 껐습니다.",
-    opusUsage: "Opus 무료 {p}%",
-    opusUsageHint: "Opus 무료 생성 잔량입니다. 다 쓰면 Anlas 를 씁니다 (V5 부터).",
+    opusUsage: "Opus {p}%",
+    opusUsageHint: "Opus 생성 잔량입니다. 다 쓰면 Anlas 를 씁니다 (V5 부터).",
     opusRefill: "시간당 {r}% 회복 · 100% 까지 {f}",
     anlasRefresh: "잔액 새로고침",
     /** 한 장 비용 상한을 넘으면 공홈처럼 생성을 막는다 */
@@ -605,7 +605,7 @@ export const ko: Dict = {
     queue: "생성",
     agentAuto: "조수의 작업을 자동 승인",
     agentAskHard: "단, 되돌릴 수 없는 것은 언제나 묻기",
-    agentApproveHint: "되돌릴 수 없는 것: 카드·씬 삭제, 그리고 Anlas 가 나가는 생성. Opus 무료 범위의 생성은 자동으로 넘어갑니다.",
+    agentApproveHint: "되돌릴 수 없는 것: 카드·씬 삭제, 그리고 Anlas 가 나가는 생성. Opus 잔량 안의 생성은 자동으로 넘어갑니다.",
     streamPreview: "그리는 중인 그림 보기",
     streamPreviewHint: "NAI 가 그리는 도중의 그림을 대기 칸에 보여 줍니다 (결과는 그대로).",
     notifyDone: "큐가 다 끝나면 알리기",

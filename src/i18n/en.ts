@@ -297,7 +297,7 @@ export const en = {
     charLimitHit: "This model allows up to {max} characters.",
     charLimitClamped: "This model allows up to {max} characters. The last {n} were turned off.",
     opusUsage: "Opus {p}%",
-    opusUsageHint: "Opus free generations remaining. When it runs out, generations cost Anlas (V5+).",
+    opusUsageHint: "Opus generation allowance remaining. When it runs out, generations cost Anlas (V5+).",
     opusRefill: "Refilling {r}%/h - full in {f}",
     anlasRefresh: "Refresh balance",
     /** Over the per image cap, so generation is blocked just like the official site */
@@ -586,7 +586,7 @@ export const en = {
     queue: "Generation",
     agentAuto: "Auto-approve assistant actions",
     agentAskHard: "But always ask for what cannot be undone",
-    agentApproveHint: "Cannot be undone: deleting cards and scenes, and generation that spends Anlas. Free Opus generation passes automatically.",
+    agentApproveHint: "Cannot be undone: deleting cards and scenes, and generation that spends Anlas. Generation within the Opus allowance passes automatically.",
     streamPreview: "Show the image as it draws",
     streamPreviewHint: "Shows NAI's in-progress frames in the waiting cell (the result is unchanged).",
     notifyDone: "Tell me when the queue finishes",

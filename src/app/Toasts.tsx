@@ -49,7 +49,7 @@ export function Toasts() {
                 background: "transparent",
                 border: "1px solid var(--accent)",
                 borderRadius: "var(--r-1)",
-                color: "var(--accent)",
+                color: "var(--accent-ink)",
                 padding: "2px var(--sp-2)",
                 fontSize: "var(--text-2xs)",
                 whiteSpace: "nowrap",

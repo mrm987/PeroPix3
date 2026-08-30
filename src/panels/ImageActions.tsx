@@ -519,7 +519,7 @@ export function ImageActions({
                 textAlign: "right",
                 cursor: "pointer",
                 textDecoration: seedHot ? "underline" : undefined,
-                color: seedHot ? "var(--accent)" : "var(--ink-faint)",
+                color: seedHot ? "var(--accent-ink)" : "var(--ink-faint)",
               }}
             >
               seed {seed}

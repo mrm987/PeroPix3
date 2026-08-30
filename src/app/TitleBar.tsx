@@ -43,7 +43,7 @@ export function TitleBar({ left, right }: { left?: ReactNode; right?: ReactNode 
       }}
     >
       <b data-tauri-drag-region style={{ fontSize: "var(--text-md)", letterSpacing: "-0.01em" }}>
-        Pero<span style={{ color: "var(--accent)" }}>Pix</span>
+        Pero<span style={{ color: "var(--accent-ink)" }}>Pix</span>
       </b>
       {/* ★버전을 여기 박아 두지 않는다 — 백엔드의 `APP_VERSION` 이 정본이다 (감사 C5).
           아직 안 붙었으면 아무것도 안 쓴다: 틀린 숫자보다 빈 자리가 낫다 */}

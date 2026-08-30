@@ -729,7 +729,7 @@ function ValueBox({
           width: 30,
           textAlign: "right",
           fontVariantNumeric: "tabular-nums",
-          color: "var(--accent)",
+          color: "var(--accent-ink)",
           cursor: "pointer",
         }}
       >

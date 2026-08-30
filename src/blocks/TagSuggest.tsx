@@ -335,9 +335,9 @@ export function useTagSuggest(
 const TYPE_COLOR: Record<string, string> = {
   artist: "var(--warn)",
   character: "var(--char-c)",
-  copyright: "var(--accent)",
+  copyright: "var(--accent-ink)",
   meta: "var(--ink-dim)",
-  [WC_TYPE]: "var(--accent)",
+  [WC_TYPE]: "var(--accent-ink)",
 };
 
 /** 글 상자의 **모습을 그대로 베낀 거울** — 자동완성이 설 자리를 재는 데 쓴다.

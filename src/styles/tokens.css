@@ -56,6 +56,11 @@
 
   /* ── 강조 ── */
   --accent: #2f6fa8;
+  /* ★★**글자·아이콘에 쓰는 강조색** (사용자 지적 2026-08-30: 드롭다운·토글의 고른 글자가 보라색이라
+     잘 안 보였다). `--accent` 는 채우기·테두리용이라 어두운 판 위의 **글자**로는 어둡다 — 다크에서는
+     한 단 밝게 띄운다. 밝은 테마는 원래 읽히므로 같은 값이다.
+     ★`color:` 에 강조색을 줄 때는 이것을 쓴다. `--accent` 는 배경·테두리·막대에만. */
+  --accent-ink: #2f6fa8;
   --accent-bg: #e3eef8;
   --accent-line: #2f6fa855;
   --accent-on: #ffffff;
@@ -221,6 +226,7 @@
     --ink-ghost: rgba(236, 236, 241, 0.3);
 
     --accent: #7c6cf0;
+    --accent-ink: #b3a8ff;
     --accent-bg: #2a2640;
     --accent-line: #7c6cf055;
     --accent-on: #ffffff;
@@ -291,6 +297,7 @@
   --ink-ghost: rgba(236, 236, 241, 0.3);
 
   --accent: #7c6cf0;
+  --accent-ink: #b3a8ff;
   --accent-bg: #2a2640;
   --accent-line: #7c6cf055;
   --accent-on: #ffffff;

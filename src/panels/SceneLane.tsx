@@ -1220,7 +1220,7 @@ function Empty({ onAdd }: { onAdd: () => void }) {
           border: "1px dashed var(--accent-line)",
           borderRadius: "var(--r-3)",
           background: "var(--accent-bg)",
-          color: "var(--accent)",
+          color: "var(--accent-ink)",
           fontSize: "var(--text-xs)",
           fontWeight: "var(--w-semi)",
         }}
@@ -1986,7 +1986,7 @@ function SceneRow(
                 placeItems: "center",
                 fontSize: "calc(11px * var(--text-scale))",
                 cursor: "pointer",
-                color: on || run ? "var(--accent)" : "var(--ink-faint)",
+                color: on || run ? "var(--accent-ink)" : "var(--ink-faint)",
                 /* ★★**그리는 중인 그림을 칸에 깐다** (사용자 지시 2026-08-26). NAI 가 흘려 준
                    중간 프레임이다 (`store/queue` 의 `steps`) — 기다리는 동안 무엇이 나오고
                    있는지가 보이고, 잘못 가고 있으면 일찍 끊을 수 있다.

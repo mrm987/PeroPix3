@@ -296,7 +296,7 @@ export const ja: Dict = {
     charLimitHit: "このモデルで有効にできるキャラクターは {max} 体までです。",
     charLimitClamped: "このモデルは {max} 体までです。末尾の {n} 体をオフにしました。",
     opusUsage: "Opus {p}%",
-    opusUsageHint: "Opus の無料生成の残量です。使い切ると Anlas を消費します（V5 以降）。",
+    opusUsageHint: "Opus の生成残量です。使い切ると Anlas を消費します（V5 以降）。",
     opusRefill: "毎時 {r}% 回復 ・ 100% まで {f}",
     anlasRefresh: "残高を再取得",
     /** 1枚あたりの上限を超えると公式サイトと同じく生成を止める */
@@ -584,7 +584,7 @@ export const ja: Dict = {
     queue: "生成",
     agentAuto: "アシスタントの作業を自動承認",
     agentAskHard: "ただし取り消せないものは必ず確認",
-    agentApproveHint: "取り消せないもの: カード・シーンの削除と、Anlas を消費する生成。Opus 無料枠の生成は自動で通ります。",
+    agentApproveHint: "取り消せないもの: カード・シーンの削除と、Anlas を消費する生成。Opus 残量内の生成は自動で通ります。",
     streamPreview: "描画中の画像を見る",
     streamPreviewHint: "NAI が描いている途中の画像を待機セルに表示します（結果は変わりません）。",
     notifyDone: "キュー完了を知らせる",

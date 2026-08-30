@@ -46,7 +46,7 @@ export function TreeRoot({
         ...rest.style,
       }}
     >
-      <span style={{ display: "grid", color: on ? "var(--accent)" : "var(--ink-faint)" }}>{Icon.folderOpen}</span>
+      <span style={{ display: "grid", color: on ? "var(--accent-ink)" : "var(--ink-faint)" }}>{Icon.folderOpen}</span>
       <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {label}
       </span>

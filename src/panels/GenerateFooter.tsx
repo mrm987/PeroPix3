@@ -200,7 +200,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
           ? t("queue.stPartial")
           : `${progress.completed}/${progress.total}`;
   const stateInk =
-    phase === "failed" ? "var(--err)" : phase === "partial" ? "var(--warn)" : phase === "done" ? "var(--ok)" : "var(--accent)";
+    phase === "failed" ? "var(--err)" : phase === "partial" ? "var(--warn)" : phase === "done" ? "var(--ok)" : "var(--accent-ink)";
   /** 끝났으면 100% 로 채워 둔다 (v2 `progressFill.style.width = '100%'`) */
   const pct =
     phase === "done" || phase === "failed" || phase === "partial"
@@ -233,7 +233,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
       style={{
         // ★막 누른 동안은 **가라앉은 액센트** — 「못 누름(회색)」과 다르게 보여야 한다
         background: firing ? "var(--accent-bg)" : off ? "var(--panel)" : "var(--accent)",
-        color: firing ? "var(--accent)" : off ? "var(--ink-faint)" : "var(--accent-on)",
+        color: firing ? "var(--accent-ink)" : off ? "var(--ink-faint)" : "var(--accent-on)",
         borderRadius: "var(--r-2)",
         padding: compact ? "var(--sp-3) 0" : "var(--sp-3)",
         fontWeight: "var(--w-semi)",
@@ -479,7 +479,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
                   whiteSpace: "nowrap",
                   borderRight: i < 2 ? "1px solid var(--line)" : undefined,
                   background: on ? "var(--accent-bg)" : "transparent",
-                  color: on ? "var(--accent)" : "var(--ink-dim)",
+                  color: on ? "var(--accent-ink)" : "var(--ink-dim)",
                   fontWeight: on ? "var(--w-semi)" : "var(--w-normal)",
                 }}
               >

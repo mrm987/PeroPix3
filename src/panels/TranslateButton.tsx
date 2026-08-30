@@ -14,7 +14,7 @@ export function TranslateButton() {
       data-on={open ? "" : undefined}
       onClick={() => setOpen(!open)}
       data-tip={t("translate.hint")}
-      style={{ color: open ? "var(--accent)" : "var(--ink-faint)", display: "grid", padding: "0 4px" }}
+      style={{ color: open ? "var(--accent-ink)" : "var(--ink-faint)", display: "grid", padding: "0 4px" }}
     >
       {Icon.globe}
     </button>

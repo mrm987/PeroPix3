@@ -214,7 +214,7 @@ export function FileManager({ onConvert }: { onConvert: () => void }) {
           >
             {opened ? Icon.chevronDown : Icon.chevronRight}
           </button>
-          <span style={{ display: "grid", color: on ? "var(--accent)" : "var(--ink-faint)" }}>
+          <span style={{ display: "grid", color: on ? "var(--accent-ink)" : "var(--ink-faint)" }}>
             {opened && node.children.length ? Icon.folderOpen : Icon.folder}
           </span>
           <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

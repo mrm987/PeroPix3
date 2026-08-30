@@ -92,7 +92,7 @@ export function UpdateStrip() {
           data-update-strip-restart
           onClick={() => void u.restart()}
           data-tip={t("update.ready")}
-          style={{ color: "var(--accent)", fontWeight: "var(--w-semi)" }}
+          style={{ color: "var(--accent-ink)", fontWeight: "var(--w-semi)" }}
         >
           {t("update.restart")}
         </button>

@@ -287,7 +287,7 @@ export function BlockLibButton() {
       data-on={open ? "" : undefined}
       onClick={() => setOpen(!open)}
       data-tip={t("lib.title")}
-      style={{ color: open ? "var(--accent)" : "var(--ink-faint)", display: "grid", padding: "0 4px" }}
+      style={{ color: open ? "var(--accent-ink)" : "var(--ink-faint)", display: "grid", padding: "0 4px" }}
     >
       {Icon.bookmark}
     </button>

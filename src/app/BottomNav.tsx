@@ -118,7 +118,7 @@ function GalleryTab({ on, onClick }: { on: boolean; onClick: () => void }) {
         padding: "0 var(--sp-7)",
         fontSize: "var(--text-md)",
         fontWeight: on ? "var(--w-semi)" : "var(--w-normal)",
-        color: zone.over ? "var(--accent)" : on ? "var(--ink)" : "var(--ink-dim)",
+        color: zone.over ? "var(--accent-ink)" : on ? "var(--ink)" : "var(--ink-dim)",
         borderRight: "1px solid var(--line-soft)",
         // ★받을 수 있을 때만 테두리를 보여 준다 — 평소에는 다른 단추와 같은 모습이다
         outline: zone.over ? "1px solid var(--accent)" : zone.active ? "1px dashed var(--line-strong)" : undefined,

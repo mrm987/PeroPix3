@@ -409,7 +409,7 @@ export function WildcardButton() {
       data-on={open ? "" : undefined}
       onClick={() => setOpen(!open)}
       data-tip={t("wc.openHint")}
-      style={{ color: open ? "var(--accent)" : "var(--ink-faint)", display: "grid", padding: "0 4px" }}
+      style={{ color: open ? "var(--accent-ink)" : "var(--ink-faint)", display: "grid", padding: "0 4px" }}
     >
       {Icon.cards}
     </button>

@@ -201,7 +201,7 @@ export function TaggerTool() {
             {empty && (
               <span
                 style={{
-                  color: over ? "var(--accent)" : "var(--ink-ghost)",
+                  color: over ? "var(--accent-ink)" : "var(--ink-ghost)",
                   display: "grid",
                 }}
               >
@@ -277,7 +277,7 @@ export function TaggerTool() {
                     color: st?.error
                       ? "var(--warn)"
                       : over
-                        ? "var(--accent)"
+                        ? "var(--accent-ink)"
                         : "var(--ink-soft)",
                   }}
                 >
@@ -341,7 +341,7 @@ function TagBlock({
           {
             label: t("tagger.charTags"),
             text: chars.join(", "),
-            accent: "var(--accent)",
+            accent: "var(--accent-ink)",
           },
         ]
       : []),
@@ -429,7 +429,7 @@ function TagBlock({
           onClick={onScores}
           style={{
             ...hbtn,
-            color: open ? "var(--accent)" : hbtn.color,
+            color: open ? "var(--accent-ink)" : hbtn.color,
             borderColor: open ? "var(--accent)" : "var(--line)",
           }}
         >
@@ -555,7 +555,7 @@ function ScorePane({ block, onClose }: { block: Block; onClose: () => void }) {
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
-                color: x.character ? "var(--accent)" : "var(--ink-soft)",
+                color: x.character ? "var(--accent-ink)" : "var(--ink-soft)",
               }}
             >
               {x.tag}

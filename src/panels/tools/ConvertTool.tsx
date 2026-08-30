@@ -221,7 +221,7 @@ export function ConvertTool() {
                     borderRadius: 1,
                     background:
                       dragIdx != null && overIdx === i && i !== dragIdx && i !== dragIdx + 1
-                        ? "var(--accent)"
+                        ? "var(--accent-ink)"
                         : "transparent",
                   }}
                 />
@@ -289,7 +289,7 @@ export function ConvertTool() {
                           <span
                             data-convert-newname
                             style={{
-                              color: row?.saved ? "var(--ok)" : "var(--accent)",
+                              color: row?.saved ? "var(--ok)" : "var(--accent-ink)",
                               fontWeight: "var(--w-semi)",
                               overflow: "hidden",
                               textOverflow: "ellipsis",

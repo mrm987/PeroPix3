@@ -212,7 +212,7 @@ function Mode({ furry, onChange }: { furry: boolean; onChange: (v: boolean) => v
         justifyContent: "center",
         borderColor: furry ? "var(--accent)" : "var(--line)",
         background: furry ? "var(--accent-bg)" : "var(--panel)",
-        color: furry ? "var(--accent)" : "var(--ink-soft)",
+        color: furry ? "var(--accent-ink)" : "var(--ink-soft)",
       }}
     >
       {furry ? Icon.paw12 : Icon.blossom12}
@@ -244,7 +244,7 @@ function Toggle({
         gap: "var(--sp-1)",
         borderColor: on ? "var(--accent)" : "var(--line)",
         background: on ? "var(--accent-bg)" : "var(--panel)",
-        color: on ? "var(--accent)" : "var(--ink-faint)",
+        color: on ? "var(--accent-ink)" : "var(--ink-faint)",
       }}
     >
       <span style={{ display: "grid", placeItems: "center", width: 12, height: 12 }}>

@@ -68,7 +68,7 @@ export function TranslatePanel() {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
-        <span style={{ color: "var(--accent)", display: "grid" }}>{Icon.globe}</span>
+        <span style={{ color: "var(--accent-ink)", display: "grid" }}>{Icon.globe}</span>
         <b style={{ fontSize: "var(--text-xs)" }}>{t("translate.title")}</b>
         <span style={{ flex: 1 }} />
         {/* 목적지 말 — 「→ 한국어」 꼴로, 그 말로 바꾼다는 뜻을 화살표가 말한다 */}
@@ -85,7 +85,7 @@ export function TranslatePanel() {
                 borderRadius: "var(--r-1)",
                 fontSize: "var(--text-2xs)",
                 border: `1px solid ${on ? "var(--accent)" : "var(--line)"}`,
-                color: on ? "var(--accent)" : "var(--ink-faint)",
+                color: on ? "var(--accent-ink)" : "var(--ink-faint)",
                 background: on ? "var(--accent-bg)" : "transparent",
               }}
             >

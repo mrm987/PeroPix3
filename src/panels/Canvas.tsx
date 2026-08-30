@@ -500,7 +500,7 @@ function ViewBtn({
              `currentColor` 로 떨어져 테두리가 안 사라진다 (실측 2026-08-23). */
         border: on ? "1px solid var(--accent)" : "1px solid transparent",
         background: on ? "var(--accent-bg)" : "transparent",
-        color: on ? "var(--accent)" : "var(--ink-dim)",
+        color: on ? "var(--accent-ink)" : "var(--ink-dim)",
       }}
     >
       {children}

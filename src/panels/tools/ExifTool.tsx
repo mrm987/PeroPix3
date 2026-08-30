@@ -140,8 +140,8 @@ export function ExifTool() {
           }}
         >
           <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-            <span style={{ color: over ? "var(--accent)" : "var(--ink-ghost)", display: "grid" }}>{Icon.images}</span>
-            <span style={{ fontSize: "var(--text-sm)", color: over ? "var(--accent)" : "var(--ink-soft)" }}>
+            <span style={{ color: over ? "var(--accent-ink)" : "var(--ink-ghost)", display: "grid" }}>{Icon.images}</span>
+            <span style={{ fontSize: "var(--text-sm)", color: over ? "var(--accent-ink)" : "var(--ink-soft)" }}>
               {t("tools.exifDrop")}
             </span>
             <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{t("tools.dropHint")}</span>
@@ -187,7 +187,7 @@ export function ExifTool() {
                 data-exif-kind={meta.kind || "unknown"}
                 style={{
                   border: "1px solid var(--accent)",
-                  color: "var(--accent)",
+                  color: "var(--accent-ink)",
                   background: "var(--accent-bg)",
                   borderRadius: "var(--r-1)",
                   padding: "1px var(--sp-2)",
