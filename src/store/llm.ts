@@ -183,7 +183,14 @@ export function linesOf(wire: Wire[]): Line[] {
             { error?: string; cancelled?: boolean; did?: string; at?: AgentAt };
           if (d?.error) {
             ok = false;
-            note = String(d.error);
+            /* ★앱 쪽 도구의 오류는 **객체**다 (`lib/actions.ActionError` — code·message·candidates).
+               `String()` 으로 찍으면 `[object Object]` 가 됐다 (사용자 지적 2026-08-30). 문구를
+               꺼내고, 후보가 있으면 뒤에 붙인다 — 조수가 고친 뒤 사용자도 무엇이 헷갈렸는지 안다. */
+            const err = d.error as unknown;
+            if (typeof err === "object" && err !== null && "message" in err) {
+              const e = err as { message: string; candidates?: string[] };
+              note = e.candidates?.length ? `${e.message} (${e.candidates.join(", ")})` : e.message;
+            } else note = String(err);
           } else if (d?.cancelled) {
             ok = false;
             note = t("ai.declined");

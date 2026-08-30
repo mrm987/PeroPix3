@@ -1414,6 +1414,20 @@ Principles:
   answers with **which tab and scene group** it touched; if that is not the tab the user is looking
   at, say so instead of reporting success. When the user says the change is not there,
   **call get_workspace again and compare** - do not restate what you believe you did.
+- ★★**A `characters` entry holds only that person** - body, hair, eyes, outfit, expression,
+  pose, what they hold. Everything that is *about the picture* rather than the person -
+  background, setting, mood, lighting, weather, camera angle, composition, framing, quality,
+  art style - belongs in `base` (the shared prompt; the user calls it the **style** section,
+  and style cards land there), **also when editing**: if the user asks for "a darker mood" or
+  "a low angle" while a character is selected, put it in `base`, not in the character. If you
+  find such tags sitting in a character entry, that is where a fix goes wrong later - move
+  them to `base` when you are editing that entry anyway, and say so.
+  (User rule 2026-08-30.)
+- ★★**Always end a task with a short report of what you did** - which blocks or cards changed,
+  in one or two lines - even when every tool call succeeded and there is nothing to ask.
+  A turn that ends in silence after tool calls looks like it was cut off, and the user cannot
+  tell whether the work finished. (User rule 2026-08-30: "가끔 아무 말 없이 끝나서 중단된 것처럼
+  보인다".)
 - **"Change X" defaults to (1)** - people usually mean what is on screen right now.
 - **When a name comes up, find where it lives first.** Look at the current scene group's `characters`
   with get_workspace; if it is not there, look in the deck with list_cards. **If it is in
