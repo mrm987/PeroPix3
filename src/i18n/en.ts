@@ -563,6 +563,7 @@ export const en = {
     guidePlaceholder: "e.g.\n- never use the thighhighs tag\n- keep replies short",
     guideHint: "Ask the assistant to remember something and it edits this. Applies to every engine. Previous versions are kept in data/.guide-bak/.",
     modelNeedKey: "Enter an API key to load models",
+    modelPick: "Choose a model",
     modelFixed: "Vertex has no model list API, so these are the verified ones.",
     loading: "Loading…",
     refresh: "Refresh",

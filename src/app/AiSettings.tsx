@@ -207,7 +207,6 @@ export function AiSettings() {
   const loading = useLlm((s) => s.modelsLoading);
   const loadModels = useLlm((s) => s.loadModels);
   const [effort, setEffort] = useState("");
-  const cur = cfg?.providers?.find((p) => p.id === cfg.provider);
   /** 지금 고른 모델의 추론 명세. 목록에 없으면(직접 입력) 단계 칸도 안 뜬다 */
   const picked = list.find((m) => m.id === model);
   const efforts = picked?.efforts ?? [];
@@ -414,7 +413,8 @@ export function AiSettings() {
               {model && !list.some((m) => m.id === model) && <option value={model}>{model}</option>}
               {!model && (
                 <option value="">
-                  {loading ? t("settings.loading") : list.length ? cur?.hint : t("settings.modelNeedKey")}
+                  {/* ★힌트 모델 이름을 여기 적지 않는다 — 고른 것처럼 보이는데 빈 값이었다 (2026-08-30) */}
+                  {loading ? t("settings.loading") : list.length ? t("settings.modelPick") : t("settings.modelNeedKey")}
                 </option>
               )}
               {list.map((m) => (

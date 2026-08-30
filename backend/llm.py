@@ -65,7 +65,7 @@ PROVIDERS: dict[str, dict] = {
         "label": "OpenAI",
         "kind": "openai",
         "url": "https://api.openai.com/v1/chat/completions",
-        "hint": "gpt-5-mini",
+        "hint": "gpt-5.6-sol",
         "list": "https://api.openai.com/v1/models",
     },
     "google": {
@@ -100,6 +100,13 @@ DEFAULT_PROVIDER = "openrouter"
 #     `safety_settings` 를 못 받는다(실측: 지원 파라미터 목록에 없음). 검열을 끄려면
 #     버텍스 공급자를 써야 하므로, 열등한 사본을 나란히 두지 않는다.
 CURATED = {
+    # ★공식 OpenAI 는 **5.6 세 모델만** (사용자 지시 2026-08-30: 그 밖은 수요가 없고 목록이 너무
+    #   길다). 차례가 곧 기본값이다 — 목록의 첫 항목을 화면이 고른다 (`store/llm.loadModels`).
+    "openai": [
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+    ],
     "openrouter": [
         "anthropic/claude-sonnet-5",
         "anthropic/claude-opus-5",
@@ -312,8 +319,8 @@ async def models(llm: dict) -> dict:
                 row["reasoningLocked"] = bool(rs.get("mandatory"))
             out.append(row)
     out.sort(key=lambda m: m["id"])
-    if pid == "openrouter":
-        pick = CURATED["openrouter"]
+    if pid in CURATED:
+        pick = CURATED[pid]
         by = {m["id"]: m for m in out}
         keep = [by[i] for i in pick if i in by]
         # ★추천 중 사라진 것이 있으면 **조용히 넘어가지 않는다** — 목록이 썩었다는 신호다

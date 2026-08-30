@@ -23,6 +23,9 @@ import type { AgentAt } from "../lib/agentAt";
 /** 공급자에 보내는 정본 모양 (앤트로픽 기준 — backend/llm.py 머리 주석) */
 type Part =
   | { type: "text"; text: string }
+  /** ★★**오류 조각** — 화면·저장에만 있고 **공급자에게는 안 나간다** (`forProvider` 가 거른다).
+   *  사용자 지시 2026-08-30: 오류가 앱을 다시 켜면 사라져 확인할 수 없었다 — 대화에 남긴다. */
+  | { type: "error"; text: string }
   | {
       type: "tool_use";
       id: string;
@@ -139,6 +142,24 @@ useI18n.subscribe((s, prev) => {
 });
 
 /** 저장된 대화(wire)를 화면 줄로 — **파생이지 별도 상태가 아니다.** */
+/** ★★오류를 **대화에 남긴다** (사용자 지시 2026-08-30: 앱을 다시 켜면 사라져 확인할 수 없었다).
+ *  ★그래도 **공급자에게는 안 보낸다** — 다음 턴에 그 글이 문맥으로 되돌아가면 또 걸린다
+ *    (`forProvider` 가 거른다). 화면과 저장(`wire`)에만 있는 조각이다. */
+function noteError(text: string) {
+  const wire: Wire[] = [
+    ...useLlm.getState().wire,
+    { role: "assistant", content: [{ type: "error", text }] },
+  ];
+  useLlm.setState({ wire, lines: linesOf(wire), error: "" });
+}
+
+/** 공급자에게 보낼 대화 — 오류 조각을 뺀다 (그것만 든 메시지는 통째로) */
+export function forProvider(wire: Wire[]): Wire[] {
+  return wire
+    .map((m) => ({ ...m, content: m.content.filter((b) => b.type !== "error") }))
+    .filter((m) => m.content.length > 0);
+}
+
 export function linesOf(wire: Wire[]): Line[] {
   const out: Line[] = [];
   const names = new Map<string, string>(); // tool_use id → 도구 이름
@@ -149,6 +170,7 @@ export function linesOf(wire: Wire[]): Line[] {
       if (b.type === "text") {
         if (b.text.trim()) out.push({ kind: m.role === "user" ? "user" : "ai", text: b.text });
       }
+      else if (b.type === "error") out.push({ kind: "error", text: b.text });
       else if (b.type === "tool_use") names.set(b.id, b.name);
       else if (b.type === "tool_result") {
         let ok = true;
@@ -308,6 +330,11 @@ export const useLlm = create<S>((set, get) => ({
         `/api/llm/models?provider=${encodeURIComponent(pid)}`,
       );
       set({ models: r.models ?? [], modelsErr: r.error ?? (r.fixed ? t("settings.modelFixed") : "") });
+      /* ★★고른 모델이 없으면 **목록의 첫 항목**을 고른다 (사용자 지적 2026-08-30: 힌트(gpt-5-mini)가
+         고른 것처럼 보였는데 실제로는 빈 값이라 「모델이 선택되지 않았다」가 떴다). 목록은
+         백엔드가 추천 순(최신이 앞)으로 주므로 첫 항목이 곧 기본값이다. */
+      const c = get().cfg;
+      if (c && c.provider === pid && !c.model && r.models?.length) await get().saveConfig({ model: r.models[0].id });
     } catch (e) {
       set({ models: [], modelsErr: String((e as Error).message ?? e) });
     } finally {
@@ -473,7 +500,9 @@ export const useLlm = create<S>((set, get) => ({
         //   "그 턴의 놓친 줄"을 되받을 수 있다 (`lib/cliCursor.ts`)
         if (r?.run) noteCliRun(r.run);
       } catch (e) {
-        set({ error: String((e as Error).message ?? e), sending: false });
+        noteError(String((e as Error).message ?? e));
+        set({ sending: false });
+        void save(get());
       }
       return; // 끝은 `turn_end` 가 알린다 (cliEvent)
     }
@@ -492,14 +521,14 @@ export const useLlm = create<S>((set, get) => ({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             system: SYSTEM + (get().title ? "" : NAME_FIRST),
-            messages: get().wire,
+            messages: forProvider(get().wire),
             tools: specs.map((t) => ({ name: t.name, description: t.description, schema: t.inputSchema })),
           }),
         });
 
         if (r.error) {
-          // ★오류는 **대화에 남기지 않는다** — 다음 턴에 공급자로 되돌아가면 또 걸린다
-          set({ error: r.error });
+          // ★오류는 대화에 **남기되** 공급자에게는 안 돌아간다 (`noteError` 의 ★★주)
+          noteError(r.error);
           break;
         }
 
@@ -566,7 +595,7 @@ export const useLlm = create<S>((set, get) => ({
         }
       }
     } catch (e) {
-      set({ error: String((e as Error).message ?? e) });
+      noteError(String((e as Error).message ?? e));
     } finally {
       endTurn();
       void save(get());

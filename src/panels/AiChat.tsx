@@ -582,7 +582,9 @@ function ModelChip({ onOpenSettings }: { onOpenSettings?: () => void }) {
                   {cfg?.model && !models.some((m) => m.id === cfg.model) && (
                     <option value={cfg.model}>{cfg.model}</option>
                   )}
-                  {!cfg?.model && <option value="">{t("settings.modelNeedKey")}</option>}
+                  {!cfg?.model && (
+                    <option value="">{models.length ? t("settings.modelPick") : t("settings.modelNeedKey")}</option>
+                  )}
                   {models.map((m) => (
                     <option key={m.id} value={m.id}>{m.id}</option>
                   ))}
