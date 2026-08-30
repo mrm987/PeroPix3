@@ -324,7 +324,10 @@ export const useLlm = create<S>((set, get) => ({
   async loadModels(provider) {
     const pid = provider ?? get().cfg?.provider;
     if (!pid) return;
-    set({ modelsLoading: true, modelsErr: "" });
+    /* ★★**옛 목록을 먼저 비운다** (사용자 지적 2026-08-30: 키 없는 오픈라우터로 바꿨는데 목록이
+       보였다). 예전에는 응답이 올 때까지 이전 공급자의 목록이 그대로 남아, 그 사이에 그것이
+       새 공급자의 목록처럼 보였다. 공급자가 다르면 옛 목록은 어차피 쓸 수 없다. */
+    set({ models: [], modelsLoading: true, modelsErr: "" });
     try {
       const r = await api<{ models: ModelInfo[]; error?: string; fixed?: boolean }>(
         `/api/llm/models?provider=${encodeURIComponent(pid)}`,
