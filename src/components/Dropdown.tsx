@@ -35,7 +35,9 @@ export function Dropdown({
 }) {
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0);
-  const [at, setAt] = useState<{ x: number; y: number; w: number } | null>(null);
+  /** 상자의 자리 — 목록을 어디에 붙일지는 목록을 **재고 나서** 정한다 (아래 `useLayoutEffect`) */
+  const [anchor, setAnchor] = useState<{ l: number; t: number; r: number; b: number; w: number } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const box = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const cur = options.find((o) => o.value === value);
@@ -44,8 +46,8 @@ export function Dropdown({
   const show = () => {
     const r = box.current?.getBoundingClientRect();
     if (!r) return;
-    // 가로: 상자 아래 · 세로: 상자 오른쪽 (상자의 글이 서 있으니 목록은 옆으로 나온다)
-    setAt(vert ? { x: r.right + 4, y: r.top, w: 0 } : { x: r.left, y: r.bottom + 4, w: r.width });
+    setAnchor({ l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width });
+    setPos(null);
     setHi(Math.max(0, options.findIndex((o) => o.value === value)));
     setOpen(true);
   };
@@ -84,17 +86,30 @@ export function Dropdown({
     };
   }, [open]);
 
-  // 열리면 목록이 키를 받는다. 화면 밖으로 나가면 안쪽으로 민다
+  /* ★★**자리는 목록을 재고 나서 정한다.** 가로: 상자 아래, 아래가 모자라면 **위로 뒤집는다**.
+     세로: 상자 오른쪽, 오른쪽이 모자라면 **왼쪽으로**. 그러고도 넘치면 안쪽으로 민다
+     (사용자 지적 2026-08-30: 뒤집히지 않고 밀리기만 해서 상자를 덮었다). 열리면 목록이 키를 받는다. */
   useLayoutEffect(() => {
     if (!open) return;
     const el = list.current;
-    if (!el || !at) return;
+    if (!el || !anchor) return;
     el.focus();
     const r = el.getBoundingClientRect();
-    const x = Math.max(8, Math.min(window.innerWidth - 8 - r.width, at.x));
-    const y = Math.max(8, Math.min(window.innerHeight - 8 - r.height, at.y));
-    if (x !== at.x || y !== at.y) setAt({ ...at, x, y });
-  }, [open, at]);
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    let x: number;
+    let y: number;
+    if (vert) {
+      x = anchor.r + 4 + r.width > W - 8 && anchor.l - 4 - r.width >= 8 ? anchor.l - 4 - r.width : anchor.r + 4;
+      y = anchor.t;
+    } else {
+      x = anchor.l;
+      y = anchor.b + 4 + r.height > H - 8 && anchor.t - 4 - r.height >= 8 ? anchor.t - 4 - r.height : anchor.b + 4;
+    }
+    x = Math.max(8, Math.min(W - 8 - r.width, x));
+    y = Math.max(8, Math.min(H - 8 - r.height, y));
+    if (!pos || pos.x !== x || pos.y !== y) setPos({ x, y });
+  }, [open, anchor, pos, vert]);
 
   const onListKey = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
@@ -150,7 +165,7 @@ export function Dropdown({
         </span>
       </button>
       {open &&
-        at &&
+        anchor &&
         createPortal(
           <div
             ref={list}
@@ -160,9 +175,11 @@ export function Dropdown({
             onKeyDown={onListKey}
             style={{
               position: "fixed",
-              left: at.x,
-              top: at.y,
-              minWidth: at.w || undefined,
+              left: pos?.x ?? 0,
+              top: pos?.y ?? 0,
+              // ★재기 전에는 안 보인다 — 잰 뒤에 자리를 잡는다 (0,0 에서 깜빡이지 않게)
+              visibility: pos ? "visible" : "hidden",
+              minWidth: vert ? undefined : anchor.w,
               zIndex: 8000,
               writingMode: "horizontal-tb",
               display: "flex",
