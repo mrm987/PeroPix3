@@ -304,7 +304,7 @@ export const ko: Dict = {
      *  「초과분은 무시됩니다」로 알리고 말면 그대로 생성했을 때 뒤쪽이 조용히 빠진다. */
     charLimitHit: "이 모델은 캐릭터 {max}명까지 켤 수 있습니다.",
     charLimitClamped: "이 모델은 캐릭터 {max}명까지입니다. 뒤 {n}명을 껐습니다.",
-    opusUsage: "Opus {p}%",
+    opusUsage: "Opus",
     opusUsageHint: "Opus 생성 잔량입니다. 다 쓰면 Anlas 를 씁니다 (V5 부터).",
     opusRefill: "시간당 {r}% 회복 · 100% 까지 {f}",
     anlasRefresh: "잔액 새로고침",

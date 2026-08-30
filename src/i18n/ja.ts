@@ -295,7 +295,7 @@ export const ja: Dict = {
     costPerSlots: "1枚 {p} × シーン {s} × {r}回",
     charLimitHit: "このモデルで有効にできるキャラクターは {max} 体までです。",
     charLimitClamped: "このモデルは {max} 体までです。末尾の {n} 体をオフにしました。",
-    opusUsage: "Opus {p}%",
+    opusUsage: "Opus",
     opusUsageHint: "Opus の生成残量です。使い切ると Anlas を消費します（V5 以降）。",
     opusRefill: "毎時 {r}% 回復 ・ 100% まで {f}",
     anlasRefresh: "残高を再取得",

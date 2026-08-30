@@ -296,7 +296,7 @@ export const en = {
     costPerSlots: "{p} each × {s} scenes × {r}",
     charLimitHit: "This model allows up to {max} characters.",
     charLimitClamped: "This model allows up to {max} characters. The last {n} were turned off.",
-    opusUsage: "Opus {p}%",
+    opusUsage: "Opus",
     opusUsageHint: "Opus generation allowance remaining. When it runs out, generations cost Anlas (V5+).",
     opusRefill: "Refilling {r}%/h - full in {f}",
     anlasRefresh: "Refresh balance",

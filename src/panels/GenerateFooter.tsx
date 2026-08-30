@@ -583,13 +583,14 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
                   })}`
                 : t("gen.opusUsageHint")
             }
-            style={{
-              color: usageLow(usage) ? "var(--warn)" : "var(--ink-faint)",
-              fontVariantNumeric: "tabular-nums",
-              whiteSpace: "nowrap",
-            }}
+            style={{ color: "var(--ink-faint)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}
           >
-            {t("gen.opusUsage", { p: String(Math.round(usagePercent(usage))) })}
+            {/* ★숫자는 Anlas 잔액과 **같은 꼴**로 — 변하는 값이라는 뜻 (사용자 지시 2026-08-30).
+                바닥나면 숫자만 경고색이다. */}
+            {t("gen.opusUsage")}{" "}
+            <b style={{ fontFamily: "var(--font-mono)", color: usageLow(usage) ? "var(--warn)" : "var(--ink-soft)" }}>
+              {Math.round(usagePercent(usage))}%
+            </b>
           </span>
         )}
         <span data-anlas-balance data-tip={sub ? `tier ${sub.tier}` : undefined}>
