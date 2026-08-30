@@ -12,6 +12,7 @@ import { TYPE } from "../styles/type";
 
 import { imgUrl, thumbUrlOf } from "../lib/imgUrl";
 import { Icon } from "../components/Icon";
+import { Dropdown } from "../components/Dropdown";
 import { Ratio, RATIO_LANDSCAPE, RATIO_PORTRAIT } from "../components/Ratio";
 import { kindColor } from "../cards/kindColor";
 import { slotBlock, slotBlocksOf } from "../lib/blocks";
@@ -36,8 +37,6 @@ import { BANNER_BG, bannerEmptyFill } from "../cards/banner";
 
 /** 드롭다운 **목록 항목**의 색 — 팝업은 브라우저가 따로 그리므로 색을 직접 준다
  *  (다크 모드에서 밝은 글자가 밝은 바탕에 얹히던 자리, 사용자 지적 2026-08-22). */
-const optStyle: React.CSSProperties = { color: "var(--ink)", background: "var(--bg)" };
-
 /** 씬 칸 — **그릇**이고, 그 위에 **씬 세트 카드**를 얹는다 (사용자 결정 2026-08-11).
  *
  *  ★층이 셋이다: 씬 칸(평면) → 카드(둥근 카드) → 씬(줄). 그릇이 둥글고 카드가 납작하면
@@ -559,20 +558,6 @@ export function SceneLane() {
         ? tab.sceneDest!
         : "base";
 
-  /** 지금 고른 목적지의 **보이는 글자** — 드롭다운 목록과 같은 규칙으로 만든다.
-   *  ★자리를 차지하는 것은 이것 하나다 (`<select>` 는 투명하게 겹쳐 둔다) — 그래야 폭이
-   *    가장 긴 항목이 아니라 **고른 것**에 맞는다 (사용자 지적 2026-08-22). */
-  const destLabel =
-    dest === "base"
-      ? t("scenes.destBase")
-      : dest === "all"
-        ? t("scenes.destAll")
-        : (() => {
-            const i = chars.findIndex((c) => c.id === dest);
-            const c = chars[i];
-            return c ? t("scenes.destChar", { name: c.name || t("cards.charN", { n: i + 1 }) }) : t("scenes.destBase");
-          })();
-
   const h = Math.min(LANE_MAX, Math.max(LANE_MIN, laneSize));
   const w = h;
   const queued = pending.filter((p) => p.groupId === tab.id);
@@ -777,12 +762,11 @@ export function SceneLane() {
         <b style={{ fontSize: "var(--text-2xs)", color: "var(--ink-dim)" }}>{t("scenes.title")}</b>
         {/* ★씬 프롬프트가 payload 의 **어디로 들어가나** — 왼쪽 컨테이너 이름(베이스 프롬프트 /
             캐릭터 프롬프트)을 그대로 가리킨다. ★탭에 **하나뿐**이다 (사용자 결정)
-            ★★고르는 것은 그대로 `<select>` 지만 **보이는 것은 우리가 그린다**
-              (사용자 지적 2026-08-22). 브라우저가 그리는 대로 두면 둘이 걸린다:
-                · 폭이 **가장 긴 항목**에 맞춰 미리 벌어진다 (세로 모드에서는 높이가 그렇다)
-                · 화살표 방향을 바꿀 수 없다 — 세로쓰기에서는 아래가 아니라 옆이다
-              그래서 `appearance: none` 으로 껍데기를 벗기고, 글자와 화살표를 우리가 얹는다.
-              고르는 동작·키보드·목록은 그대로 `<select>` 의 것이다. */}
+            ★★상자도 목록도 **우리가 그린다** (`components/Dropdown`). 2026-08-22 에는 `<select>` 를
+              투명하게 겹쳐 두고 상자만 그렸는데(폭이 가장 긴 항목에 맞춰 벌어지고, 화살표 방향을
+              못 바꿔서), 2026-08-30 에 목록까지 우리 것으로 바꿨다 — 브라우저 목록은 항목 여백을
+              못 주고 세로 모드에서는 목록까지 세로로 섰다. 폭은 **고른 것**에 맞고, 화살표는
+              언제나 아래다. */}
         <label
           style={{
             display: "flex",
@@ -793,76 +777,25 @@ export function SceneLane() {
           }}
         >
           {t("scenes.destLabel")}
-          <span
-            /* ★무엇을 고르는 자리인지 툴팁으로 (사용자 지시 2026-08-30) — 「베이스에 삽입」만으로는
-               씬 프롬프트가 어디에 끼는지 처음 보는 사람이 모른다 */
-            data-tip={t("scenes.destHint")}
-            style={{
-              position: "relative",
-              display: "flex",
-              alignItems: "center",
-              gap: 2,
-              background: "var(--bg)",
-              border: "1px solid var(--line)",
-              borderRadius: "var(--r-2)",
-              color: "var(--ink)",
-              /* ★★세로 모드에서는 **안쪽 여백도 축을 따라간다** (사용자 지적 2026-08-22:
-                 세로 모드에서만 상자가 너무 두꺼웠다). 가로쓰기에서 좌우로 주던 여백을
-                 그대로 두면 그 값이 곧 **띠의 두께**가 된다 — 글이 서는 쪽으로 옮긴다. */
-              /* ★★**글자 쪽을 더 준다** (사용자 지적 2026-08-30: 좌우가 균일하게 안 넓어졌다).
-                 화살표 아이콘(14px)은 그림 좌우에 3~4px 빈 여백을 품고 있어, 양쪽에 같은 값을
-                 주면 화살표 쪽만 넓어 보인다 — 글자 쪽 10px · 화살표 쪽 6px 이 눈에는 같다.
-                 세로 모드는 글자가 서는 축(위아래)에 같은 배분을, 좌우(글자 옆)에 4px 를 준다 —
-                 1px 이면 글자가 테두리에 닿았다. */
-              padding: vert ? "var(--sp-4) var(--sp-1) var(--sp-2)" : "1px var(--sp-2) 1px var(--sp-4)",
-            }}
-          >
-            {/* ★보이는 글은 **지금 고른 것 하나뿐**이라, 자리도 그만큼만 차지한다 */}
-            <span>{destLabel}</span>
-            {/* ★★화살표는 **언제나 아래**다 (사용자 지시 2026-08-22).
-                ★그러려면 세로쓰기에 **안 딸려 돌아야** 한다 — 아이콘까지 함께 돌면 오른쪽을
-                  넣었는데 화면에서는 위를 가리킨다. 그 자리만 가로쓰기로 되돌려 못 박는다.
-                  그래야 넣은 방향이 곧 보이는 방향이다. */}
-            <span style={{ display: "grid", color: "var(--ink-faint)", writingMode: "horizontal-tb" }}>
-              {Icon.chevronDown14}
-            </span>
-            <select
-              data-scene-dest
-              value={dest}
-              onChange={(e) => patchSceneGroup(tab.id, { sceneDest: e.target.value })}
-              /* ★★**목록(팝업)은 `opacity` 를 안 따른다** — 브라우저가 따로 그리면서
-                 `<select>` 의 `color`·`background-color` 를 그대로 쓴다. 상자를 투명하게
-                 만들면서 그 둘을 빼 버렸더니, 다크 모드에서 **밝은 글자가 밝은 바탕에**
-                 얹혀 목록이 안 보였다 (사용자 지적 2026-08-22).
-                 ★상자는 `opacity: 0` 으로 감추되 **색은 남긴다.** `<option>` 에도 같이 준다 —
-                   일부 브라우저는 항목의 색을 따로 본다. */
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                opacity: 0,
-                cursor: "pointer",
-                appearance: "none",
-                border: "none",
-                padding: 0,
-                color: "var(--ink)",
-                background: "var(--bg)",
-              }}
-            >
-              <option value="base" style={optStyle}>{t("scenes.destBase")}</option>
-              {/* ★v2 의 `promptTarget === "char"` (backend.py:2803-2833) — 씬 태그가 켜진
-                  캐릭터 **전부**에 붙는다. 두 명부터만 낸다 (위 `canAll` 주석) */}
-              {canAll && <option value="all" style={optStyle}>{t("scenes.destAll")}</option>}
-              {/* ★이름이 비어 있으면 **화면에 뜨는 이름**을 그대로 쓴다 (사용자 지적 2026-08-19:
-                  갓 만든 캐릭터가 공백으로 떴다). 카드 머리도 같은 규칙이다 (`CharSection`) */}
-              {chars.map((c, i) => (
-                <option key={c.id} value={c.id} style={optStyle}>
-                  {t("scenes.destChar", { name: c.name || t("cards.charN", { n: i + 1 }) })}
-                </option>
-              ))}
-            </select>
-          </span>
+          {/* ★★**목록도 우리가 그린다** (`components/Dropdown`, 사용자 지시 2026-08-30) — 브라우저
+              기본 목록은 항목 여백을 못 주고, 세로 모드에서는 목록까지 세로로 섰다.
+              ★`all` 은 두 명부터만 낸다 (위 `canAll` 주석) — v2 의 `promptTarget === "char"`.
+              ★캐릭터 이름이 비어 있으면 화면에 뜨는 이름을 그대로 쓴다 (사용자 지적 2026-08-19) */}
+          <Dropdown
+            mark="scene-dest"
+            vert={vert}
+            tip={t("scenes.destHint")}
+            value={dest}
+            onChange={(v) => patchSceneGroup(tab.id, { sceneDest: v })}
+            options={[
+              { value: "base", label: t("scenes.destBase") },
+              ...(canAll ? [{ value: "all", label: t("scenes.destAll") }] : []),
+              ...chars.map((c, i) => ({
+                value: c.id,
+                label: t("scenes.destChar", { name: c.name || t("cards.charN", { n: i + 1 }) }),
+              })),
+            ]}
+          />
         </label>
         {/* ★★**별표 단추는 맨 끝**이다 (사용자 지시 2026-08-25: *"별표만 보기를 그냥 우측
             끝으로 옮겨"*). 앞에 붙여 두면 세로 모드의 좁은 머리에서 옆 글자와 겹쳐 읽힌다.
