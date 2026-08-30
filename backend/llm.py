@@ -354,20 +354,26 @@ _VER = re.compile(r"(?<![0-9.])(?:(?<=[-/])v)?(\d+(?:\.\d+)*)(?![0-9])")
 
 
 def _family(mid: str):
-    """`gpt-5.6-sol` → (`gpt-#-sol`, (5, 6)). 숫자가 없으면 None."""
+    """`gpt-5.6-sol` → (`gpt-#-sol`, 5.6). 숫자가 없으면 None.
+
+    ★버전은 **소수로** 읽는다 (사용자 지적 2026-08-30: `grok-4.20` 이 `4.5` 보다 새 것으로 떴다).
+      정수 조각으로 비교하면 `.20 > .5` 가 되지만, 모델 이름의 숫자는 4.20 = 4.2 로 읽힌다.
+      셋째 조각(`1.2.3`)은 드물어 무시한다."""
     m = _VER.search(mid)
     if not m:
         return None
-    return mid[:m.start()] + "#" + mid[m.end():], tuple(int(x) for x in m.group(1).split("."))
+    parts = m.group(1).split(".")
+    ver = float(parts[0] + ("." + parts[1] if len(parts) > 1 else ""))
+    return mid[:m.start()] + "#" + mid[m.end():], ver
 
 
 def newer_than(pick: list[str], out: list[dict]) -> list[dict]:
     """추천과 같은 가족이면서 버전이 더 높은 것 — 높은 버전이 앞."""
-    fam: dict[str, tuple] = {}
+    fam: dict[str, float] = {}
     for i in pick:
         f = _family(i)
         if f:
-            fam[f[0]] = max(fam.get(f[0], ()), f[1])
+            fam[f[0]] = max(fam.get(f[0], -1.0), f[1])
     found = []
     for m in out:
         if m["id"] in pick:
