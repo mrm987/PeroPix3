@@ -583,6 +583,7 @@ export const ko: Dict = {
     guideHint: "조수에게 「기억해」 라고 하면 이 문서를 고칩니다. 엔진(API·CLI)과 무관하게 지켜집니다. 직전 내용은 data/.guide-bak/ 에 남습니다.",
     modelNeedKey: "키를 넣으면 목록을 받아옵니다",
     modelPick: "모델을 고르세요",
+    modelNew: "새 버전",
     modelFixed: "버텍스는 목록 창구가 없어 확인된 것만 보입니다.",
     loading: "불러오는 중…",
     refresh: "새로고침",

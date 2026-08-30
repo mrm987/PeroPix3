@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import httpx
 
@@ -72,7 +73,7 @@ PROVIDERS: dict[str, dict] = {
         "label": "Google AI Studio (Gemini)",
         "kind": "openai",
         "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-        "hint": "gemini-2.5-flash",
+        "hint": "gemini-3.7-flash",
         "list": "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
     },
     "openrouter": {
@@ -106,6 +107,17 @@ CURATED = {
         "gpt-5.6-sol",
         "gpt-5.6-terra",
         "gpt-5.6-luna",
+    ],
+    # ★클로드·제미나이(AI Studio)도 추린다 (사용자 지시 2026-08-30) — 전체 목록은 옛 세대까지 다 섰다
+    "anthropic": [
+        "claude-sonnet-5",
+        "claude-opus-5",
+        "claude-fable-5",
+    ],
+    "google": [
+        "gemini-3.7-flash",
+        "gemini-3.1-pro-preview",
+        "gemini-2.5-pro",
     ],
     "openrouter": [
         "anthropic/claude-sonnet-5",
@@ -216,7 +228,7 @@ async def verify(llm: dict) -> dict:
 #   (cloud.google.com/vertex-ai/generative-ai/docs/thinking — "Default thinking_level").
 #   ★단계는 **모델마다 다르다** — 3.1 Pro 는 MINIMAL 을 400 으로 거부한다 (실측).
 VERTEX_THINKING: dict[str, dict] = {
-    "gemini-3.6-flash": {"efforts": ["high", "medium", "low", "minimal"], "default": "medium"},
+    # ★3.6 Flash 는 뺐다 (사용자 지시 2026-08-30: 필요 없음) — 3.7 Flash 가 그 자리다
     # ★이름이 `gemini-3.1-pro` 가 아니다 — 그건 404 다 (실측 2026-08-08)
     "gemini-3.1-pro-preview": {"efforts": ["high", "medium", "low"], "default": "high"},
 }
@@ -325,9 +337,46 @@ async def models(llm: dict) -> dict:
         keep = [by[i] for i in pick if i in by]
         # ★추천 중 사라진 것이 있으면 **조용히 넘어가지 않는다** — 목록이 썩었다는 신호다
         gone = [i for i in pick if i not in by]
+        keep += newer_than(pick, out)
         return {"models": keep, "curated": True, "total": len(out),
                 "missing": gone, "error": (f"추천 목록에 없는 모델: {', '.join(gone)}" if gone else "")}
     return {"models": out}
+
+
+# ★★**상위 버전은 손대지 않아도 뜬다** (사용자 지시 2026-08-30: 새 모델이 나올 때마다 손으로
+#   넣어 주지 않아도 대응할 시간을 벌게). 추천 이름에서 **버전 숫자만 뺀 꼴**(`gpt-#-sol`,
+#   `claude-sonnet-#`, `gemini-#-pro`)을 가족으로 보고, 공급자 목록에 같은 가족의 **더 높은
+#   버전**이 있으면 추천 뒤에 `new` 표시로 붙인다. 날짜가 붙은 이름(`…-2025-04-14`)은 꼴이
+#   달라 안 잡힌다 — 그런 것은 원래 뜻이 없다.
+# ★숫자 앞의 `v` 는 `-`·`/` 뒤에 올 때만 버전 표기로 본다 (`deepseek-v4-pro`). 글자에 붙은 숫자는
+#   그대로 버전이다 (`qwen3.8-max`). 앞이 숫자·점이면 버전 한가운데라 건너뛴다.
+_VER = re.compile(r"(?<![0-9.])(?:(?<=[-/])v)?(\d+(?:\.\d+)*)(?![0-9])")
+
+
+def _family(mid: str):
+    """`gpt-5.6-sol` → (`gpt-#-sol`, (5, 6)). 숫자가 없으면 None."""
+    m = _VER.search(mid)
+    if not m:
+        return None
+    return mid[:m.start()] + "#" + mid[m.end():], tuple(int(x) for x in m.group(1).split("."))
+
+
+def newer_than(pick: list[str], out: list[dict]) -> list[dict]:
+    """추천과 같은 가족이면서 버전이 더 높은 것 — 높은 버전이 앞."""
+    fam: dict[str, tuple] = {}
+    for i in pick:
+        f = _family(i)
+        if f:
+            fam[f[0]] = max(fam.get(f[0], ()), f[1])
+    found = []
+    for m in out:
+        if m["id"] in pick:
+            continue
+        f = _family(m["id"])
+        if f and f[0] in fam and f[1] > fam[f[0]]:
+            found.append(({**m, "new": True}, f[1]))
+    found.sort(key=lambda t: t[1], reverse=True)
+    return [m for m, _ in found]
 
 
 # ── 앤트로픽 ──────────────────────────────────────────────────────

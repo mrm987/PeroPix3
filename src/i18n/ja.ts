@@ -562,6 +562,7 @@ export const ja: Dict = {
     guideHint: "アシスタントに「覚えて」と言うとこの文書を書き換えます。エンジンを問わず適用され、直前の内容は data/.guide-bak/ に残ります。",
     modelNeedKey: "APIキーを入れると一覧を取得します",
     modelPick: "モデルを選択してください",
+    modelNew: "新バージョン",
     modelFixed: "Vertex は一覧APIがないため、確認済みのみ表示します。",
     loading: "読み込み中…",
     refresh: "更新",

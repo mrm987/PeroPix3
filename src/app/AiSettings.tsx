@@ -420,6 +420,7 @@ export function AiSettings() {
               {list.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.id}
+                  {m.new ? `  ·  ${t("settings.modelNew")}` : ""}
                   {m.in ? `  ·  $${m.in}/M` : ""}
                   {m.vision ? "  ·  vision" : ""}
                 </option>

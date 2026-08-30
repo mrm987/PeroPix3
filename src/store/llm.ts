@@ -71,6 +71,8 @@ export type ModelInfo = {
   effortDefault?: string;
   /** 끌 수 없는 모델(제미나이·그록·Qwen 등) — 끄기 칸을 감춘다 */
   reasoningLocked?: boolean;
+  /** 추천 목록에 없지만 같은 가족의 **더 높은 버전** — 백엔드 `newer_than` (2026-08-30) */
+  new?: boolean;
 };
 export type LlmConfig = {
   provider: string;
