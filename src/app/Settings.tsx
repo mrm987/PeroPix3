@@ -497,7 +497,7 @@ const TABS = [
  *  적으면 안내가 곧 거짓말이 된다. 조작을 더하거나 걷으면 여기도 같이 고친다.
  *  ★설명은 i18n 에 산다 (`settings.keyGuide.*`) — 여기서는 어느 무리에 무엇이 드는지만 정한다. */
 const KEY_GROUPS: readonly (readonly [string, readonly string[]])[] = [
-  ["prompt", ["chipDelete", "chipWeight", "chipWeightBig", "chipReset", "chipDrag", "blockDrag", "blockRename", "blockText",
+  ["prompt", ["chipDelete", "chipWeight", "chipWeightBig", "chipReset", "chipDrag", "blockDrag",
               "editEnter", "editShiftEnter", "editTab", "editEsc", "editUndo"]],
   ["scene", ["pickMulti", "pickRange", "pickDelete", "pickClear", "arrowTake", "arrowScene", "wheelTake", "wheelZoom",
              "wheelLane", "sceneRename", "sceneTab", "dragGroup", "dragTab", "undo"]],

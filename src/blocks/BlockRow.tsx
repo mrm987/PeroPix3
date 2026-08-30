@@ -32,7 +32,6 @@ export function BlockRow({
   onDone,
   onOpen,
   onTab,
-  onSave,
   autoEdit,
   autoCaret,
   fill,
@@ -55,7 +54,6 @@ export function BlockRow({
   onRemove: () => void;
   /** 저장소로 **끌어 넣기** — 머리를 잡고 서랍에 놓는다 (사용자 지시 2026-08-13).
    *  ★단추가 아니다: 넣는 것도 꺼내는 것도 같은 동작이라야 규칙이 하나로 남는다. */
-  onSave?: (e: React.PointerEvent) => void;
   /** Enter — 고친 내용과 함께. **한 번에** 넘겨야 목록이 두 번 갈리지 않는다 */
   /** Shift+Enter — 고친 내용과 **가를 자리** (`BlockBody` 의 같은 이름 주석) */
   onEnter?: (b: Block, splitAt?: number) => void;
@@ -129,20 +127,13 @@ export function BlockRow({
       {/* 머리 */}
       <div
         data-block-head
-        // ★머리는 **두 가지**를 한다: 그냥 누르면 접기/펼치기, 끌면 저장소로 넣기.
-        //   문턱(4px)을 넘어야 끌기가 되고, 안 넘기면 `onTap` 이 접기를 한다 —
-        //   카드 배너의 역드래그 저장과 같은 규칙이다 (`useDragSource`).
-        // ★★머리 위의 **누르는 것들**(색·이름·토글·삭제)은 끌기에서 비켜 간다.
-        //   안 비키면 `pointerdown` 의 기본 동작 막기가 **호환 click 을 삼켜** 그 단추들이
-        //   통째로 죽는다 — 저장소를 열었을 때만 죽어서 원인이 안 보였다 (실측 2026-08-16).
-        onPointerDown={(e) => {
-          if ((e.target as HTMLElement).closest("button, [data-head-action]")) return;
-          onSave?.(e);
-        }}
+        // ★머리는 누르면 **접고 펼 뿐**이다. 끌기(순서·서랍·다른 카드)는 전부 **손잡이**다
+        //   (사용자 지시 2026-08-30 — 예전에는 머리를 끌면 서랍에 들어갔는데 비직관적이었고,
+        //   그 pointerdown 의 기본 동작 막기가 호환 click 을 삼켜 이름 더블클릭까지 죽였다).
+        // ★머리 위의 **누르는 것들**(색·이름 바꾸기·토글·삭제)은 접기에서 비켜 간다.
         onClick={(e) => {
           if ((e.target as HTMLElement).closest("button, [data-head-action]")) return;
-          // 끌기 제스처가 잡았으면 클릭은 오지 않는다 (pointerdown 에서 기본 동작을 막는다)
-          if (!onSave) onChange({ ...block, open: !block.open });
+          onChange({ ...block, open: !block.open });
         }}
         style={{
           display: "flex",
@@ -210,10 +201,7 @@ export function BlockRow({
           />
         ) : (
           <b
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              rename.toggle();
-            }}
+            /* ★이름 바꾸기는 **단추 하나**로 (더블클릭은 걷었다 — 끌기에 먹혀 오래 죽어 있었다) */
             style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap", userSelect: "none" }}
           >
             {block.label}

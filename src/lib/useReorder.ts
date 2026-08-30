@@ -30,9 +30,16 @@ const THRESH = 4;
 export function useReorder(
   _count: number,
   onMove: (from: number, to: number) => void,
-  opts: { axis?: "x" | "y"; tapSafe?: boolean } = {},
+  opts: { axis?: "x" | "y"; tapSafe?: boolean; within?: React.RefObject<HTMLElement | null> } = {},
 ) {
-  const { axis = "y", tapSafe = false } = opts;
+  /* ★`within` — 목록의 상자. 포인터가 **그 밖**에 있으면 끼울 자리를 안 잡고, 거기서 놓으면
+     순서를 안 바꾼다. 블록 손잡이가 순서 바꾸기와 **서랍 넣기·다른 카드로 옮기기**를 함께 맡게
+     되면서 필요해졌다 (사용자 지시 2026-08-30) — 밖에서 놓은 것은 그쪽(`dragStore`)이 받는다. */
+  const { axis = "y", tapSafe = false, within } = opts;
+  const inside = (x: number, y: number) => {
+    const r = within?.current?.getBoundingClientRect();
+    return !r || (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+  };
   const rows = useRef<(HTMLElement | null)[]>([]);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
@@ -112,7 +119,7 @@ export function useReorder(
           (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           begin(a.i, a.x, a.y);
         } else if (dragIdx == null) return;
-        const g = gapAt(e.clientX, e.clientY);
+        const g = inside(e.clientX, e.clientY) ? gapAt(e.clientX, e.clientY) : null;
         overRef.current = g;
         setOverIdx(g);
         setGhost({

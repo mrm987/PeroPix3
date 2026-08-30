@@ -177,7 +177,23 @@ export function BlockList({
     onChange(n);
   };
 
-  const { register, handleProps, dragIdx, overIdx, ghost } = useReorder(blocks.length, move);
+  /** 목록의 상자 — 받는 자리 셋(`zone`·`moveIn`)과 순서 바꾸기의 `within` 이 함께 쓴다 */
+  const box = useRef<HTMLDivElement>(null);
+  const { register, handleProps, dragIdx, overIdx, ghost } = useReorder(blocks.length, move, { within: box });
+  /** ★★손잡이 끌기 **하나**가 순서 바꾸기·서랍 넣기·다른 카드로 옮기기를 다 맡는다 (사용자 지시
+   *  2026-08-30: 이름을 끌어야 저장되는 것이 비직관적이었다). 누르는 순간 두 제스처를 함께 시작한다 —
+   *  목록 안에서 놓으면 순서가 바뀌고(`useReorder`), 밖(서랍·다른 카드)에서 놓으면 그쪽 받는 자리가
+   *  받는다(`dragStore`). 제 목록의 받는 자리는 제 것을 거절하므로 둘이 겹치지 않는다. */
+  const grip = (i: number, b: Block) => {
+    const h = handleProps(i);
+    return {
+      ...h,
+      onPointerDown: (e: React.PointerEvent) => {
+        h.onPointerDown(e);
+        startDrag(e, { dir: "save", kind: "blocklib", block: b, srcZone: libZone });
+      },
+    };
+  };
   const tag = useTagDrag(moveTag);
   const replace = (i: number, b: Block) => onChange(blocks.map((x, j) => (j === i ? b : x)));
 
@@ -235,7 +251,6 @@ export function BlockList({
   /** 잘려 안 보이는 칩이 몇 개인가 — ★칩은 **다 그려 두고** 넘치는 것만 잘린다
    *  (`overflow: hidden`). 자리를 실제로 차지해 봐야 셀 수 있으므로 지우지 않고 재기만
    *  한다. 그래서 잘린 칩도 **끌 수 있고 서랍 드롭도 받는다** — 진짜 블록 그대로다. */
-  const box = useRef<HTMLDivElement>(null);
   const [over, setOver] = useState(0);
   const tagKey = blocks.map((b) => b.tags.map((x) => `${x.t}${x.w ?? ""}`).join("|")).join("//");
   useLayoutEffect(() => {
@@ -334,14 +349,8 @@ export function BlockList({
               onDone={onDone}
               onOpen={onOpen}
               onTab={onTab}
-              /* ★머리를 끌면 **서랍에 넣거나 다른 카드로 옮긴다** — 서랍이 닫혀 있어도 다른
-                 카드가 받으므로 언제나 끌 수 있다. 문턱을 안 넘기면 `onTap` 이 접기를 한다. */
-              onSave={(e) =>
-                startDrag(e, { dir: "save", kind: "blocklib", block: b, srcZone: libZone }, undefined, () =>
-                  replace(i, { ...b, open: !b.open }),
-                )
-              }
-              gripProps={handleProps(i)}
+              /* ★끌기는 **손잡이** 하나다 (위 `grip` 의 ★★주) — 머리는 누르면 접고 펼 뿐이다 */
+              gripProps={grip(i, b)}
               tagDrag={{
                 handle: (ci, label) => tag.handle(i, ci, label),
                 draggingIndex: tag.from?.block === i ? tag.from.index : null,
