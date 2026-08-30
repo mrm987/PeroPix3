@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import platform
 import shutil
+import sys
 import time
 import zipfile
 from pathlib import Path
@@ -48,6 +50,18 @@ def parse_version(v: str) -> tuple[int, int, int, int]:
     except Exception:
         return (0, 0, 0, 0)
     return (out[0], out[1], out[2], out[3])
+
+
+def full_asset_name(latest: str, system: str = sys.platform, machine: str = platform.machine()) -> str:
+    """이 기계가 받을 **전체 zip 의 이름** — `PeroPix-<ver>-win64.zip` · `PeroPix-<ver>-macos-<arch>.zip`.
+
+    ★★한 릴리즈에 윈도우·맥 zip 이 **함께** 올라간다 (macOS 포팅, 이슈 #1). 이름 앞뒤만 보고
+      `PeroPix-*.zip` 을 집으면 상대편 것을 받아 앱 폴더에 풀게 된다 — 플랫폼·아키텍처로 고른다.
+    ★맥의 arch 는 `platform.machine()` 이 준다 — 애플 실리콘은 `arm64`, 인텔은 `x86_64`."""
+    if system == "darwin":
+        arch = "arm64" if machine.lower() in ("arm64", "aarch64") else "x86_64"
+        return f"PeroPix-{latest}-macos-{arch}.zip"
+    return f"PeroPix-{latest}-win64.zip"
 
 
 async def check(current: str) -> dict[str, Any]:
@@ -83,8 +97,9 @@ async def check(current: str) -> dict[str, Any]:
                     info = {}
 
             # ★자산이 아직 안 올라왔으면 **빌드 중**이다 (릴리즈를 만든 직후가 그렇다)
-            full = next((a for n, a in assets.items() if n.startswith("PeroPix-") and n.endswith(".zip")), None)
-            patch = assets.get(f"patch-{latest}.zip")
+            full = assets.get(full_asset_name(latest))
+            # ★패치(`patch-<ver>.zip`)는 **윈도우 전용**이다 — exe 와 백엔드만 담는다. 맥은 늘 전체.
+            patch = assets.get(f"patch-{latest}.zip") if sys.platform != "darwin" else None
             if has and not full and not patch:
                 return {"ok": True, "has_update": True, "building": True,
                         "current": current, "latest": latest, "url": rel.get("html_url", "")}
