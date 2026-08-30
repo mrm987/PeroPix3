@@ -124,7 +124,7 @@ CURATED = {
         "anthropic/claude-opus-5",
         "openai/gpt-5.6-terra",
         "openai/gpt-5.6-sol",
-        "x-ai/grok-4.5",
+        "x-ai/grok-4.6",   # ★4.5 → 4.6 (사용자 지시 2026-08-30: 목록에 4.6 이 떠서 올렸다)
         "deepseek/deepseek-v4-pro",
         "qwen/qwen3.8-max",
     ],
