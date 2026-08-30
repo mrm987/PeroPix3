@@ -787,7 +787,16 @@ function handle(m: Record<string, any>, set: Setter, get: () => S) {
     //   ★그래도 **자리는 같다**: 씬 줄의 그 씬 칸에 「미저장」 칸으로 들어간다
     //     (v2 `index.html:12146` — 미저장도 저장된 것과 같은 슬롯 카드다).
     case "image_preview": {
-      void import("./previews").then(({ usePreviews }) => usePreviews.getState().add(m));
+      void import("./previews").then(({ usePreviews }) => {
+        const take = usePreviews.getState().add(m);
+        /* ★★**보고 있던 대기 칸에 미저장 그림이 나오면 그 그림으로 옮겨 간다** (사용자 지적
+           2026-08-30: 자동 저장을 끄면 생성 완료 때 선택이 풀렸다). 저장된 그림은 `consumePending`
+           안에서 `m.file` 로 옮기는데, 미저장 그림에는 **서버가 준 파일 이름이 없다** — 화면이
+           붙이는 표식(`preview:N`)은 `add()` 가 만들어야 알 수 있다. 그래서 여기서 옮긴다.
+           ★판정은 저장된 쪽과 같다: «내가 보고 있는 씬에 나왔는가»뿐이다. */
+        const f0 = useSceneFocus.getState();
+        if (f0.pending && (m.cell_id ?? null) === (f0.cell || null)) f0.focus(f0.cell, take.file);
+      });
       // ★대기 칸도 **똑같이** 지운다. 안 지우면 그림이 나왔는데 「생성 중」 칸이 배치가
       //   끝날 때까지 남는다 (`settleBatch` 가 마지막에야 비운다)
       consumePending(m, set, get);
