@@ -179,6 +179,9 @@ export function BlockBody({
     const el = ta.current;
     if (!el) return;
     /* ★★`fill` 이어도 **글만큼은 키운다** (사용자 지시 2026-08-30: 씬 프롬프트 편집창을 내용 크기만큼).
+       ★★그러려면 `fill` 상자들의 flex 기본 크기가 **내용(auto)** 이어야 한다 — `flex: 1` 은 `1 1 0%`
+         라 부모가 자기 높이를 잴 때 이 상자를 0 으로 치고, 글 상자에 높이를 줘도 칸이 안 자랐다
+         (같은 날 두 번째 지적: 그대로 잘렸다). `BlockList`·`BlockBody` 의 fill 자리는 전부 `1 1 auto` 다.
        예전에는 100% 로 자리를 채우기만 해서, 글이 자리보다 길면 상자 안에서 굴러갔다. 이제
        높이를 글에 맞추고, 자리가 더 크면 `flex: 1` 이 마저 채운다 — 짧은 글은 전처럼 꽉 차고
        긴 글은 상자를 키운다 (씬 칸은 펼치면 `minHeight` 라 따라 자란다). */
@@ -474,7 +477,7 @@ export function BlockBody({
             rows={1}
             style={{
               ...box,
-              ...(fill ? { flex: 1, minHeight: 0, resize: "none" as const } : {}),
+              ...(fill ? { flex: "1 1 auto", minHeight: 0, resize: "none" as const } : {}),
               /* ★★줄 간격을 늘리면 **첫 줄이 반쪽 여백만큼 내려간다.** 그만큼 위 안여백을
                    덜어 첫 줄을 칩 줄과 같은 높이에 세운다 (아래 안여백으로 옮겨 붙인다).
                    ★상자 규격(`box`) 자체는 안 건드린다 — 폭은 두 모습이 같아야 한다. */
@@ -550,7 +553,7 @@ export function BlockBody({
             alignContent: "flex-start",
             gap: 4,
             // ★`fill` 이면 품이 준 만큼 — 아니면 한 줄 높이 (위 `fill` 의 ★★주)
-            ...(fill ? { flex: 1, minHeight: 0 } : { minHeight: "calc(1.5em + 8px)" }),
+            ...(fill ? { flex: "1 1 auto", minHeight: 0 } : { minHeight: "calc(1.5em + 8px)" }),
             cursor: readOnly ? "inherit" : "text",
           }}
         >

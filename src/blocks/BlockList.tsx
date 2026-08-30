@@ -309,7 +309,7 @@ export function BlockList({
         display: "flex",
         flexDirection: "column",
         // ★`fill` 이면 품이 준 자리를 그대로 아래로 흘린다 (`BlockBody` 의 `fill` 주석)
-        ...(fill ? { flex: 1, minHeight: 0 } : {}),
+        ...(fill ? { flex: "1 1 auto", minHeight: 0 } : {}),
         // 저장소에서 끄는 중에만 자리를 알린다 — 1단계 점선, 2단계(지금 떼면 여기) 실선
         // ★다른 카드에서 오는 **블록**은 여기서 안 밝힌다 — 끼울 줄 하나에만 선을 긋는다
         //   (`crossOver`). 목록 전체를 칠하면 갈아 끼우는 것처럼 보였다 (사용자 지적 2026-08-30).
@@ -333,7 +333,7 @@ export function BlockList({
            입력칸만 한 줄로 남던 까닭이다. 표시를 넣어 보고서야 이 층이 보였다. */
         <div
           key={b.id}
-          style={fill ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : undefined}
+          style={fill ? { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" } : undefined}
         >
           {!single && (
             <DropLine active={(dragIdx != null && overIdx === i && i !== dragIdx && i !== dragIdx + 1) || crossOver === i} />
@@ -343,7 +343,7 @@ export function BlockList({
           <div
             data-block-row
             ref={register(i)}
-            style={fill ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : undefined}
+            style={fill ? { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" } : undefined}
           >
             <BlockRow
               block={b}
