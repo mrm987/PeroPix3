@@ -861,6 +861,7 @@ export const en = {
     undone: "Undone: {what}",
     undoTag: "chip removal",
     undoWeight: "weight change",
+    undoSettings: "settings import",
     undoBlockAdd: "adding a block",
     undoBlockRemove: "removing a block",
     undoBlockOn: "toggling a block",

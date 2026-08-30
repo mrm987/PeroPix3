@@ -892,6 +892,7 @@ export const ko: Dict = {
     undone: "되돌렸습니다: {what}",
     undoTag: "칩 지우기",
     undoWeight: "가중치",
+    undoSettings: "설정 불러오기",
     undoBlockAdd: "블록 추가",
     undoBlockRemove: "블록 삭제",
     undoBlockOn: "블록 켜고끄기",

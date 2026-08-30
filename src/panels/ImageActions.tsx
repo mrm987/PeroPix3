@@ -3,6 +3,7 @@ import { Icon } from "../components/Icon";
 import { useI18n } from "../i18n";
 import { fitSizeToBase, useGen } from "../store/gen";
 import { useImageInput } from "../store/imageInput";
+import { pushUndo } from "../lib/undo";
 import { useUi } from "../store/ui";
 import { ask } from "../store/ask";
 import { toast } from "../store/toast";
@@ -178,6 +179,16 @@ export function ImageActions({
     try {
       const m = await loadMeta();
       if (!m) return toast(t("act.noMeta"), "warn");
+      /* ★★**되돌릴 수 있다** (사용자 지시 2026-08-30: 설정 불러오기도 취소 대상에). 불러오기는
+         프롬프트·생성 옵션·이미지 입력(바이브·베이스) 셋을 한꺼번에 갈아 끼우므로, 셋을 **먼저
+         찍어 두고** 끝나면 되돌리기 로그에 한 칸으로 담는다 — Ctrl+Z 한 번이면 전부 돌아온다. */
+      const dataOf = <T extends object>(o: T) =>
+        Object.fromEntries(Object.entries(o).filter(([, v]) => typeof v !== "function")) as Partial<T>;
+      const before = {
+        prompt: usePrompt.getState().snapshot(),
+        params: useGen.getState().params,
+        input: dataOf(useImageInput.getState()),
+      };
       const env = loadEnv ? await loadEnv().catch(() => null) : null;
       if (env?.prompt) {
         // 구조는 스냅샷에서, 값(해상도·시드·바이브)은 메타데이터에서
@@ -190,6 +201,11 @@ export function ImageActions({
       //   ★구조를 못 찾은 옛 그림에도 건다: 베이스가 기록에 남는 것과 구조가 남는 것은 별개다
       if (loadBase)
         await applyRecordedBase(await loadBase().catch(() => null), name);
+      pushUndo(t("common.undoSettings"), () => {
+        usePrompt.getState().load(before.prompt);
+        useGen.setState({ params: before.params });
+        useImageInput.setState(before.input);
+      });
       toast(t("act.applied"));
     } catch (e) {
       toast(String(e), "warn");

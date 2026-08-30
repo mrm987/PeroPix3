@@ -859,6 +859,7 @@ export const ja: Dict = {
     undone: "元に戻しました: {what}",
     undoTag: "チップ削除",
     undoWeight: "重み変更",
+    undoSettings: "設定の読み込み",
     undoBlockAdd: "ブロック追加",
     undoBlockRemove: "ブロック削除",
     undoBlockOn: "ブロックの切り替え",
