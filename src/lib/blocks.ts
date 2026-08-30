@@ -333,8 +333,9 @@ export function dupSet(blocks: Block[]): Set<string> {
  *  0 = 보통, 양수 = 강조, 음수 = 억제 */
 export function weightLevel(w: number | null): number {
   if (w == null || w === 1) return 0;
-  if (w < 0) return -2;
-  if (w < 1) return -1;
-  if (w >= 1.5) return 2;
-  return 1;
+  /* ★★**부호가 색을 가른다** (사용자 지시 2026-08-30: 양수면 파랑, 음수면 빨강 — 예전에는
+     1 미만(0.2 같은 낮춤)도 빨강이라 음수 가중치와 섞여 헷갈렸다). 세기는 1 에서 얼마나 먼가:
+     0.5 이상 멀면 진하게 (0.2·0.5·1.5 는 진한 파랑, 0.75·1.3 은 옅은 파랑). 음수는 -1.5 부터 진한 빨강. */
+  if (w < 0) return w <= -1.5 ? -2 : -1;
+  return Math.abs(w - 1) >= 0.5 ? 2 : 1;
 }

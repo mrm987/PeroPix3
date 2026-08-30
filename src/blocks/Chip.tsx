@@ -166,7 +166,7 @@ export function Chip({
     };
   }, [readOnly]);
 
-  // 강조 수준 → 배경·테두리 세기. 음수는 붉은 계열로 갈린다.
+  // 강조 수준 → 배경·테두리 세기. ★부호가 색을 가른다 — 양수는 파랑, 음수는 빨강 (`weightLevel`)
   const tone =
     lv === 0
       ? { bg: "var(--chip-bg)", bd: "var(--line)", fg: "var(--ink)" }
