@@ -1728,8 +1728,11 @@ function SceneRow(
           zIndex: 2,
           flexShrink: 0,
           // ★머리는 시작 쪽에 붙는다 — 아래 모드면 왼쪽, 세로 모드면 위. 크기는 같은 값이다
+          /* ★★세로 모드에서도 **펼치면 자란다** (사용자 지적 2026-08-30: `+n` 을 눌러도 안 늘어났다).
+             머리 높이가 고정이라 펼쳐도 잘린 채였다 — 가로 모드가 `minHeight` 로 아래로 자라듯,
+             세로 모드도 펼쳤을 때는 아래로 자라게 둔다 (기둥 폭은 그대로다). */
           ...(p.vert
-            ? { top: 0, height: p.headw, borderBottom: "1px solid var(--line)" }
+            ? { top: 0, ...(expanded ? { minHeight: p.headw } : { height: p.headw }), borderBottom: "1px solid var(--line)" }
             : { left: 0, width: p.headw, borderRight: "1px solid var(--line)" }),
           /* ★★**강조는 「고른 씬」이 아니라 「지금 치고 있는 칸」이다** (사용자 지시
              2026-08-28: *"이미지만 선택했는데 머리가 선택된 것처럼 표시된다. 이미지를

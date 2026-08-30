@@ -178,11 +178,10 @@ export function BlockBody({
   const fit = () => {
     const el = ta.current;
     if (!el) return;
-    // ★`fill` 이면 자리를 다 쓰므로 글에 맞춰 키우지 않는다 (위 `fill` 의 ★★주)
-    if (fill) {
-      el.style.height = "100%";
-      return;
-    }
+    /* ★★`fill` 이어도 **글만큼은 키운다** (사용자 지시 2026-08-30: 씬 프롬프트 편집창을 내용 크기만큼).
+       예전에는 100% 로 자리를 채우기만 해서, 글이 자리보다 길면 상자 안에서 굴러갔다. 이제
+       높이를 글에 맞추고, 자리가 더 크면 `flex: 1` 이 마저 채운다 — 짧은 글은 전처럼 꽉 차고
+       긴 글은 상자를 키운다 (씬 칸은 펼치면 `minHeight` 라 따라 자란다). */
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   };
