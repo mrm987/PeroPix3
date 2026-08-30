@@ -161,6 +161,10 @@ export type SceneGroup =
 export type WsTab = {
   id: string;
   name: string;
+  /** ★이 탭에서 **마지막으로 보던 씬 그룹** (사용자 지시 2026-08-30) — 탭을 떠날 때 적고
+   *  (`switchTab`), 돌아오면 그것을 연다. 없거나 지워졌으면 첫 씬 그룹. 문서가 아니라 보는
+   *  자리지만 `activeTab`·`activeSceneGroup` 과 같은 사정으로 워크스페이스에 함께 남는다. */
+  lastSceneGroup?: string;
   prompt?: TabPrompt;
   /** ★★**그 탭의 생성 옵션** (사용자 지시 2026-08-22). 모델·크기·steps·cfg·시드·프리셋…
    *  전부 여기 담긴다. 예전에는 앱 전역이라, 다른 탭에서 만지다 돌아오면 **앞 탭의 값을
@@ -1424,11 +1428,18 @@ export const useWs = create<S>((set, get) => ({
     if (!spec || spec.activeTab === id) return;
     // ★지금 편집기 내용을 **떠나는 캐릭터에** 담고 옮긴다 (탭 전환과 같은 순서)
     const stashed = stash(spec, spec.activeSceneGroup);
-    // 그 캐릭터의 포즈세트 중 하나를 연다. 없으면 하나 만든다.
+    /* ★★**떠나는 탭에 지금 보던 씬 그룹을 적어 둔다** (사용자 지시 2026-08-30: 탭을 오가면
+       마지막으로 보던 씬 그룹이 열려 있게). 기록하는 자리는 여기 하나다 — 어떤 길로 씬 그룹을
+       골랐든(선택·새로 만들기·복제) 떠나는 순간의 것이 곧 「마지막으로 보던 것」이다. */
+    const tabs = (stashed.tabs ?? []).map((c) =>
+      c.id === spec.activeTab ? { ...c, lastSceneGroup: spec.activeSceneGroup } : c,
+    );
+    // 그 탭의 씬 그룹 중 **마지막으로 보던 것**을 연다 (없으면 첫 것). 하나도 없으면 하나 만든다.
     const mine = stashed.sceneGroups.filter((x) => x.kind === "sceneGroup" && x.tabId === id);
-    let next = { ...stashed, tabs: stashed.tabs, activeTab: id };
+    let next = { ...stashed, tabs, activeTab: id };
     if (mine.length) {
-      next = { ...next, activeSceneGroup: mine[0].id };
+      const last = tabs.find((c) => c.id === id)?.lastSceneGroup;
+      next = { ...next, activeSceneGroup: (mine.find((x) => x.id === last) ?? mine[0]).id };
     } else {
       const tid = "tab_" + Date.now().toString(36);
       next = {
