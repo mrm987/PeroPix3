@@ -163,6 +163,27 @@ export const en = {
   },
 
   /** Block library — keep blocks and drop them into any prompt (shared across workspaces) */
+  tagsearch: {
+    title: "Tag search",
+    hint: "Tag search: find tags used in your images and add them to the prompt",
+    close: "Close",
+    refresh: "Refresh index (re-reads only new or changed images)",
+    indexing: "Scanning {done}/{total}",
+    error: "Index error: {msg}",
+    search: "Search tags…",
+    artistOnly: "Artists",
+    empty: "No tags yet. Images with prompts in the output folder will show up here.",
+    noHit: "No matches",
+    more: "{n} more, narrow with a search",
+    pickHint: "Click to show images using this tag below",
+    add: "Append to base",
+    added: "Added to base: {tag}",
+    dup: "Already in base: {tag}",
+    picked: "{tag} ({n} images)",
+    showMore: "Show more",
+    noPick: "Click a tag to see the images that use it. Press + to append it to the end of base.",
+  },
+
   lib: {
     title: "Block library",
     close: "Close",

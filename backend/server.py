@@ -38,6 +38,7 @@ from pydantic import BaseModel
 import censor
 import files
 import tagger
+import tagindex
 import imgutil
 import keep
 import genqueue
@@ -2797,6 +2798,24 @@ class FilesMove(BaseModel):
 class FilesName(BaseModel):
     path: str = ""
     name: str = ""
+
+
+# ── 태그 검색 인덱스 (backend/tagindex.py) — 아웃풋 루트의 긍정 프롬프트 원문 ──────
+@app.get("/api/tags/status")
+async def tags_status():
+    return tagindex.status(WS_ROOT)
+
+
+@app.post("/api/tags/index")
+async def tags_index():
+    """아웃풋 루트를 훑어 곁파일을 갱신한다 — 백그라운드. 진행은 `/api/tags/status`."""
+    return tagindex.start(WS_ROOT)
+
+
+@app.get("/api/tags/data")
+async def tags_data():
+    """곁파일 통째 — 태그 집계는 화면이 한다 (`tagindex` 머리 ★★주). 몇 MB 라 딴 실에서 읽는다."""
+    return await asyncio.to_thread(tagindex.load, WS_ROOT)
 
 
 @app.get("/api/files/tree")

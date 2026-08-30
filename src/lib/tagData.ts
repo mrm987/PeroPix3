@@ -42,6 +42,18 @@ let loading: Promise<void> | null = null;
 
 export const tagsLoaded = () => loaded;
 
+let TYPE: Map<string, string> | null = null;
+/** 사전이 아는 태그의 종류 (`artist`·`character`…). 모르면 undefined.
+ *  ★태그 검색 서랍의 「작가만」 거르기용 (`lib/tagSearch`) — 접두 없이 적은 작가 이름을 알아본다 */
+export function tagType(tag: string): string | undefined {
+  if (!loaded) return undefined;
+  if (!TYPE) {
+    TYPE = new Map();
+    for (const e of ALL) TYPE.set(norm(e.value), e.type);
+  }
+  return TYPE.get(norm(tag));
+}
+
 /** 한 번만 읽는다. 파일이 없어도 위 넷은 언제나 제안된다. */
 export function loadTags(): Promise<void> {
   if (loaded) return Promise.resolve();

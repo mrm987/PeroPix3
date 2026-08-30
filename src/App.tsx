@@ -40,6 +40,7 @@ import { DragLayer } from "./cards/DragLayer";
 import { SaveDialog, type SaveAsk } from "./cards/SaveDialog";
 import { useSub } from "./store/sub";
 import { BlockDrawer } from "./blocks/BlockDrawer";
+import { TagDrawer } from "./blocks/TagDrawer";
 import { WildcardModal } from "./panels/WildcardModal";
 import { DropImport } from "./app/DropImport";
 import { TranslatePanel } from "./panels/TranslatePanel";
@@ -300,7 +301,14 @@ export function App() {
           )
         }
         /* ★블록 저장소는 **프롬프트를 볼 때만** 뜻이 있다 — 갤러리에는 놓을 목록이 없다 */
-        leftDrawer={mode === "generate" ? <BlockDrawer /> : undefined}
+        leftDrawer={
+          mode === "generate" ? (
+            <>
+              <BlockDrawer />
+              <TagDrawer />
+            </>
+          ) : undefined
+        }
         /* 캐릭터 줄만 세 기둥 위에. 씬 세트 줄은 캔버스 위로 내려갔다 */
         /* ★워크스페이스 탭이 **위**, 캐릭터가 아래다. 검열·보조도구는 워크스페이스를
            안 쓰는 도구라 탭 줄을 감춘다 (사용자 지시 2026-08-08).

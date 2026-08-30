@@ -105,7 +105,7 @@ def _unwrap_envelope(d):
     return d
 
 
-def read_raw(image_bytes: bytes) -> dict:
+def read_raw(image_bytes: bytes, stealth: bool = True) -> dict:
     """이미지에서 **원본 형식 그대로** 메타데이터를 읽는다. 없으면 빈 dict.
 
     ★**단계 순서가 규칙이다** (backend.py:629-784 이식). 바꾸면 이전 세대 파일 복원이
@@ -228,9 +228,12 @@ def read_raw(image_bytes: bytes) -> dict:
             pass
 
         # 7. NAI stealth pnginfo — ★앞이 전부 실패했을 때만.
-        stealth = _decode_stealth_pnginfo(img)
+        # ★`stealth=False` 면 건너뛴다 — 픽셀 전부를 훑는 폴백이라 수천 장을 인덱싱할 때는
+        #   못 쓴다 (`tagindex.py`). 한 장씩 볼 때는 전처럼 끝까지 간다.
         if stealth:
-            return stealth
+            hidden = _decode_stealth_pnginfo(img)
+            if hidden:
+                return hidden
     except Exception:
         pass
     return meta
