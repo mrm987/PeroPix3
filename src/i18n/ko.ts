@@ -880,6 +880,10 @@ export const ko: Dict = {
     unsaved: "미저장",
     saveToFile: "파일로 저장",
     dropPreview: "미리보기 지우기",
+    sweepHint: "정리: 이 씬 그룹의 저장 안 한 그림 {n}장을 모두 지우기",
+    sweepAsk: "저장 안 한 그림 {n}장을 지울까요?",
+    sweepBody: "이 씬 그룹에서 파일로 저장하지 않은 그림을 전부 버립니다. 되돌릴 수 없습니다.",
+    swept: "저장 안 한 그림 {n}장을 지웠습니다.",
     savedToast: "저장했습니다: {name}",
   },
   slots: {

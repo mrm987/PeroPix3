@@ -849,6 +849,10 @@ export const en = {
     unsaved: "Unsaved",
     saveToFile: "Save to file",
     dropPreview: "Discard preview",
+    sweepHint: "Sweep: discard all {n} unsaved images in this scene group",
+    sweepAsk: "Discard {n} unsaved images?",
+    sweepBody: "Every image in this scene group that was not saved to a file will be discarded. This cannot be undone.",
+    swept: "Discarded {n} unsaved images.",
     savedToast: "Saved: {name}",
   },
   slots: {

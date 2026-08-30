@@ -31,7 +31,7 @@ import { t as tr } from "../i18n";
 import { toast } from "../store/toast";
 import { useRename } from "../components/useRename";
 import { ask } from "../store/ask";
-import { usePreviews, withPreviews } from "../store/previews";
+import { usePreviews, withPreviews, isPreviewFile } from "../store/previews";
 import { BANNER_BG, bannerEmptyFill } from "../cards/banner";
 
 /** 드롭다운 **목록 항목**의 색 — 팝업은 브라우저가 따로 그리므로 색을 직접 준다
@@ -587,6 +587,31 @@ export function SceneLane() {
   const all = withPreviews(records, ws, previews);
   const takesOfCell = (c: Slot) =>
     takesOfScene(all, tab, cells, c).filter((r) => !starOnly || isStarred(r.file));
+  /** ★「정리」 — **이 씬 그룹의 미저장 그림 전부**를 버린다 (사용자 지시 2026-08-30: 한 장에
+   *  딸린 단추가 아니라 씬 헤더의 별표 옆). 어느 씬에 속하는지는 줄과 같은 창구(`takesOfScene`)로
+   *  센다 — 갈 씬이 없는 결과는 첫 씬이 받으므로(감사 D6) `cell_id` 로 직접 거르면 빠진다.
+   *  ★확인창을 거친다 — 미저장 그림은 메모리에만 있어 되돌릴 수 없다. */
+  const staleFiles = cells
+    .flatMap((c) => takesOfScene(all, tab, cells, c))
+    .map((r) => r.file)
+    .filter(isPreviewFile);
+  const sweepPreviews = async () => {
+    const n = staleFiles.length;
+    if (!n) return;
+    if (
+      !(await ask({
+        title: t("scenes.sweepAsk", { n }),
+        body: t("scenes.sweepBody"),
+        ok: t("common.delete"),
+        cancel: t("common.cancel"),
+      }))
+    )
+      return;
+    for (const f of staleFiles) usePreviews.getState().drop(f);
+    const fx = useSceneFocus.getState();
+    if (fx.file && staleFiles.includes(fx.file)) fx.focus(fx.cell, null);
+    toast(t("scenes.swept", { n }));
+  };
   /** 별을 단 장이 **몇 개인가** — 거르기 전 목록에서 센다 (거른 뒤에 세면 늘 전부다).
    *  ★단추에 적어 두는 까닭: 0 이면 눌러도 화면이 비므로, 누르기 전에 알아야 한다. */
   const starCount = cells.reduce(
@@ -863,6 +888,27 @@ export function SceneLane() {
         >
           {starOnly ? Icon.star12On : Icon.star12}
         </button>
+        {/* ★정리 — 별표 **오른쪽**. 이 씬 그룹에 미저장 그림이 있을 때만 선다 (사용자 지시 2026-08-30).
+            빗자루다 — 한 장을 버리는 지우개·파일을 지우는 휴지통과 다른 일이다. */}
+        {staleFiles.length > 0 && (
+          <button
+            data-sweep-previews
+            onClick={() => void sweepPreviews()}
+            data-tip={t("scenes.sweepHint", { n: staleFiles.length })}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 22,
+              height: 22,
+              borderRadius: "var(--r-1)",
+              border: "1px solid transparent",
+              color: "var(--warn)",
+            }}
+          >
+            {Icon.broom}
+          </button>
+        )}
         {/* ★칸 크기는 **Ctrl + 휠**로 바꾼다 (사용자 지시 2026-08-14). 버튼 셋이
             차지하던 자리를 돌려주고, 손이 줄 위에 있는 채로 바로 조절된다.
             ★안내 문구를 두지 않는다 (사용자 지시 2026-08-19) — 휠로 조절되는 것은

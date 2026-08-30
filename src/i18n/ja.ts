@@ -847,6 +847,10 @@ export const ja: Dict = {
     unsaved: "未保存",
     saveToFile: "ファイルに保存",
     dropPreview: "プレビューを消す",
+    sweepHint: "整理: このシーングループの未保存画像 {n} 枚をすべて消す",
+    sweepAsk: "未保存の画像 {n} 枚を消しますか？",
+    sweepBody: "このシーングループでファイルに保存していない画像をすべて破棄します。元に戻せません。",
+    swept: "未保存の画像 {n} 枚を消しました。",
     savedToast: "保存しました: {name}",
   },
   slots: {
