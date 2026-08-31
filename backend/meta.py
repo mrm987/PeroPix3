@@ -41,6 +41,21 @@ ND_PNG_TEXT_CHUNKS = ("Title", "Description", "Software", "Source", "Generation 
 # ── 1. 읽기 ──────────────────────────────────────────────────
 
 
+def _stealth_bits(alpha):
+    """알파 LSB 를 **column-major**(x 바깥, y 안쪽)로 편 비트열 — 심는 쪽이 그 차례로 넣는다."""
+    return (alpha & 1).astype(alpha.dtype).T.reshape(-1)
+
+
+def _stealth_sig(bits) -> str:
+    """비트열 머리의 시그니처 — NAI 것이 아니면 빈 문자열."""
+    import numpy as np
+
+    if bits.size < 15 * 8:
+        return ""
+    sig = np.packbits(bits[: 15 * 8]).tobytes().decode("utf-8", "ignore")
+    return sig if sig in ("stealth_pnginfo", "stealth_pngcomp") else ""
+
+
 def _decode_stealth_pnginfo(img: Image.Image) -> dict | None:
     """NAI stealth pnginfo(알파 채널 LSB 스테가노그래피) 디코드.
 
@@ -53,13 +68,13 @@ def _decode_stealth_pnginfo(img: Image.Image) -> dict | None:
         import numpy as np
 
         alpha = np.array(img)[:, :, 3]
-        bits = (alpha & 1).astype(np.uint8).T.reshape(-1)  # column-major
+        bits = _stealth_bits(alpha)
         sig_bits = 15 * 8
         if bits.size < sig_bits + 32:
             return None
         # 시그니처 확인 (opaque 이미지는 알파 LSB 가 전부 1이라 여기서 걸러진다)
-        sig = np.packbits(bits[:sig_bits]).tobytes().decode("utf-8", "ignore")
-        if sig not in ("stealth_pnginfo", "stealth_pngcomp"):
+        sig = _stealth_sig(bits)
+        if not sig:
             return None
         compressed = sig == "stealth_pngcomp"
         off = sig_bits
@@ -877,8 +892,18 @@ def strip(image_bytes: bytes, fmt: str = "PNG", quality: int = 95) -> bytes:
 
     arr = np.array(img)
     if arr.ndim == 3 and arr.shape[2] == 4:
-        if arr[:, :, 3].min() >= 254:
+        a = arr[:, :, 3]
+        if a.min() >= 254:
             arr[:, :, 3] = 255  # 불투명 — 스테가노그래피 LSB 를 지운다
+        elif _stealth_sig(_stealth_bits(a)):
+            # ★★**거의 불투명한 그림도 지운다** (사용자 제보 2026-08-31: *"메타데이터 제거를
+            #   해도 exif 리더에서 읽어져요"*). 알파가 **한두 픽셀만** 254 아래여도 예전에는
+            #   위 조건이 거짓이 되어 **정리를 통째로 건너뛰었다** — 실측으로 200장 중 34장이
+            #   그랬다 (min 227~253, 나머지 백만 픽셀은 254·255). PNG·WebP 둘 다 그랬다.
+            # ★그래서 알파 값이 아니라 **숨은 데이터가 실제로 있는가**로 가른다. 있으면 LSB 를
+            #   1 로 밀어 시그니처를 깬다 — 알파는 최대 1/255 만 움직여 눈에 안 보인다.
+            # ★알파 0 은 **그대로 둔다** — 투명 배경 그림이 반투명해지면 안 된다.
+            arr[:, :, 3] = np.where(a == 0, 0, a | 1)
     clean = Image.fromarray(arr)
 
     out = io.BytesIO()
