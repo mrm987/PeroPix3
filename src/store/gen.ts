@@ -445,6 +445,16 @@ useGen.subscribe((s, prev) => {
   if (s.params === prev.params) return;
   // ★모델이 바뀌면 상한도 바뀐다 — 줄어든 쪽이면 그 자리에서 초과분을 끈다
   if (s.params.model !== prev.params.model) clampCharsToModel();
+  /* ★★**바뀔 때마다 지금 탭에도 담는다** (사용자 지시 2026-08-31).
+     예전에는 **탭을 떠날 때만** 담았다. 그래서 탭 하나로만 쓰는 사용자는 담기는 순간이
+     아예 없었고, 앱을 껐다 켜면 부팅이 `tab.gen`(마지막으로 떠났을 때의 값)으로
+     localStorage 를 덮어 **매번 되돌아갔다** (제보 2026-08-31: *"STEPS, Prompt Guidance,
+     Prompt Guidance Rescale 값이 자꾸 초기화됩니다"*). 프롬프트는 이미 자동 저장마다
+     담기고 있었다 (`workspace.save` 의 `stash`) — 수치만 빠져 있던 자리다.
+     ★**미루지 않고 그 자리에서** 담는다: 파일 쓰기는 `stashGen` 안에서 이미 묶이고
+       (`queueSave`, 400ms), 여기서 또 미루면 늦게 깨어나 **남의 탭에** 쓸 수 있다. */
+  const tabId = useWs.getState().spec?.activeTab;
+  if (tabId) useWs.getState().stashGen(tabId, s.params);
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try {
