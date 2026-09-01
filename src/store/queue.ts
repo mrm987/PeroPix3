@@ -315,7 +315,7 @@ async function flushSpec(out: Record<string, unknown>) {
  *    갖고, 화면 버튼은 확인 창으로, 조수는 **승인 카드**로 묻는다 (`docs/…` 2-5).
  *  ★등록되지 않은 이름은 아래 옛 분기로 내려간다 — 프롬프트 편집처럼 아직 옮기지 않은 것들이다.
  */
-async function runAction(action: string, args: Record<string, any>): Promise<Record<string, unknown>> {
+async function runAction(action: string, args: Record<string, any>, ask = true): Promise<Record<string, unknown>> {
   const [{ getAction }, { askApprove, needsAsk }] = await Promise.all([
     import("../lib/actions"),
     import("../lib/approve"),
@@ -325,7 +325,10 @@ async function runAction(action: string, args: Record<string, any>): Promise<Rec
   if (def) {
     try {
       const risk = typeof def.confirm === "function" ? await def.confirm(args) : (def.confirm ?? "ask");
-      if (needsAsk(risk)) {
+      /* ★★**바깥 에이전트(MCP)는 안 묻는다** (사용자 결정 2026-08-31) — 그쪽 클라이언트가
+         이미 묻고, 기록도 그쪽 앱에 남는다. 백엔드가 어느 열쇠로 들어왔는지 보고 `ask` 로
+         알려 준다 (`backend/server.py` 의 `agent_call`). 앱 안 조수는 그대로 묻는다. */
+      if (ask && needsAsk(risk)) {
         const body = def.preview ? await def.preview(args) : undefined;
         /* ★제목은 **사람이 읽는 한 줄**이다 — `desc` 는 LLM 용이라 길고 마크다운이 섞여 있어
            카드가 설명서처럼 보인다 (QA 실측 2026-08-25). */
@@ -360,6 +363,7 @@ async function legacyAction(action: string, args: Record<string, any>): Promise<
      자동 승인 설정도 승인 카드도 앱에 있기 때문이다. 백엔드는 위험도만 정해 넘긴다
      (`backend/agent.py` 의 `TOOL_RISK`·`approve`). */
   if (action === "ask_approve") {
+    // ★바깥에서 온 것은 여기까지 오지 않는다 (백엔드가 `approve` 를 건너뛴다)
     const { askApprove, needsAsk } = await import("../lib/approve");
     const risk = (args.risk === "hard" ? "hard" : "ask") as "hard" | "ask";
     // ★자동 승인 설정을 **여기서도 그대로** 본다 — 기준이 두 벌이 되면 안 된다
@@ -891,7 +895,7 @@ function handle(m: Record<string, any>, set: Setter, get: () => S) {
     // ★AI 가 시킨 **행동** — 이름 붙은 것만 한다 (도구 목록은 백엔드가 갖는다).
     //   생성은 프롬프트 조립·시드 규칙이 전부 화면에 있어서 여기서 해야 한다
     case "do": {
-      void runAction(m.action, m.args ?? {}).then((result) =>
+      void runAction(m.action, m.args ?? {}, m.ask !== false).then((result) =>
         sock?.send(JSON.stringify({ type: "done", id: m.id, result })),
       );
       break;

@@ -17,7 +17,7 @@
 
 import { defineAction, err, nearBy, type ActionResult } from "./actions.ts";
 import { useWs, type DelTarget, type SceneGroup } from "../store/workspace";
-import { findSetAt, findTab, whereOf } from "./findAt.ts";
+import { findSetAt, findTab, tabOf, whereOf } from "./findAt.ts";
 import { useCensor } from "../store/censor";
 import { useQueue } from "../store/queue";
 import { useUi } from "../store/ui";
@@ -73,6 +73,14 @@ async function doRemove(target: DelTarget): Promise<ActionResult> {
   };
 }
 
+/** 지우는 것이 무엇인가 — 이름 앞에 붙여 「씬 그룹 「A」」 처럼 읽히게 한다 */
+const KIND_WORD: Record<string, string> = {
+  tab: "탭 ",
+  sceneGroup: "씬 그룹 ",
+  sceneCard: "씬 카드 ",
+  scene: "씬 ",
+};
+
 /** 승인 카드에 띄울 문구 — **무엇이 사라지는지 미리 세어** 보여 준다 */
 function previewRemove(target: DelTarget): string {
   const p = useWs.getState().planRemove(target);
@@ -80,8 +88,15 @@ function previewRemove(target: DelTarget): string {
   /* ★★**어느 탭인지 함께 적는다** (사용자 승인 2026-08-25). 이름만 적으면 다른 탭의 같은
      이름을 지우려는 것도 **똑같은 카드**로 보인다 — 그러면 승인 절차가 방어가 되지 않는다.
      ★자리를 말로 옮기는 것은 `lib/findAt` 의 `whereOf` 하나다. */
-  const at = target.kind === "sceneGroup" ? whereOf(target.id) : target.kind === "scene" ? whereOf(target.groupId) : "";
-  const bits = [at && at.includes("탭") ? `${at} 안의 「${p.name}」` : `「${p.name}」`];
+  /* ★★**담긴 자리**를 적는다 — 대상 자신이 아니다 (사용자 지적 2026-08-31: 「…「A」 안의
+     「A」」 로 이름이 두 번 나왔다). 씬 그룹은 탭 안에, 씬·씬 카드는 씬 그룹 안에 있다.
+     ★무엇을 지우는지도 말로 밝힌다 — 이름만 있으면 그것이 탭인지 씬인지 알 수 없다. */
+  const at =
+    target.kind === "sceneGroup" ? tabOf(target.id)
+    : target.kind === "scene" || target.kind === "sceneCard" ? whereOf(target.groupId)
+    : "";
+  const head = `${KIND_WORD[target.kind] ?? ""}「${p.name}」`;
+  const bits = [at ? `${at} 안의 ${head}` : head];
   if (p.inner) bits.push(`안에 든 ${p.inner}개`);
   if (p.files.length) bits.push(`그림 ${p.files.length}장 (휴지통으로)`);
   return bits.join(" · ") + " 가 사라집니다. 되돌리기로는 못 돌아옵니다.";

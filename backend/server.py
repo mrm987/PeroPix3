@@ -29,7 +29,7 @@ import sys
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fastapi import File, UploadFile, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import File, Request, UploadFile, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from PIL import Image
@@ -339,10 +339,14 @@ class KeyGate:
             return await self.app(scope, receive, send)
 
         path = scope.get("path", "")
-        for pref in self._prefixes():
+        for i, pref in enumerate(self._prefixes()):
             if path == pref or path.startswith(pref + "/"):
                 rest = path[len(pref):] or "/"
-                scope = {**scope, "path": rest, "raw_path": rest.encode()}
+                # ★★**어느 열쇠로 들어왔는지 남긴다** (사용자 결정 2026-08-31). 화면 열쇠(첫째)는
+                #   **이 앱의 조수**이고, 더 받아 준 열쇠는 **바깥 에이전트**(MCP)다. 규칙이
+                #   갈리므로 여기서 한 번 표시해 둔다 — 뒤에서는 다시 알아낼 방법이 없다.
+                state = {**(scope.get("state") or {}), "outside": i > 0}
+                scope = {**scope, "path": rest, "raw_path": rest.encode(), "state": state}
                 return await self.app(scope, receive, send)
 
         if scope["type"] == "websocket":
@@ -766,6 +770,12 @@ def write_mcp_endpoint() -> None:
     ★그래서 **주소를 파일에 적고** MCP 서버가 그것을 읽는다. 파일 자리는 안 바뀌므로 사용자가
       한 번 붙여 넣은 설정은 계속 맞는다 — 켤 때마다 이 파일만 새로 쓰인다.
     ★열쇠가 없으면 안 쓴다 — MCP 를 안 쓰는 사용자에게 파일을 만들지 않는다."""
+    # ★★**판정이 앱을 띄울 때는 쓰지 않는다** (실측 2026-08-31). 테스트가 FastAPI 앱을
+    #   세우면 startup 이 그대로 돌아, **돌고 있는 앱의 주소 파일을 8770 으로 덮었다**
+    #   (모듈 기본값). 그때부터 바깥 에이전트는 엉뚱한 곳에 붙는다.
+    #   ★표식은 `main()` 이 넣는다 — 리로드 워커도 환경을 물려받으므로 함께 지난다.
+    if not os.environ.get("PEROPIX_SERVING"):
+        return
     k = SECRETS.get(MCP_SECRET)
     if not k:
         return
@@ -858,8 +868,16 @@ async def agent_tools():
 
 
 @app.post("/api/agent/call")
-async def agent_call(body: AgentCall):
-    return await tools.call(body.name, body.input)
+async def agent_call(body: AgentCall, request: Request):
+    """★★**바깥 에이전트는 앱의 대화에 관여하지 않는다** (사용자 결정 2026-08-31).
+
+    MCP 로 붙은 도구는 **그쪽 클라이언트가 이미 묻는다** — 클로드 코드·코덱스 모두 도구를
+    부르기 전에 사용자에게 확인한다. 우리가 또 물으면 두 번 묻는 셈이고, 그 창을 안 보고
+    있으면 카드가 600초를 붙들기만 한다. 기록도 그쪽 앱에 남으므로 여기 남길 이유가 없다.
+    ★**앱 안의 조수는 그대로 묻는다.** 그쪽은 우리가 `--allowedTools mcp__peropix__*` 로
+      클라이언트 승인을 꺼 두므로(`cliagent.argv`), 우리 카드가 유일한 방어선이다."""
+    outside = bool((request.scope.get("state") or {}).get("outside"))
+    return await tools.call(body.name, body.input, outside=outside)
 
 
 # ── 로컬 에이전트 CLI ─────────────────────────────────────────────
@@ -3039,8 +3057,9 @@ def main():
     ap.add_argument("--port", type=int, default=8770)
     args = ap.parse_args()
     CURRENT_PORT = args.port
-    # ★★**주소를 남긴다** — 포트가 이번 실행에 정해지므로 여기서야 알 수 있다 (위 ★주)
-    write_mcp_endpoint()
+    # ★**여기부터가 진짜 서비스다** — 주소 파일은 이 표식이 있을 때만 쓰인다 (위 ★★주).
+    #   리로드 워커는 환경을 물려받으므로 그쪽에서도 켜져 있다.
+    os.environ["PEROPIX_SERVING"] = "1"
     # ★개발 중에는 **파이썬을 고치면 알아서 다시 뜬다** (사용자 지시 2026-08-08).
     #   예전엔 사이드카가 앱과 함께만 떠서, 백엔드를 고치면 앱을 통째로 재실행해야 했다.
     #   ★보는 곳은 `backend/` **하나뿐**이다 — 작업 폴더를 보게 두면 그림이 한 장 생길

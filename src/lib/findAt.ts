@@ -21,6 +21,15 @@ const tabsOf = () => useWs.getState().spec?.tabs ?? [];
 const sceneGroupsOf = () => (useWs.getState().spec?.sceneGroups ?? []).filter((x) => x.kind === "sceneGroup");
 
 /** 「어느 탭의 어느 것」을 말로 — 승인 카드·보고에 붙인다 (자리가 어긋난 것이 눈에 보이게) */
+/** 그 씬 그룹이 **어느 탭에** 있나 — 씬 그룹 자신의 이름은 넣지 않는다.
+ *  ★`whereOf` 는 「탭의 씬그룹」까지 말한다. 지우는 대상이 **씬 그룹 자신**일 때 그것을 쓰면
+ *    「…「A」 안의 「A」」 처럼 이름이 두 번 나온다 (사용자 지적 2026-08-31). */
+export function tabOf(groupId: string): string {
+  const set = sceneGroupsOf().find((x) => x.id === groupId);
+  const tab = set && tabsOf().find((c) => c.id === (set as { tabId?: string }).tabId);
+  return tab ? `「${tab.name}」 탭` : "";
+}
+
 export function whereOf(groupId: string): string {
   const set = sceneGroupsOf().find((x) => x.id === groupId);
   if (!set) return "";

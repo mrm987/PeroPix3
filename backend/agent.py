@@ -276,14 +276,16 @@ class App:
         #   없으면 도구가 세운다 (코드가 대신 고르지 않는다).
         self.workspace: str = ""
 
-    async def do(self, action: str, args: dict, timeout: float = 60.0) -> dict:
+    async def do(self, action: str, args: dict, timeout: float = 60.0, ask: bool = True) -> dict:
         if not self.clients:
             # ★앱을 켜면 그대로 다시 하면 된다 → safe
             return fail("app_off", "앱이 안 켜져 있습니다. PeroPix 를 켜고 다시 시켜 주세요.")
         cid = uuid.uuid4().hex[:8]
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         self._waiting[cid] = fut
-        msg = {"type": "do", "id": cid, "action": action, "args": args or {}}
+        # ★`ask: false` 면 화면도 안 묻는다 — 앱 액션은 **화면이** 승인 카드를 띄우므로
+        #   백엔드에서만 건너뛰면 바깥 요청이 그대로 카드에 걸린다 (`store/queue` 의 `runAction`)
+        msg = {"type": "do", "id": cid, "action": action, "args": args or {}, "ask": ask}
         sent = False
         for _, ws in reversed(list(self.clients.items())):
             try:
@@ -494,14 +496,22 @@ class Tools:
             return fail("blocked", "앞선 승인 요청이 아직 화면에 떠 있습니다. 그것을 먼저 처리해 주세요.")
         return fail("refused", "사용자가 승인하지 않았습니다.", retry="never")
 
-    async def call(self, name: str, args: dict) -> dict:
+    #: **우리 대화를 건드리는** 도구 — 바깥 에이전트에게는 열지 않는다 (사용자 결정 2026-08-31).
+    #  ★묻는 것도 이름 붙이는 것도 **제 대화에서** 할 일이다. 여기서 열어 두면 사용자가 쓰던
+    #    대화에 남의 물음이 끼어들고, 대화 이름이 바깥에서 바뀐다.
+    CHAT_TOOLS = {"ask_user", "name_chat"}
+
+    async def call(self, name: str, args: dict, outside: bool = False) -> dict:
+        if outside and name in self.CHAT_TOOLS:
+            return fail("not_here", "이 도구는 PeroPix 앱 안의 조수만 씁니다. "
+                        "묻거나 이름 붙이는 것은 당신 쪽 대화에서 하세요.", retry="never")
         # ★★표에 없는 이름이라도 **액션 목록에 있으면 앱에 시킨다** (2026-08-24).
         #   ★기다리는 시간이 넉넉해야 한다: 되돌릴 수 없는 일 앞에서는 앱이 **승인 카드**를
         #     띄우고 사람이 누를 때까지 멈춘다 (`docs/agent-actions-design.md` 2-5).
         #     `ask_user` 와 같은 취급으로 두지 않으면, 사람이 답하는 중에 도구가 시간 초과로
         #     끝나 놓고 **그 뒤에 실행**되는 어긋남이 난다.
         if not any(n == name for n, _, _, _ in self._table()) and _is_action(name):
-            return self._mark_app(name, await self.app.do(name, args or {}, timeout=600.0))
+            return self._mark_app(name, await self.app.do(name, args or {}, timeout=600.0, ask=not outside))
         for n, _, _, fn in self._table():
             if n != name:
                 continue
@@ -513,11 +523,12 @@ class Tools:
                 #   뜰 수 있는 것 전부**가 그렇다 (2026-08-24). 짧게 두면 사람이 승인을 누르는
                 #   동안 도구가 시간 초과로 끝나 놓고 **그 뒤에 실행**되는 어긋남이 난다
                 #   (조수는 실패로 보고했는데 실제로는 지워진다).
-                out = await self.app.do(name, args or {}, timeout=600.0)
+                out = await self.app.do(name, args or {}, timeout=600.0, ask=not outside)
                 return self._mark_app(name, out)
             # ★★**실행 전에 승인을 지난다** — 앱 액션과 같은 기준이다 (`approve`).
             #   ★무엇을 하려는지 한 줄로 보여 준다: 카드·지침은 이름을, 파일은 장 수를.
-            gate = await self.approve(name, self._what(name, args or {}))
+            # ★바깥 에이전트는 지나간다 (`server.agent_call` 의 ★★주)
+            gate = None if outside else await self.approve(name, self._what(name, args or {}))
             if gate is not None:
                 return gate
             try:
