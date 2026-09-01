@@ -2,45 +2,36 @@ import { useState } from "react";
 import { api } from "../lib/backend";
 import { useI18n } from "../i18n";
 
-/** **MCP 연동** — 바깥 에이전트(클로드 코드 등)가 이 앱의 도구를 그대로 쓰게 하는 자리
+/** **MCP 연동** — 바깥 에이전트(클로드 코드·코덱스 등)가 이 앱의 도구를 그대로 쓰게 하는 자리
  *  (사용자 결정 2026-08-31).
  *
  *  ★★도구도 지침도 **내부 조수와 한 벌**이다 (`backend/mcp_stdio.py`) — 여기서 따로
- *    보여 주거나 고르게 하지 않는다. 이 화면이 하는 일은 **붙여 넣을 것을 건네주는 것** 하나다.
- *  ★설정은 백엔드가 짓는다 (`/api/mcp/config`) — 파이썬·스크립트 경로·포트·열쇠를
- *    화면이 짐작하면 배포판과 저장소에서 갈리고, 한쪽만 고쳐진다.
- *  ★★**다음에 무엇을 할지는 누른 뒤에 말한다** (사용자 지적 2026-08-31: *"복사를 누르면
- *    JSON 이 나오는데 다음 행동을 모르겠다"*). 미리 다 적어 두면 읽지 않고, 정작 복사한
- *    뒤에는 안내가 없었다. 그래서 설명은 한 줄로 줄이고, **고른 방식에 맞는 안내**를 아래에 띄운다. */
-type Conf = { json: string; command: string };
-
+ *    보여 주거나 고르게 하지 않는다. 이 화면이 하는 일은 **건네줄 것을 만들어 주는 것** 하나다.
+ *  ★★**등록 명령어를 짓지 않는다** (사용자 지시 2026-08-31: *"정확히 실행되는 명령어일
+ *    필요 없고, LLM 에 건네면 통용되는 형태면 된다"*). 도구마다 등록 방법이 다르고 셸마다
+ *    따옴표 규칙도 달라, 맞히려 들면 한 도구에만 맞는다 (실측: `claude mcp add-json` 한 줄이
+ *    파워셸에서 깨졌다). 대신 **「이 양식대로 연동해 줘」 + 설정**을 준다.
+ *  ★값(경로·포트·열쇠)은 백엔드가, 말은 여기(i18n)가 — 언어는 셋이고 값은 하나다.
+ *  ★★**다음에 무엇을 할지는 누른 뒤에 말한다** (사용자 지적 2026-08-31) — 미리 다 적어 두면
+ *    읽지 않고, 정작 복사한 뒤에는 안내가 없었다. */
 export function McpSettings() {
   const t = useI18n((s) => s.t);
-  const [conf, setConf] = useState<Conf | null>(null);
-  const [mode, setMode] = useState<"cmd" | "json" | null>(null);
+  const [text, setText] = useState("");
   const [err, setErr] = useState("");
 
   /** ★**누를 때 받아 온다** — 이 창구를 부르는 순간 고정 열쇠가 처음 만들어지므로,
    *    MCP 를 안 쓰는 사용자에게는 열쇠 자체가 생기지 않는다. */
-  const copy = async (which: "cmd" | "json") => {
+  const copy = async () => {
     setErr("");
     try {
-      const r = conf ?? (await api<Conf>("/api/mcp/config"));
-      setConf(r);
-      await navigator.clipboard.writeText(which === "cmd" ? r.command : r.json);
-      setMode(which);
+      const r = await api<{ json: string }>("/api/mcp/config");
+      const out = `${t("settings.mcpAsk")}\n\n${r.json}`;
+      setText(out);
+      await navigator.clipboard.writeText(out);
     } catch (e) {
       setErr(String(e));
-      setMode(null);
+      setText("");
     }
-  };
-
-  const btn: React.CSSProperties = {
-    padding: "3px var(--sp-3)",
-    fontSize: "var(--text-2xs)",
-    border: "1px solid var(--line)",
-    borderRadius: "var(--r-1)",
-    color: "var(--ink)",
   };
 
   return (
@@ -49,26 +40,31 @@ export function McpSettings() {
         {t("settings.mcpHint")}
       </span>
 
-      <div style={{ display: "flex", gap: "var(--sp-2)" }}>
-        <button data-mcp-copy="cmd" onClick={() => void copy("cmd")} style={btn}>
-          {t("settings.mcpCopyCmd")}
-        </button>
-        <button data-mcp-copy="json" onClick={() => void copy("json")} style={btn}>
-          {t("settings.mcpCopyJson")}
-        </button>
-      </div>
+      <button
+        data-mcp-copy
+        onClick={() => void copy()}
+        style={{
+          alignSelf: "flex-start",
+          padding: "3px var(--sp-3)",
+          fontSize: "var(--text-2xs)",
+          border: "1px solid var(--line)",
+          borderRadius: "var(--r-1)",
+          color: "var(--ink)",
+        }}
+      >
+        {t("settings.mcpCopy")}
+      </button>
 
-      {/* ★복사한 **그 방식**에 맞는 다음 행동만 말한다 */}
-      {mode && conf && (
+      {text && (
         <div data-mcp-next style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
           <span style={{ fontSize: "var(--text-2xs)", color: "var(--accent-ink)", lineHeight: 1.6 }}>
-            {t(mode === "cmd" ? "settings.mcpNextCmd" : "settings.mcpNextJson")}
+            {t("settings.mcpNext")}
           </span>
           <pre
             data-mcp-config
             style={{
               margin: 0,
-              maxHeight: 180,
+              maxHeight: 200,
               overflow: "auto",
               padding: "var(--sp-2)",
               background: "var(--surface2)",
@@ -81,7 +77,7 @@ export function McpSettings() {
               userSelect: "text",
             }}
           >
-            {mode === "cmd" ? conf.command : conf.json}
+            {text}
           </pre>
           <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", lineHeight: 1.6 }}>
             {t("settings.mcpNote")}
