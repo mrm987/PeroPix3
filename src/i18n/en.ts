@@ -652,7 +652,6 @@ export const en = {
     mcpTitle: "MCP",
     mcpHint: "Agents like Claude Code or Codex can drive this app directly. Copy the text below and hand it to your agent.",
     mcpCopy: "Copy",
-    mcpAsk: "Please register the MCP server below, using whatever method your tool uses.",
     mcpNext: "Copied. Paste it as-is into your AI agent.",
     mcpNote: "The app must be running for the tools to work. The key is created once and reused.",
     agentApproveHint: "Cannot be undone: deleting cards and scenes, and generation that spends Anlas. Generation within the Opus allowance passes automatically.",

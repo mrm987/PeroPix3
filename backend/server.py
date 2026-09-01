@@ -783,9 +783,14 @@ async def mcp_config():
     #   파워셸이 JSON 안의 겹따옴표를 뭉개 `Invalid configuration` 이 났다.
     #   대신 **설정만** 주고, 「이 양식대로 연동해 줘」라는 말을 화면이 앞에 붙여 사용자가
     #   쓰는 에이전트에게 건넨다. 등록 방법은 그 에이전트가 제 도구에 맞게 고른다.
-    # ★말은 화면(i18n)에, 값은 여기에 — 언어는 세 가지고 경로·포트·열쇠는 하나다.
-    return {"name": "peropix", "server": server,
-            "json": json.dumps({"mcpServers": {"peropix": server}}, ensure_ascii=False, indent=2)}
+    # ★★**요청문은 언제나 영어다** (사용자 지시 2026-08-31). 이 글을 읽는 것은 사람이 아니라
+    #   **에이전트**라 앱의 표시 언어를 따라갈 이유가 없다 — 도구 설정에서 가장 널리 통하는
+    #   말이 영어다. 그래서 i18n 이 아니라 **여기**서 만든다 (화면 문구와 성격이 다르다).
+    conf = json.dumps({"mcpServers": {"peropix": server}}, ensure_ascii=False, indent=2)
+    ask = ("Please register the MCP server below, using whatever setup method your tool supports "
+           "(config file or CLI). It connects to PeroPix, a desktop app that must be running.")
+    return {"name": "peropix", "server": server, "json": conf, "ask": ask,
+            "text": f"{ask}\n\n{conf}"}
 
 
 @app.get("/api/agent/system")

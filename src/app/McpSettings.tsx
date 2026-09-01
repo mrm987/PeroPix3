@@ -11,7 +11,9 @@ import { useI18n } from "../i18n";
  *    필요 없고, LLM 에 건네면 통용되는 형태면 된다"*). 도구마다 등록 방법이 다르고 셸마다
  *    따옴표 규칙도 달라, 맞히려 들면 한 도구에만 맞는다 (실측: `claude mcp add-json` 한 줄이
  *    파워셸에서 깨졌다). 대신 **「이 양식대로 연동해 줘」 + 설정**을 준다.
- *  ★값(경로·포트·열쇠)은 백엔드가, 말은 여기(i18n)가 — 언어는 셋이고 값은 하나다.
+ *  ★★**건네줄 글은 백엔드가 통째로 만든다** — 요청문이 **언제나 영어**이기 때문이다
+ *    (사용자 지시 2026-08-31: 읽는 것은 사람이 아니라 에이전트다). 화면 문구(i18n)와
+ *    성격이 달라 같은 자리에 두지 않는다. 여기서 조립하면 앱 언어를 따라가게 된다.
  *  ★★**다음에 무엇을 할지는 누른 뒤에 말한다** (사용자 지적 2026-08-31) — 미리 다 적어 두면
  *    읽지 않고, 정작 복사한 뒤에는 안내가 없었다. */
 export function McpSettings() {
@@ -24,10 +26,9 @@ export function McpSettings() {
   const copy = async () => {
     setErr("");
     try {
-      const r = await api<{ json: string }>("/api/mcp/config");
-      const out = `${t("settings.mcpAsk")}\n\n${r.json}`;
-      setText(out);
-      await navigator.clipboard.writeText(out);
+      const r = await api<{ text: string }>("/api/mcp/config");
+      setText(r.text);
+      await navigator.clipboard.writeText(r.text);
     } catch (e) {
       setErr(String(e));
       setText("");
