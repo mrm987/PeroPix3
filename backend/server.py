@@ -770,8 +770,12 @@ def write_mcp_endpoint() -> None:
     if not k:
         return
     try:
+        # ★★**문이 안 잠겨 있으면 열쇠를 적지 않는다** (실측 2026-08-31). 개발 모드에서는
+        #   껍데기가 열쇠를 안 만들어 `KEY_PREFIX` 가 비고, KeyGate 가 통째로 지나간다 —
+        #   그런데 주소에 `/k/…` 를 붙이면 **그런 길이 없어 404** 가 온다. 실제로 밟았다.
         MCP_ENDPOINT.write_text(
-            json.dumps({"port": CURRENT_PORT, "key": k}, ensure_ascii=False), encoding="utf-8")
+            json.dumps({"port": CURRENT_PORT, "key": k if KEY_PREFIX else ""}, ensure_ascii=False),
+            encoding="utf-8")
     except OSError as e:
         say("error", "mcp", f"주소 파일을 못 썼습니다: {e}")
 
@@ -2067,6 +2071,10 @@ async def _process_job(job: dict) -> None:
 @app.on_event("startup")
 async def _start_queue():
     app.state.queue_task = asyncio.create_task(genqueue.run_loop(Q, _process_job))
+    # ★★**주소는 여기서 남긴다** (실측 2026-08-31). `main()` 에만 두면 개발 리로드 모드에서
+    #   워커가 그 길을 안 지나 **파일이 옛 주소로 남는다** — 실제로 시험 서버가 적어 둔 포트가
+    #   그대로 남아 개발판에 못 붙었다. 서버가 뜨는 자리는 어느 모드든 반드시 지난다.
+    write_mcp_endpoint()
 
 
 @app.on_event("shutdown")

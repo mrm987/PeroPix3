@@ -105,6 +105,15 @@ def _down(e: Exception) -> str:
 
     ★읽는 것은 사람이 아니라 에이전트다. 원문 오류(`WinError 10061`)만 주면 무엇을 하라는
       말인지 알 수 없어 엉뚱한 것을 고치려 든다. 영어로 적는 것도 같은 까닭이다."""
+    # ★★**답이 온 것과 안 온 것을 가른다** (실측 2026-08-31). `HTTPError` 는 `URLError` 의
+    #   자식이라 한 덩이로 다루면 **404·403 까지 「앱이 꺼져 있다」로 말한다** — 실제로 열쇠가
+    #   어긋나 404 가 왔는데 앱을 켜라고 답했다. 앱은 멀쩡히 돌고 있었다.
+    if isinstance(e, urllib.error.HTTPError):
+        if e.code in (403, 404):
+            return (f"PeroPix answered {e.code} at {BASE} — the address or key is stale. "
+                    f"Ask the user to restart PeroPix, or to copy the MCP config again "
+                    f"(Settings > MCP).")
+        return f"PeroPix returned HTTP {e.code}: {e}"
     if isinstance(e, (urllib.error.URLError, OSError)):
         return (f"PeroPix is not running (tried {BASE.split('/k/')[0]}). "
                 f"Ask the user to start the PeroPix app, then retry. [{e}]")
