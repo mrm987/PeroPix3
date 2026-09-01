@@ -777,8 +777,21 @@ async def mcp_config():
     base = f"http://127.0.0.1:{CURRENT_PORT}/k/{mcp_key()}"
     server = {"type": "stdio", "command": sys.executable, "args": [script],
               "env": {"PEROPIX_BACKEND": base}}
+    # ★★**둘 다 준다** (사용자 지적 2026-08-31: *"복사한 텍스트 안에 설치 명령어가 있어야
+    #   하는 것 아닌가"*). 도구마다 받는 모양이 다르다:
+    #     · 클로드 코드는 **명령어 한 줄**로 끝난다.
+    #     · 클로드 데스크톱 등은 설정 파일의 `mcpServers` 안에 **JSON 을 넣는다.**
+    # ★★명령어는 `add-json` 이 **아니라** `add` 다 (실측 2026-08-31). `add-json` 은 JSON 을
+    #   통째로 인자에 실어야 하는데, **윈도우 파워셸이 그 안의 겹따옴표를 뭉개서** 붙여 넣으면
+    #   `Invalid configuration: Invalid input` 이 온다 (홑따옴표로 감싸도 마찬가지였다).
+    #   `add` 형태는 겹따옴표가 경로 둘에만 붙어 그 함정이 없다 — 실제로 등록해 보고
+    #   `claude mcp get` 이 **✓ Connected** 를 내는 것까지 확인했다.
+    # ★`--scope user` 다 — 어느 폴더에서 클로드 코드를 켜든 앱을 몰 수 있어야 한다
+    #   (프로젝트 하나에 매인 도구가 아니다).
     return {"name": "peropix", "server": server,
-            "json": json.dumps({"mcpServers": {"peropix": server}}, ensure_ascii=False, indent=2)}
+            "json": json.dumps({"mcpServers": {"peropix": server}}, ensure_ascii=False, indent=2),
+            "command": (f"claude mcp add peropix -e PEROPIX_BACKEND={base} --scope user "
+                        f'-- "{sys.executable}" "{script}"')}
 
 
 @app.get("/api/agent/system")
