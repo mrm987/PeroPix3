@@ -13,6 +13,7 @@ import { toast } from "../store/toast";
 import { Icon } from "../components/Icon";
 import { Help } from "../components/Tip";
 import { AiSettings } from "./AiSettings";
+import { McpSettings } from "./McpSettings";
 
 /** 설정 — **앱 안에서 손대는 것들**을 한자리에 (10단계).
  *
@@ -474,6 +475,7 @@ export function Settings({
             )}
 
             {tab === "llm" && <AiSettings />}
+            {tab === "mcp" && <McpSettings />}
             {tab === "keys" && <KeyGuide />}
           </div>
         </div>
@@ -489,6 +491,7 @@ const TABS = [
   ["general", "settings.tabGeneral"],
   ["look", "settings.look"],
   ["llm", "settings.llm"],
+  ["mcp", "settings.mcpTab"],
   ["keys", "settings.keysTab"],
 ] as const satisfies readonly (readonly [TabId, string])[];
 

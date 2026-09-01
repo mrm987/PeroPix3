@@ -17,7 +17,7 @@ const KEY = "peropix.ui";
 
 /** 설정 창의 좌측 탭. ★`app/Settings.tsx` 가 이 이름을 그대로 쓴다 — 여는 자리마다
  *  다른 이름을 쓰면 "어느 탭이 열리나"가 흩어진다. */
-export type SettingsTabId = "general" | "look" | "llm" | "keys";
+export type SettingsTabId = "general" | "look" | "llm" | "mcp" | "keys";
 
 
 /** 본문 폰트 — 넷을 번들해 두고 고른다 (styles/fonts.css). 비교해 보려고 넣은 것이다. */
