@@ -15,6 +15,12 @@ import { useTagSearch } from "../store/tagsearch";
  *  옮겨 갔다 돌아와 치는 일이 없다 (사용자 지적: *"생성 모드에서 볼 수 있지 않으면 쓰기 애매"*).
  *  ★독립 기능이다 — 이 파일·`store/tagsearch.ts`·`lib/tagSearch.ts`·`backend/tagindex.py` 와
  *    단추 하나(`PromptPanel`)·마운트 한 줄(`App`)이 전부라 들어내기 쉽다. */
+/** ★★**아직 열지 않는다** (사용자 지시 2026-09-01: *"태그 검색 서랍은 아직 미완성"*).
+ *  v3.0.5 로 한 번 나갔던 것을 도로 잠갔다 — 코드·판정·백엔드 창구(`/api/tags/*`)는 그대로
+ *  두고 **문만 닫는다.** 다시 열 때는 이 값을 `true` 로 바꾸면 된다.
+ *  ★잠근 동안에는 인덱스도 안 돈다 — 서랍을 열어야 훑기 때문이다 (`store/tagsearch.setOpen`). */
+export const TAG_SEARCH_READY = false;
+
 const SHOW_TAGS = 200;
 const SHOW_STEP = 60;
 
@@ -49,7 +55,7 @@ export function TagDrawer() {
   const picked = pick ? tags.get(pick) : undefined;
   const files = useTagSearch((s) => s.files);
 
-  if (!open) return null;
+  if (!TAG_SEARCH_READY || !open) return null;
 
   return (
     <div
@@ -285,6 +291,11 @@ export function TagDrawer() {
 /** 서랍 열기 단추 — 프롬프트 라벨 줄, 블록 저장소 단추 옆 */
 export function TagSearchButton() {
   const t = useI18n((s) => s.t);
+  // ★잠긴 동안에는 단추도 없다 — 열 길이 없어야 「미완성인데 왜 보이나」가 안 생긴다
+  return TAG_SEARCH_READY ? <TagSearchToggle t={t} /> : null;
+}
+
+function TagSearchToggle({ t }: { t: (k: string) => string }) {
   const open = useTagSearch((s) => s.open);
   const setOpen = useTagSearch((s) => s.setOpen);
   return (
