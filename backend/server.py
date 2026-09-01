@@ -876,7 +876,10 @@ async def agent_call(body: AgentCall, request: Request):
     있으면 카드가 600초를 붙들기만 한다. 기록도 그쪽 앱에 남으므로 여기 남길 이유가 없다.
     ★**앱 안의 조수는 그대로 묻는다.** 그쪽은 우리가 `--allowedTools mcp__peropix__*` 로
       클라이언트 승인을 꺼 두므로(`cliagent.argv`), 우리 카드가 유일한 방어선이다."""
-    outside = bool((request.scope.get("state") or {}).get("outside"))
+    # ★표식이 먼저다 — 개발 모드에서는 문을 안 잠가 열쇠로 못 가른다 (`mcp_stdio` 의 ★★주).
+    #   잠긴 배포판에서는 둘 다 맞는다: MCP 열쇠로 들어오고 표식도 달고 온다.
+    outside = (request.headers.get("x-peropix-outside") == "1"
+               or bool((request.scope.get("state") or {}).get("outside")))
     return await tools.call(body.name, body.input, outside=outside)
 
 

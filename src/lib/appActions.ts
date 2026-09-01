@@ -319,16 +319,24 @@ defineAction({
       });
     const g = useGen.getState();
     const done: string[] = [];
+    /* ★★**옛 값을 함께 들고 나간다** (사용자 지시 2026-08-31). 예전에는 안 적어서
+       `undo_change` 가 「아직 자동으로 못 되돌립니다」로 거절했다 — 조수가 스텝을 바꿔 놓고
+       되돌려 달라고 하면 손으로 고쳐야 했다.
+       ★되돌리는 법은 **같은 액션을 옛 값으로 부르는 것**이다 (`agent._undo_change` 의 ★★주) —
+       갈래마다 되돌리는 코드를 새로 적지 않는다. */
+    const was: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(o)) {
       const want = GEN_FIELDS[k];
       const val = want === "number" ? Number(v) : want === "boolean" ? !!v : String(v);
       if (want === "number" && !Number.isFinite(val as number))
         return err("unknown_field", `${k} 는 숫자여야 합니다.`, { given: String(v) });
+      was[k] = (g.params as Record<string, unknown>)[k];
       g.set(k as never, val as never);
       done.push(`${k}=${val}`);
     }
     if (!done.length) return err("unknown_field", "고칠 값을 주세요.");
-    return { ok: true, did: `생성 옵션 고침 — ${done.join(", ")}`, at: { kind: "queue" } };
+    return { ok: true, did: `생성 옵션 고침 — ${done.join(", ")}`, at: { kind: "queue" },
+      before: { action: "set_gen_option", args: { options: was } } };
   },
 });
 

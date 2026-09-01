@@ -79,9 +79,15 @@ def _req(path: str, body: dict | None = None) -> dict:
         BASE = _from_app() or BASE
     url = BASE + path
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(
-        url, data=data, headers={"Content-Type": "application/json"} if data else {}
-    )
+    # ★★**바깥에서 왔다고 밝힌다** (사용자 결정 2026-08-31). 앱은 이 표식을 보고 승인 카드를
+    #   건너뛰고, 앱의 대화를 건드리는 도구를 거절한다.
+    #   ★왜 열쇠로 안 가르나: **개발 모드는 문을 안 잠근다**(`KEY_PREFIX` 가 빈 문자열) — 그때는
+    #     모든 요청이 같은 길로 들어와 안팎이 구분되지 않는다 (실측으로 밟았다).
+    #   ★이것은 **자물쇠가 아니라 신원 표시**다. 문을 지키는 것은 여전히 열쇠다.
+    head = {"X-PeroPix-Outside": "1"}
+    if data:
+        head["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=head)
     # ★`ask_user` 는 사람이 답할 때까지 기다린다 — 여기서 먼저 끊기면 안 된다
     with urllib.request.urlopen(req, timeout=1800) as r:
         return json.loads(r.read().decode("utf-8"))
