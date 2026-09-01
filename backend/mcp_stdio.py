@@ -67,6 +67,15 @@ def fail(mid, code: int, message: str) -> None:
     send({"jsonrpc": "2.0", "id": mid, "error": {"code": code, "message": message}})
 
 
+def _system_prompt() -> str:
+    """내부 조수가 받는 그 지침 (`/api/agent/system`)."""
+    try:
+        return _req("/api/agent/system?lang=ko")["system"]
+    except Exception as e:
+        log("[peropix-mcp] 지침을 못 받았습니다:", e)
+        return "PeroPix 3.0 의 화면을 직접 만지는 도구들입니다. 고치기 전에 get_workspace 로 지금 상태를 확인하세요."
+
+
 def handle(msg: dict) -> None:
     method = msg.get("method")
     mid = msg.get("id")
@@ -83,8 +92,12 @@ def handle(msg: dict) -> None:
                 "protocolVersion": want,
                 "capabilities": {"tools": {}},
                 "serverInfo": {"name": NAME, "version": VERSION},
-                "instructions": "PeroPix 3.0 의 화면을 직접 만지는 도구들입니다. "
-                "고치기 전에 get_screen 으로 지금 상태를 확인하세요.",
+                # ★★**지침도 같은 창구에서 받는다** (사용자 지시 2026-08-31: *"별도 구현이
+                #   아니라 같은 창구를 쓰는 게 제일 깔끔"*). 도구는 이미 `/api/agent/tools` 로
+                #   내부 조수와 한 벌인데 지침만 여기 두 줄로 따로 적혀 있었다 — 그래서 바깥
+                #   에이전트는 앱의 규약(캐릭터 칸에는 인물만·base 는 그림체…)을 모른 채 움직였다.
+                # ★못 받으면 앱이 아직 안 떴다는 뜻이다 — 짧은 안내로 대신하고 연결은 살린다.
+                "instructions": _system_prompt(),
             },
         )
         return

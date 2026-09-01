@@ -317,21 +317,33 @@ class KeyGate:
     ★★**HTTP 미들웨어가 아니라 ASGI 층**이다 — `@app.middleware("http")` 는 웹소켓을
       안 지나간다. 소켓이야말로 진행 상황·생성 결과가 흐르는 통로라 빠지면 안 된다.
     ★맞히려는 쪽이 얻는 것은 403 뿐이다. 몇 번째 글자가 맞았는지 같은 실마리를 안 준다.
+    ★★**열쇠는 둘이다** (사용자 결정 2026-08-31). 화면이 쓰는 것은 **실행마다 바뀌고**,
+      바깥 에이전트(MCP)가 쓰는 것은 **고정**이다 — 안 그러면 앱을 켤 때마다 설정을 다시
+      붙여 넣어야 해서 아무도 안 쓴다. 고정 열쇠를 파일에 두어도 **웹페이지에 대한 방어는
+      그대로다**: 웹페이지는 파일을 못 읽는다. 그 파일을 읽을 수 있는 프로그램이라면
+      이미 토큰·워크스페이스를 통째로 읽을 수 있어 열쇠 하나가 더할 위험이 없다.
+    ★고정 열쇠는 **쓸 때 처음 만든다** (`mcp_key`) — MCP 를 안 쓰는 사용자에게는 아예 없다.
     """
 
-    def __init__(self, app_, prefix: str):
+    def __init__(self, app_, prefix: str, extra=None):
         self.app = app_
         self.prefix = prefix
+        #: 더 받아 줄 열쇠를 **그때그때 묻는다** — MCP 열쇠는 나중에 생길 수 있다
+        self.extra = extra or (lambda: [])
+
+    def _prefixes(self) -> list[str]:
+        return [p for p in [self.prefix, *self.extra()] if p]
 
     async def __call__(self, scope, receive, send):
         if not self.prefix or scope["type"] not in ("http", "websocket"):
             return await self.app(scope, receive, send)
 
         path = scope.get("path", "")
-        if path == self.prefix or path.startswith(self.prefix + "/"):
-            rest = path[len(self.prefix):] or "/"
-            scope = {**scope, "path": rest, "raw_path": rest.encode()}
-            return await self.app(scope, receive, send)
+        for pref in self._prefixes():
+            if path == pref or path.startswith(pref + "/"):
+                rest = path[len(pref):] or "/"
+                scope = {**scope, "path": rest, "raw_path": rest.encode()}
+                return await self.app(scope, receive, send)
 
         if scope["type"] == "websocket":
             # ★받기 전에 닫는다 — 핸드셰이크를 마치면 그때부터 방송이 흘러간다
@@ -351,7 +363,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(KeyGate, prefix=KEY_PREFIX)
+app.add_middleware(KeyGate, prefix=KEY_PREFIX, extra=lambda: mcp_prefixes())
 
 
 # ── 설정 ──────────────────────────────────────────────────────────
@@ -728,6 +740,45 @@ async def set_token(body: TokenBody):
 class AgentCall(BaseModel):
     name: str
     input: dict = {}
+
+
+# ── MCP (바깥 에이전트가 앱을 몬다) ──────────────────────────────
+#: 고정 열쇠가 사는 자리 — 비밀 파일이다 (`secrets.json`, 신고용 `config.json` 과 가른다)
+MCP_SECRET = "mcp_key"
+
+
+def mcp_prefixes() -> list[str]:
+    """KeyGate 가 **더 받아 줄** 앞머리. ★없으면 빈 목록 — 만들지 않는다.
+    문을 안 잠근 개발 모드(`KEY_PREFIX` 가 빈 문자열)에서는 애초에 KeyGate 가 지나간다."""
+    k = SECRETS.get(MCP_SECRET)
+    return [f"/k/{k}"] if k else []
+
+
+def mcp_key() -> str:
+    """MCP 용 고정 열쇠 — **처음 물을 때 만든다.**
+
+    ★화면 열쇠(`APP_KEY`)와 달리 실행마다 바뀌지 않는다. 바깥 에이전트의 설정 파일에
+      한 번 적어 두고 계속 쓰는 것이라, 켤 때마다 바뀌면 쓸 수가 없다."""
+    k = SECRETS.get(MCP_SECRET)
+    if not k:
+        k = uuid.uuid4().hex + uuid.uuid4().hex[:16]
+        SECRETS.set(MCP_SECRET, k)
+    return k
+
+
+@app.get("/api/mcp/config")
+async def mcp_config():
+    """붙여 넣을 수 있는 **완성된 MCP 설정**을 준다 (사용자 결정 2026-08-31).
+
+    ★경로를 화면이 짐작하지 않는다 — 파이썬도 스크립트도 **지금 이 프로세스가 아는 것**이
+      정확하다 (배포판은 동봉 파이썬, 저장소는 PATH 의 파이썬).
+    ★열쇠는 여기서 처음 만들어진다 — 이 창구를 안 부르면 열쇠도 없다."""
+    script = str((Path(__file__).resolve().parent / "mcp_stdio.py"))
+    base = f"http://127.0.0.1:{CURRENT_PORT}/k/{mcp_key()}"
+    server = {"type": "stdio", "command": sys.executable, "args": [script],
+              "env": {"PEROPIX_BACKEND": base}}
+    return {"name": "peropix", "server": server,
+            "json": json.dumps({"mcpServers": {"peropix": server}}, ensure_ascii=False, indent=2)}
 
 
 @app.get("/api/agent/system")
