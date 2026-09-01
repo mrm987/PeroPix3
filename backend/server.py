@@ -754,6 +754,28 @@ def mcp_prefixes() -> list[str]:
     return [f"/k/{k}"] if k else []
 
 
+#: 지금 실행의 주소가 적히는 자리 — MCP 서버가 이걸 읽는다
+MCP_ENDPOINT = DATA_DIR / "mcp-endpoint.json"
+
+
+def write_mcp_endpoint() -> None:
+    """**포트는 켤 때마다 바뀔 수 있다** — 8770 이 차 있으면 빈 번호로 밀린다 (실측: 설치본이
+    8770 을 쥐고 있어 개발판이 51676 으로 떴다). 그래서 바깥 도구의 설정에 포트를 적어 두면
+    다음 실행에서 안 붙는다.
+
+    ★그래서 **주소를 파일에 적고** MCP 서버가 그것을 읽는다. 파일 자리는 안 바뀌므로 사용자가
+      한 번 붙여 넣은 설정은 계속 맞는다 — 켤 때마다 이 파일만 새로 쓰인다.
+    ★열쇠가 없으면 안 쓴다 — MCP 를 안 쓰는 사용자에게 파일을 만들지 않는다."""
+    k = SECRETS.get(MCP_SECRET)
+    if not k:
+        return
+    try:
+        MCP_ENDPOINT.write_text(
+            json.dumps({"port": CURRENT_PORT, "key": k}, ensure_ascii=False), encoding="utf-8")
+    except OSError as e:
+        say("error", "mcp", f"주소 파일을 못 썼습니다: {e}")
+
+
 def mcp_key() -> str:
     """MCP 용 고정 열쇠 — **처음 물을 때 만든다.**
 
@@ -763,6 +785,7 @@ def mcp_key() -> str:
     if not k:
         k = uuid.uuid4().hex + uuid.uuid4().hex[:16]
         SECRETS.set(MCP_SECRET, k)
+        write_mcp_endpoint()   # ★막 만들었으니 지금 주소도 함께 남긴다
     return k
 
 
@@ -773,10 +796,17 @@ async def mcp_config():
     ★경로를 화면이 짐작하지 않는다 — 파이썬도 스크립트도 **지금 이 프로세스가 아는 것**이
       정확하다 (배포판은 동봉 파이썬, 저장소는 PATH 의 파이썬).
     ★열쇠는 여기서 처음 만들어진다 — 이 창구를 안 부르면 열쇠도 없다."""
-    script = str((Path(__file__).resolve().parent / "mcp_stdio.py"))
-    base = f"http://127.0.0.1:{CURRENT_PORT}/k/{mcp_key()}"
-    server = {"type": "stdio", "command": sys.executable, "args": [script],
-              "env": {"PEROPIX_BACKEND": base}}
+    # ★★경로는 **슬래시로** 적는다 (사용자 지적 2026-08-31: *"`\\` 가 두 번 적힌다"*).
+    #   JSON 은 역슬래시를 두 번 써야 하나가 되는데, 읽는 사람도 옮기는 에이전트도 헷갈린다.
+    #   윈도우는 슬래시 경로로도 프로세스를 띄운다 (실측: 파워셸·Node 둘 다 정상).
+    script = (Path(__file__).resolve().parent / "mcp_stdio.py").as_posix()
+    exe = Path(sys.executable).as_posix()
+    # ★★**주소를 싣지 않는다** — 포트가 실행마다 바뀔 수 있어 적어 두면 다음에 안 붙는다.
+    #   MCP 서버가 앱이 남긴 주소 파일을 읽는다 (`write_mcp_endpoint`). 그래서 설정에 남는 것은
+    #   **안 바뀌는 것**(경로)뿐이고, 한 번 붙여 넣으면 계속 맞는다.
+    #   ★열쇠는 여기서 만들어진다 — 만들면서 지금 주소도 파일에 남는다.
+    mcp_key()
+    server = {"type": "stdio", "command": exe, "args": [script]}
     # ★★**등록 명령어를 짓지 않는다** (사용자 지시 2026-08-31). 도구마다 방법이 다르고
     #   (클로드 코드·코덱스·데스크톱…) 셸마다 따옴표 규칙도 달라서, 맞히려 들면 한 도구에만
     #   맞고 나머지는 깨진다 — 실제로 `claude mcp add-json` 한 줄을 만들어 봤더니 윈도우
@@ -3001,6 +3031,8 @@ def main():
     ap.add_argument("--port", type=int, default=8770)
     args = ap.parse_args()
     CURRENT_PORT = args.port
+    # ★★**주소를 남긴다** — 포트가 이번 실행에 정해지므로 여기서야 알 수 있다 (위 ★주)
+    write_mcp_endpoint()
     # ★개발 중에는 **파이썬을 고치면 알아서 다시 뜬다** (사용자 지시 2026-08-08).
     #   예전엔 사이드카가 앱과 함께만 떠서, 백엔드를 고치면 앱을 통째로 재실행해야 했다.
     #   ★보는 곳은 `backend/` **하나뿐**이다 — 작업 폴더를 보게 두면 그림이 한 장 생길

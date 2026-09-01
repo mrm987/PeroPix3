@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import sys
 import urllib.error
 import urllib.request
@@ -31,7 +32,33 @@ for _s in (sys.stdin, sys.stdout, sys.stderr):
     except Exception:
         pass
 
-BASE = os.environ.get("PEROPIX_BACKEND", "http://127.0.0.1:8770")
+def _from_app() -> str:
+    """앱이 남긴 **지금 주소**를 읽는다 (`data/mcp-endpoint.json`).
+
+    ★★**포트를 설정에 적어 두면 안 된다** (사용자 지적 2026-08-31). 8770 이 차 있으면 앱은
+      빈 번호로 밀려서 뜬다 — 실측으로 설치본이 8770 을 쥔 채 개발판이 51676 으로 떴다.
+      그래서 바깥 도구의 설정에는 **안 바뀌는 것**(이 스크립트의 경로)만 두고, 주소는 켤 때마다
+      앱이 다시 쓰는 이 파일에서 읽는다.
+    ★**내 앱의 파일**을 찾는다 — 이 스크립트가 그 앱 폴더 안에 있으므로 위로 올라가며 본다
+      (배포판은 `<뿌리>/app/backend/`, 저장소는 `<뿌리>/backend/`). 여러 벌을 깔아 두어도
+      각자 제 것을 읽는다.
+    ★못 찾으면 빈 문자열 — 부르는 쪽이 예전 기본값(8770)으로 간다."""
+    here = pathlib.Path(__file__).resolve().parent
+    for d in (here.parent, here.parent.parent, here.parent.parent.parent):
+        f = d / "data" / "mcp-endpoint.json"
+        try:
+            if f.is_file():
+                d_ = json.loads(f.read_text(encoding="utf-8"))
+                port, key = int(d_.get("port") or 0), str(d_.get("key") or "")
+                if port:
+                    return f"http://127.0.0.1:{port}" + (f"/k/{key}" if key else "")
+        except Exception as e:
+            log("[peropix-mcp] 주소 파일을 못 읽었습니다:", f, e)
+    return ""
+
+
+#: ★환경변수가 있으면 그쪽이 먼저다 — 다른 기계에 붙이거나 시험할 때 쓰는 문
+BASE = os.environ.get("PEROPIX_BACKEND") or _from_app() or "http://127.0.0.1:8770"
 NAME = "peropix"
 VERSION = "3.0.0-dev"
 # 클라이언트가 요구한 판을 그대로 돌려준다 (규격: 지원하면 같은 값으로 답한다).
@@ -44,6 +71,12 @@ def log(*a) -> None:
 
 
 def _req(path: str, body: dict | None = None) -> dict:
+    # ★★**부를 때마다 다시 본다** — 이 프로세스는 에이전트가 띄워 놓고 오래 산다. 그 사이
+    #   앱을 껐다 켜면 포트가 바뀌므로, 시작할 때 한 번 읽은 주소를 붙들면 그때부터 못 붙는다.
+    #   ★환경변수로 못 박은 경우에는 그대로 쓴다 (사람이 정한 것을 덮지 않는다).
+    global BASE
+    if not os.environ.get("PEROPIX_BACKEND"):
+        BASE = _from_app() or BASE
     url = BASE + path
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(
@@ -65,6 +98,17 @@ def reply(mid, result: dict) -> None:
 
 def fail(mid, code: int, message: str) -> None:
     send({"jsonrpc": "2.0", "id": mid, "error": {"code": code, "message": message}})
+
+
+def _down(e: Exception) -> str:
+    """앱이 안 떠 있을 때가 대부분이다 — **그렇게 말해 준다.**
+
+    ★읽는 것은 사람이 아니라 에이전트다. 원문 오류(`WinError 10061`)만 주면 무엇을 하라는
+      말인지 알 수 없어 엉뚱한 것을 고치려 든다. 영어로 적는 것도 같은 까닭이다."""
+    if isinstance(e, (urllib.error.URLError, OSError)):
+        return (f"PeroPix is not running (tried {BASE.split('/k/')[0]}). "
+                f"Ask the user to start the PeroPix app, then retry. [{e}]")
+    return f"PeroPix request failed: {e}"
 
 
 def _system_prompt() -> str:
@@ -110,7 +154,7 @@ def handle(msg: dict) -> None:
         try:
             reply(mid, {"tools": _req("/api/agent/tools")["tools"]})
         except Exception as e:
-            fail(mid, -32603, f"도구 목록을 못 받았습니다: {e}")
+            fail(mid, -32603, _down(e))
         return
 
     if method == "tools/call":
@@ -118,7 +162,7 @@ def handle(msg: dict) -> None:
         try:
             out = _req("/api/agent/call", {"name": p.get("name"), "input": p.get("arguments") or {}})
         except Exception as e:
-            out = {"error": str(e)}
+            out = {"error": _down(e)}
         bad = bool(out.get("error") or out.get("cancelled"))
         # ★★**그림은 `image` 콘텐츠로 싣는다** (2026-08-24). 예전에는 결과를 통째로 `text`
         #   로 쌌는데, 그러면 `read_image` 의 base64 가 **글자 뭉치**로 들어가 모델이 못 본다.
