@@ -810,6 +810,13 @@ async function flushSave(get: () => S) {
   await get().save();
 }
 
+/** 밀린 저장을 **버린다** — 저장할 대상이 없어졌을 때 (워크스페이스 삭제). `flushSave` 의 반대다. */
+function dropPendingSave() {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+}
+
 /** 열어 둔 워크스페이스 이름들 — ★**이름만** 담는다. 내용은 활성 것 하나만 메모리에 있다. */
 const TABS_KEY = "peropix.openWs";
 const loadTabs = (): string[] => {
@@ -1035,8 +1042,14 @@ export const useWs = create<S>((set, get) => ({
       set({ openWs: tabs });
     }
     if (get().current !== name) return;
+    /* ★★**지운 이름으로 저장이 나가면 안 된다** (사용자 실측 2026-09-02: 지운 워크스페이스가 다시 켜면
+       되살아나 있었다). 옆 탭을 여는 길은 **밀린 편집을 먼저 쓰는데**(`open` 의 `flushSave`), 그 순간
+       `current` 가 아직 지운 이름이라 그 PUT 이 `workspace.json` 만 든 빈 폴더를 도로 만들었다 — 서버의
+       `Store.save` 는 폴더를 만드는 것이 정상이다 (새 워크스페이스도 같은 길로 태어난다). 옆 탭을
+       열기 **전에** 지운 것을 놓아 버린다 — 밀린 저장은 버리고, 현재를 비운다. */
+    dropPendingSave();
+    get().close();
     if (tabs.length) await get().open(tabs[tabs.length - 1]);
-    else get().close();
   },
 
   async save() {
