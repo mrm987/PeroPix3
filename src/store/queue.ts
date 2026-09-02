@@ -113,8 +113,11 @@ const EMPTY: QueueProgress = { completed: 0, total: 0, queue_length: 0 };
 
 let sock: WebSocket | null = null;
 let seqId = 1;
-/** 직전에 돌고 있었나 — 멈추는 **그 순간**만 알린다 */
-let wasBusy = false;
+/** 직전에 돌고 있던 **차선(계정)들** — 멈추는 **그 순간**만 알린다.
+ *  ★★차선마다 따로다 (사용자 실측 2026-09-02: 계정 셋을 돌리니 셋째의 완료 알림이 안 왔다). 표식이 하나면
+ *    둘째 계정이 끝나며 내린 표식을, 이미 마지막 장이 나가 있던 셋째 계정은 다시 못 세워 알림이 막힌다.
+ *  ★차선 정보가 없는 옛 백엔드는 `"*"` 하나로 예전처럼 돈다. */
+const busyLanes = new Set<string>();
 let retry = 0;
 /** 이번 배치의 성공·실패 장 수 (v2 `batchImageCount`·`batchErrorCount`). 끝날 때 문구를 가른다.
  *  ★계정(차선)마다 따로 센다 — 한 계정의 실패가 다른 계정의 「완료」를 「일부 실패」로 만들면 안 된다 */
@@ -984,7 +987,10 @@ function handle(m: Record<string, any>, set: Setter, get: () => S) {
 function takeProgress(p: QueueProgress | undefined, set: Setter) {
   if (!p) return;
   const running = p.total > p.completed || p.queue_length > 0;
-  if (running) wasBusy = true;
+  // ★돌고 있는 차선마다 표식을 세운다 — 끝은 그 차선의 표식으로만 알린다 (`busyLanes` 의 ★★주)
+  if (p.lanes) {
+    for (const [id, l] of Object.entries(p.lanes)) if (l.total > l.completed || l.queue_length > 0) busyLanes.add(id);
+  } else if (running) busyLanes.add("*");
   set({ progress: p, ...(running ? { phase: "running" as QueuePhase } : {}) });
 }
 
@@ -1036,7 +1042,7 @@ function settleBatch(cancelled: boolean, account: string | null, set: Setter, ge
   if (phase === "done") void useAnlasMeter.getState().settle(account ?? undefined);
   else useAnlasMeter.getState().disarm(account ?? undefined);
 
-  if (!cancelled) announceDone(done);
+  if (!cancelled) announceDone(done, account);
 
   if (phaseTimer) clearTimeout(phaseTimer);
   if (phase !== "idle") {
@@ -1049,9 +1055,15 @@ function settleBatch(cancelled: boolean, account: string | null, set: Setter, ge
 
 /** 「다 됐다」를 한 번만 알린다 — **돌다가 멈춘 그 순간**에만.
  *  ★두 경로가 함께 쓴다: 브로드캐스트(`job_done`)와 재접속 복원(`applyStatus`). */
-function announceDone(n: number) {
-  if (!wasBusy) return;
-  wasBusy = false;
+function announceDone(n: number, account: string | null) {
+  // ★그 차선이 돌고 있었을 때만 — 차선을 모르면(옛 백엔드·재접속 복원) 세워진 표식 아무거나
+  if (account) {
+    if (!busyLanes.has(account)) return;
+    busyLanes.delete(account);
+  } else {
+    if (!busyLanes.size) return;
+    busyLanes.clear();
+  }
   const ui = useUi.getState();
   if (ui.notifyDone) toast(t("queue.allDone", { n }));
   // ★화면을 안 보고 있을 때를 위해 소리로도 알린다 (v2 `notifySoundOnComplete`)
@@ -1075,13 +1087,14 @@ function applyStatus(status: Record<string, any> | undefined, set: Setter, get: 
   const idle = (status.queue_length ?? 0) === 0 && !status.is_processing;
   if (idle && get().pending.length) set({ pending: [] });
   // ★다 끝났으면 한 번만 알린다 — 여러 장 돌려 놓고 다른 일을 하다 놓치는 것을 막는다.
-  //   `wasBusy` 로 **돌다가 멈춘 순간**만 잡는다 (가만히 있을 때 계속 울리지 않게).
+  //   `busyLanes` 로 **돌다가 멈춘 순간**만 잡는다 (가만히 있을 때 계속 울리지 않게).
   //   ★평소의 끝은 `settleBatch` 가 받는다. 이 자리는 **끊겼다 다시 붙었더니 그 사이
   //     끝나 있던** 경우를 위한 것이다 — 알리는 창구는 `announceDone` 하나로 모았다.
   const done = status.completed_images ?? 0;
   const total = status.total_images ?? 0;
-  if (idle && total > 0 && done >= total) announceDone(done);
-  wasBusy = !idle;
+  if (idle && total > 0 && done >= total) announceDone(done, null);
+  if (idle) busyLanes.clear();
+  else busyLanes.add("*");
   // ★★차선도 옮겨 담는다 (사용자 실측 2026-09-02: 재접속 복원이 차선 없이 합계만 넣어서, 나란히 가던
   //   「0/3 · 0/3」이 잠시 뒤 「0/6」으로 합쳐졌다). 상태의 차선은 `Lane.status()` 꼴이라 이름을 맞춘다
   const lanesIn = status.lanes as Record<string, Record<string, any>> | undefined;
