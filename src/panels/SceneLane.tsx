@@ -3,7 +3,7 @@ import { useI18n } from "../i18n";
 import { DropLine } from "../components/DropLine";
 import { useGen } from "../store/gen";
 import { usePrompt } from "../store/prompt";
-import { runningPendingId, useQueue } from "../store/queue";
+import { runningPendingId, stepKey, useQueue } from "../store/queue";
 import { LANE_MAX, LANE_MIN, useUi } from "../store/ui";
 import { allCells, useWs, takesOfScene, type Rec, type SceneCard, type Slot } from "../store/workspace";
 import { newestFirst } from "../lib/takes";
@@ -965,7 +965,7 @@ export function SceneLane() {
                 onPick={pick}
                 onPickPending={(cellId, id) => useSceneFocus.getState().focusPending(cellId, id)}
                 takes={takesOfCell}
-                stepOf={(id) => steps[id] ?? ""}
+                stepOf={(id) => steps[stepKey(ws, id)] ?? ""}
                 isStarred={isStarred}
                 onStar={toggleStar}
                 queuedOf={(cellId) => queued.filter((p) => p.cellId === cellId)}

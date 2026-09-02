@@ -161,6 +161,10 @@ function startHeartbeat() {
   }, 20000);
 }
 
+/** 중간 그림(`steps`)의 열쇠 — **워크스페이스 + 칸**. 칸 id 는 워크스페이스를 건너 겹치므로 (`Pending.workspace`
+ *  의 ★주) 칸만으로 들면 다른 워크스페이스의 지난 프레임이 이 칸 위에 뜬다 (사용자 실측 2026-09-02). */
+export const stepKey = (workspace: string, cell: string) => `${workspace}::${cell}`;
+
 /** 지금 붙는 중인가 — `connect()` 가 `await` 를 만나기 **전에** 세우는 표식.
  *  ★소켓이 생기기 전 구간을 이것이 지킨다 (`connect` 의 ★주) */
 let connecting = false;
@@ -175,14 +179,16 @@ let connecting = false;
 export function runningPendingId(groupId: string | null | undefined): string | null {
   const { progress, pending } = useQueue.getState();
   if (!(progress.total > progress.completed)) return null;
-  const mine = pending.filter((p) => p.groupId === groupId);
+  // ★★대기 칸도 **이 워크스페이스 것**만 (사용자 실측 2026-09-02: 씬 그룹·칸 id 가 워크스페이스마다 같아서,
+  //   다른 워크스페이스의 대기 칸을 집어 돌려주면 이 화면의 어느 칸과도 안 맞아 「생성 중」이 안 떴다)
+  const here = useWs.getState().current;
+  const mine = pending.filter((p) => p.groupId === groupId && p.workspace === here);
   // ★★차선(계정)마다 「지금 만드는 씬」이 하나씩이다 (2026-09-02). **이 씬 그룹을 만드는 차선**을 찾는다 —
   //   다른 계정이 다른 워크스페이스를 만드는 중이라고 이 그룹의 맨 앞 칸에 「생성 중」을 찍으면 안 된다.
   //   차선 정보가 없는 옛 백엔드일 때만 맨 앞으로 물러선다.
   const lanes = progress.lanes ? Object.values(progress.lanes) : null;
   const cells = lanes ? lanes.map((l) => l.current_cell) : [progress.current_cell];
   // ★워크스페이스까지 맞아야 한다 — 복제한 워크스페이스는 씬 그룹 id 가 같다 (`Pending.workspace` 의 ★주)
-  const here = useWs.getState().current;
   const cell = cells.find((c) => c && c.scene_group_id === groupId && (!c.workspace || c.workspace === here))?.cell_id ?? null;
   if (cell) return mine.find((p) => p.cellId === cell)?.id ?? null;
   return lanes ? null : (mine[0]?.id ?? null);
@@ -867,7 +873,8 @@ function handle(m: Record<string, any>, set: Setter, get: () => S) {
       /* ★형식은 **서버가 알려 준다** — 중간 그림은 줄여 보내느라 JPEG 이다
          (`imgutil.preview_jpeg`). 옛 서버가 안 실어 주면 예전대로 PNG 로 읽는다. */
       const mime = String(m.mime ?? "image/png");
-      set({ steps: { ...get().steps, [cell]: `data:${mime};base64,${m.b64}` } });
+      // ★열쇠는 워크스페이스 + 칸 (`stepKey` 의 ★주)
+      set({ steps: { ...get().steps, [stepKey(String(m.workspace ?? ""), cell)]: `data:${mime};base64,${m.b64}` } });
       break;
     }
     /* ★★**업데이트 진행률·완료** (사용자 지시 2026-08-26). 받는 것은 백엔드가 하고
@@ -1108,11 +1115,14 @@ function applyStatus(status: Record<string, any> | undefined, set: Setter, get: 
  *  ★저장된 그림과 미저장 그림이 **같이 쓴다** — 어느 쪽이든 대기 칸은 하나 줄어야 한다. */
 function consumePending(m: Record<string, any>, set: Setter, get: () => S, mine = true) {
   /* ★그 칸의 중간 그림을 놓는다 — 완성본이 왔는데 남겨 두면 그 위에 흐린 미리보기가 겹친다.
-     ★이 화면의 그림일 때만 — 중간 그림은 칸 id 로만 들고 있어서, 다른 워크스페이스의 같은 칸 id 것을 놓으면 안 된다 */
+     ★★**어느 워크스페이스의 그림이든** 놓는다 (사용자 실측 2026-09-02: 보고 있지 않은 워크스페이스의 그림이
+       완성될 때 안 놓으니, 그리로 가면 다음 「생성 중」 칸에 지난 프레임이 떠 있었다). 열쇠가 워크스페이스 +
+       칸이라 다른 워크스페이스의 같은 칸 id 것을 잘못 놓을 일은 없다 (`stepKey`). */
   const cell = String(m.cell_id ?? "");
-  if (mine && cell && get().steps[cell]) {
+  const sk = stepKey(String(m.workspace ?? useWs.getState().current), cell);
+  if (cell && get().steps[sk]) {
     const steps = { ...get().steps };
-    delete steps[cell];
+    delete steps[sk];
     set({ steps });
   }
   /* ★★★**보고 있던 대기 칸에 그림이 나오면, 그 그림으로 옮겨 간다** (사용자 지적 2026-08-26:

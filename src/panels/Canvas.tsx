@@ -5,7 +5,7 @@ import { useGen } from "../store/gen";
 import { useWs, takesOfScene, allCells, allScenes, type ShotEnv } from "../store/workspace";
 import { SceneLane, takeSrc } from "./SceneLane";
 import { useSceneFocus } from "../store/sceneFocus";
-import { runningPendingId, useQueue } from "../store/queue";
+import { runningPendingId, stepKey, useQueue } from "../store/queue";
 import { removeTakes, stepTake } from "../lib/sceneTakes";
 import { useUi } from "../store/ui";
 import { CanvasTabs } from "./CanvasTabs";
@@ -593,7 +593,7 @@ function ScenePreview() {
   /** ★만들어지는 중인 칸을 골랐나 — 그때는 **빈 화면**이다 (안내 문구도 안 띄운다) */
   const pendingSel = useSceneFocus((s) => s.pending);
   /** 지금 고른 칸에 **그리는 중인 그림** (`store/queue` 의 `steps`) */
-  const stepImg = useQueue((q) => (cell ? (q.steps[cell] ?? "") : ""));
+  const stepImg = useQueue((q) => (cell ? (q.steps[stepKey(ws, cell)] ?? "") : ""));
   /** 지금 그리고 있는 대기 칸 — 씬 줄과 **같은 답**을 본다 (`store/queue.runningPendingId`) */
   const runId = useQueue(() => runningPendingId(activeSceneGroup()?.id));
   const previews = usePreviews((s) => s.items);
