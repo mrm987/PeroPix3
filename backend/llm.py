@@ -37,6 +37,8 @@ ANTHROPIC_VERSION = "2023-06-01"
 # ★60초다 (사용자 결정 2026-08-08). 늘리는 것은 해결이 아니라 **기다리게 하는 것**이다 —
 #   공급자가 불안정해서 나는 타임아웃은 라우팅(아래 OR_ROUTING)으로 고치고, 여기서는 빨리 포기한다.
 TIMEOUT = 60.0
+# ★로컬 llama.cpp 전용 — 지침 처리(prefill)가 원격보다 한 자릿수 느리다 (`chat` 의 local 분기 주석)
+LOCAL_TIMEOUT = 600.0
 
 # ★오픈라우터 라우팅 (사용자 결정 2026-08-08). 실측 근거:
 #   - `quantizations` 는 **화이트리스트**라 적지 않은 등급은 전부 잘린다. `unknown` 을 빼면
@@ -89,8 +91,27 @@ PROVIDERS: dict[str, dict] = {
         "url": "https://aiplatform.googleapis.com/v1/publishers/google/models/{model}:generateContent",
         "hint": "gemini-2.5-flash",
     },
+    # ★로컬 llama.cpp (`llama-server`) — 사용자가 따로 띄운 서버에 붙는다 (사용자 지시 2026-09-02:
+    #   앱 안에서 로컬 모델을 써 보고 싶다). 앱이 서버를 띄우지는 않는다.
+    #   ★키가 없다 (`nokey`). 주소는 설정 `llm.localUrl` 로 바꾼다 — 기본은 `D:\llm-test` 벤치와 같은 8899.
+    #   ★추론 끄기는 `reasoning_effort: "none"` 이다 (실측 2026-09-02, Gemma 4 26B: 생각 0자).
+    #     오픈라우터의 `reasoning:{effort}` 모양이 아니다 — `_openai_compat` 의 `effort_field`.
+    "local": {
+        "label": "Local (llama.cpp)",
+        "kind": "openai",
+        "base": "http://127.0.0.1:8899",
+        "url": "http://127.0.0.1:8899/v1/chat/completions",
+        "hint": "local",
+        "list": "http://127.0.0.1:8899/v1/models",
+        "nokey": True,
+    },
 }
 DEFAULT_PROVIDER = "openrouter"
+
+
+def local_base(llm: dict) -> str:
+    """로컬 서버 주소 — 설정이 비면 기본값. 끝의 `/` 는 뗀다 (뒤에 경로를 붙인다)."""
+    return (llm.get("localUrl") or PROVIDERS["local"]["base"]).rstrip("/")
 
 # ★오픈라우터만 **추천 목록**을 둔다 (사용자 지시 2026-08-08: "모든 선택지를 주는 게 아니라
 #   제일 좋은 것을 정해준다"). 400종을 그대로 보여 주면 고를 수가 없다.
@@ -153,15 +174,21 @@ def config_view(cfg: dict, has_key=None) -> dict:
     if has_key is None:
         def has_key(p: str) -> bool:  # noqa: E306
             return p == cur and bool(llm.get("key"))
+
+    # ★키가 없는 공급자(로컬)는 언제나 「있음」이다 — 화면의 검증 단추·초록 점이 키 유무를 본다
+    def has(p: str) -> bool:
+        return bool(PROVIDERS[p].get("nokey")) or bool(has_key(p))
     return {
         "provider": cur,
         "model": models.get(cur, ""),
         "models": models,
         # 추론 강도도 **공급자마다 따로** 산다 (모델·키와 같은 이유 — 단계 이름이 모델마다 다르다)
         "effort": efforts.get(cur, ""),
-        "hasKey": bool(has_key(cur)),
+        "hasKey": has(cur),
+        "localUrl": llm.get("localUrl") or "",
         "providers": [
-            {"id": pid, "label": p["label"], "hint": p["hint"], "hasKey": bool(has_key(pid))}
+            {"id": pid, "label": p["label"], "hint": p["hint"], "hasKey": has(pid),
+             "nokey": bool(p.get("nokey"))}
             for pid, p in PROVIDERS.items()
         ],
     }
@@ -184,13 +211,27 @@ async def chat(
     spec = PROVIDERS[pid]
     key = llm.get("key", "")
     model = llm.get("model", "")
-    if not key:
+    if not key and not spec.get("nokey"):
         return {"error": f"{spec['label']} API 키가 설정되지 않았습니다."}
     if not model:
         return {"error": "모델 이름이 설정되지 않았습니다."}
 
     url = llm.get("baseUrl") or spec["url"]
     effort = (llm.get("effort") or "").strip().lower()
+    if pid == "local":
+        # ★주소는 설정에서 온다. 키는 없지만 헤더는 채운다 — llama-server 는 무시한다
+        # ★★제한 시간은 **로컬만** 길다 (`LOCAL_TIMEOUT`). 60초는 원격 공급자의 불안정을 빨리
+        #   포기하려는 값인데, 로컬은 지침 6천 토큰 처리만 20~60초라 그 값으로는 첫 턴부터
+        #   끊긴다 (실측 2026-09-02: VRAM 이 넘친 상태에서 62 t/s → 4,459 토큰에 70초).
+        # ★접속 실패·시간 초과는 500 이 아니라 **문구**로 돌려준다 — 서버를 안 띄웠거나 죽은
+        #   것이 로컬에서는 흔한 상황이라, 대화 안에 사유가 남아야 사용자가 고칠 수 있다.
+        try:
+            return await _openai_compat(key or "none", model, system, messages, tools, max_tokens,
+                                        local_base(llm) + "/v1/chat/completions",
+                                        effort, effort_field="reasoning_effort",
+                                        timeout=LOCAL_TIMEOUT)
+        except httpx.HTTPError as e:
+            return {"error": f"로컬 서버({local_base(llm)})에 붙지 못했습니다: {type(e).__name__}: {e}"}
     if spec["kind"] == "anthropic":
         return await _anthropic(key, model, system, messages, tools, max_tokens, url, effort)
     if spec["kind"] == "gemini":
@@ -277,6 +318,19 @@ async def models(llm: dict) -> dict:
             out.append(row)
         return {"models": out, "fixed": True}
     key = llm.get("key", "")
+    if pid == "local":
+        # ★서버가 안 떠 있으면 접속 오류 문구가 그대로 화면에 간다 — 사용자가 띄워야 한다
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as c:
+                r = await c.get(local_base(llm) + "/v1/models")
+        except Exception as e:
+            return {"models": [], "error": f"{type(e).__name__}: {e}"}
+        if r.status_code >= 400:
+            return {"models": [], "error": _err(r)}
+        # ★단계 목록은 `none` 하나 — 실측으로 확인한 값만 적는다 (다른 단계는 llama-server 가
+        #   어떻게 옮기는지 확인하지 못했다). 화면은 「모델 기본값 / 끄기」 둘을 보여 준다.
+        return {"models": [{"id": m.get("id", ""), "label": "", "efforts": ["none"]}
+                           for m in (r.json().get("data") or []) if m.get("id")]}
     if not key:
         return {"models": [], "error": f"{spec['label']} API 키가 필요합니다."}
 
@@ -524,11 +578,15 @@ def _to_openai(system: str, messages: list[dict], cache: bool = False) -> list[d
 
 
 async def _openai_compat(key, model, system, messages, tools, max_tokens, url,
-                         effort="", routing=None) -> dict:
+                         effort="", routing=None, effort_field="reasoning",
+                         timeout: float = TIMEOUT) -> dict:
     body: dict = {"model": model, "messages": _to_openai(system, messages, cache=bool(routing))}
     if max_tokens:
         body["max_tokens"] = max_tokens
-    if effort:
+    if effort and effort_field == "reasoning_effort":
+        # ★로컬 llama-server 규격 — 값 하나로 간다 (`none` 이면 생각을 끈다, 실측 2026-09-02)
+        body["reasoning_effort"] = effort
+    elif effort:
         # 오픈라우터가 공급자마다 다른 규격으로 옮겨 준다 (문서: "OpenRouter normalizes …")
         body["reasoning"] = {"enabled": True, "effort": effort}
     if routing:
@@ -546,7 +604,7 @@ async def _openai_compat(key, model, system, messages, tools, max_tokens, url,
             for t in tools
         ]
     headers = {"Authorization": f"Bearer {key}", "content-type": "application/json"}
-    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+    async with httpx.AsyncClient(timeout=timeout) as c:
         r = await c.post(url, headers=headers, json=body)
         # ★★공식 OpenAI 의 추론 모델은 `/v1/chat/completions` 에서 **도구와 추론을 함께 못 쓴다**
         #   (실측 2026-08-30, gpt-5.6-terra: "Function tools with reasoning_effort are not supported

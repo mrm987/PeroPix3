@@ -658,6 +658,8 @@ export const ko: Dict = {
     refresh: "새로고침",
     llmModel: "모델",
     llmHint: "키는 이 PC 에만 저장되고 화면에 다시 보이지 않습니다.",
+    localUrl: "서버 주소 (비우면 http://127.0.0.1:8899)",
+    localHint: "직접 띄운 llama-server 같은 OpenAI 규격 로컬 서버에 붙습니다. 키는 필요 없고, 서버는 앱이 띄우지 않습니다.",
     keySet: "설정됨. 바꾸려면 새 키를 넣으세요",
     keyEmpty: "API 키",
     save: "저장",

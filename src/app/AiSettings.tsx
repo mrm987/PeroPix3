@@ -198,6 +198,10 @@ export function AiSettings() {
   const setCliEffort = useCli((c) => c.setEffort);
   const [key, setKey] = useState("");
   const [model, setModel] = useState("");
+  /** 로컬 서버 주소 칸 (공급자 `local` 만). 저장된 값에서 시작한다 */
+  const [localUrl, setLocalUrl] = useState("");
+  /** 지금 공급자가 키 없는 쪽(로컬)인가 — 키 칸 대신 주소 칸 */
+  const nokey = !!cfg?.providers.find((p) => p.id === cfg.provider)?.nokey;
   const [verifying, setVerifying] = useState(false);
   /** "" 아직 안 눌렀다 · "ok" 통과 · 그 밖은 공급자가 준 오류 문구 그대로 */
   const [verdict, setVerdict] = useState("");
@@ -231,6 +235,7 @@ export function AiSettings() {
   // ★공급자를 바꾸면 모델 칸도 **그 공급자 것**으로 바뀐다 (키와 마찬가지로 따로 산다)
   useEffect(() => setModel(cfg?.model ?? ""), [cfg?.model, cfg?.provider]);
   useEffect(() => setEffort(cfg?.effort ?? ""), [cfg?.effort, cfg?.provider]);
+  useEffect(() => setLocalUrl(cfg?.localUrl ?? ""), [cfg?.localUrl, cfg?.provider]);
   // ★목록은 공급자·키가 정해진 뒤에 받는다 (키가 없으면 저쪽이 사유를 돌려준다)
   useEffect(() => {
     if (engine !== "api" || !cfg?.provider) return;
@@ -452,7 +457,9 @@ export function AiSettings() {
                   {t("settings.effortDefault")}
                   {picked?.effortDefault ? `  ·  ${picked.effortDefault}` : ""}
                 </option>
-                {efforts.map((v) => (
+                {/* ★`none` 은 아래 「끄기」 칸이 맡는다 — 로컬 llama.cpp 는 단계가 `none` 하나뿐이라
+                    그대로 두면 같은 값이 두 줄 뜬다 */}
+                {efforts.filter((v) => v !== "none").map((v) => (
                   <option key={v} value={v}>
                     {v}
                   </option>
@@ -463,6 +470,32 @@ export function AiSettings() {
             </Line>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
+            {nokey ? (
+              <>
+                {/* ★로컬(llama.cpp)은 키가 없다 — 그 자리에 **서버 주소**를 받는다 (2026-09-02).
+                    서버는 사용자가 따로 띄운다. 비워서 저장하면 백엔드 기본값(127.0.0.1:8899)이다. */}
+                <Help tip={t("settings.localHint")} />
+                <input
+                  data-llm-local-url
+                  value={localUrl}
+                  placeholder={t("settings.localUrl")}
+                  onChange={(e) => setLocalUrl(e.target.value)}
+                  style={{ ...field, flex: 1 }}
+                />
+                <button
+                  data-llm-local-save
+                  onClick={() => {
+                    setVerdict("");
+                    void saveLlm({ localUrl: localUrl.trim(), model }).then(() => loadModels(undefined, true));
+                  }}
+                  disabled={localUrl.trim() === (cfg?.localUrl ?? "")}
+                  style={btn}
+                >
+                  {t("settings.save")}
+                </button>
+              </>
+            ) : (
+              <>
             {/* ★키를 어디에 두는지는 **`?` 안에** 있다 (사용자 지시 2026-08-19) */}
             <Help tip={t("settings.llmHint")} />
             <input
@@ -490,6 +523,8 @@ export function AiSettings() {
             >
               {t("settings.save")}
             </button>
+              </>
+            )}
             {/* ★탐지와 달리 이것은 공짜가 아니다 — 누를 때만 부른다 (토큰 몇 개) */}
             <button data-llm-verify onClick={() => void runVerify()} disabled={!cfg?.hasKey || verifying} style={btn}>
               {verifying ? t("settings.verifying") : t("settings.verify")}

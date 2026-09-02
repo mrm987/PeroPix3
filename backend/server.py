@@ -413,6 +413,8 @@ def llm_settings(provider: str = "") -> dict:
         "model": (llm.get("models") or {}).get(pid, ""),
         "effort": (llm.get("efforts") or {}).get(pid, ""),
         "key": SECRETS.get(f"llm_key_{pid}"),
+        # 로컬 서버 주소 (공급자 `local` 만 쓴다, `llm.local_base`)
+        "localUrl": llm.get("localUrl") or "",
     }
 
 
@@ -1075,6 +1077,8 @@ class LlmConfigBody(BaseModel):
     effort: str | None = None
     # 빈 문자열이면 **그대로 둔다** (설정 화면이 키를 다시 안 보내도 지워지지 않게)
     key: str | None = None
+    #: 로컬 서버 주소. `None` 이면 그대로, 빈 문자열이면 기본값으로 되돌린다
+    localUrl: str | None = None
 
 
 class LlmChatBody(BaseModel):
@@ -1136,6 +1140,8 @@ async def set_llm_config(body: LlmConfigBody):
         efforts = dict(cur.get("efforts") or {})
         efforts[pid] = body.effort.strip()
         cur["efforts"] = efforts
+    if body.localUrl is not None:
+        cur["localUrl"] = body.localUrl.strip()
     CONFIG["llm"] = cur
     save_config(CONFIG)
     if body.key is not None and body.key.strip():

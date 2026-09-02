@@ -59,7 +59,14 @@ export type Line =
 
 /** ★공급자는 **정확한 이름**으로 고른다 (사용자 지시 2026-08-08: "호환은 적을 필요 없음").
  *  목록·라벨·호출명 예시는 **백엔드가 정본**이다 — 규격을 아는 쪽이 거기라서. */
-export type ProviderInfo = { id: string; label: string; hint: string; hasKey: boolean };
+export type ProviderInfo = {
+  id: string;
+  label: string;
+  hint: string;
+  hasKey: boolean;
+  /** 키가 필요 없는 공급자(로컬 llama.cpp) — 키 칸 대신 주소 칸을 보인다 */
+  nokey?: boolean;
+};
 /** 공급자가 알려 준 모델 하나. `in` 은 백만 토큰당 입력 단가(오픈라우터만) */
 export type ModelInfo = {
   id: string;
@@ -82,6 +89,8 @@ export type LlmConfig = {
   /** 지금 공급자의 추론 강도. 빈 값이면 모델 기본값 */
   effort: string;
   hasKey: boolean;
+  /** 로컬 서버 주소 (공급자 `local` 만). 비면 백엔드 기본값(127.0.0.1:8899) */
+  localUrl?: string;
   providers: ProviderInfo[];
   /** 요청 창구(디스코드). ★백엔드가 정본이다 — 화면에 주소를 박지 않는다 */
   support: string;
@@ -281,7 +290,7 @@ type S = {
   loadModels: (provider?: string, force?: boolean) => Promise<void>;
 
   loadConfig: () => Promise<void>;
-  saveConfig: (c: Partial<LlmConfig> & { key?: string }) => Promise<void>;
+  saveConfig: (c: Partial<LlmConfig> & { key?: string; localUrl?: string }) => Promise<void>;
   /** 앱을 켤 때 — 마지막 대화를 되살린다 */
   restore: () => Promise<void>;
   refreshList: () => Promise<void>;
@@ -381,6 +390,8 @@ export const useLlm = create<S>((set, get) => ({
         ...(c.effort === undefined ? {} : { effort: c.effort }),
         // ★키는 **보낼 때만** 바뀐다 (undefined 면 그대로 둔다)
         ...(c.key === undefined ? {} : { key: c.key }),
+        // 로컬 서버 주소도 같다 — 빈 문자열은 「기본값으로」다
+        ...(c.localUrl === undefined ? {} : { localUrl: c.localUrl }),
       }),
     });
     set({ cfg: next });

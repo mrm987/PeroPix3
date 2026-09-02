@@ -637,6 +637,8 @@ export const ja: Dict = {
     refresh: "更新",
     llmModel: "モデル",
     llmHint: "キーはこの PC にのみ保存され、画面には再表示されません。",
+    localUrl: "サーバーアドレス（空欄なら http://127.0.0.1:8899）",
+    localHint: "自分で起動した llama-server などの OpenAI 互換ローカルサーバーに接続します。キーは不要で、サーバーはアプリが起動しません。",
     keySet: "設定済み。変更するには新しいキーを入力",
     keyEmpty: "API キー",
     save: "保存",

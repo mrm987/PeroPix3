@@ -639,6 +639,8 @@ export const en = {
     refresh: "Refresh",
     llmModel: "Model",
     llmHint: "The key is stored on this PC only and is never shown again.",
+    localUrl: "Server URL (blank = http://127.0.0.1:8899)",
+    localHint: "Connects to an OpenAI-compatible local server you run yourself, such as llama-server. No key is needed; the app does not start the server.",
     keySet: "Set. Enter a new key to replace it",
     keyEmpty: "API key",
     save: "Save",
