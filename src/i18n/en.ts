@@ -609,7 +609,7 @@ export const en = {
     accountReplaced: "Token replaced",
     accountRemoved: "Account removed",
     accountDelete: "Remove the account \"{name}\"?",
-    accountDeleteBody: "Workspaces using it fall back to the first account. Images already generating still finish.",
+    accountDeleteBody: "Workspaces using it fall back to the first account. Images queued on this account are cancelled; only the one already generating finishes.",
     engineCli: "Local CLI",
     engineCliSub: "{n} available",
     engineApi: "API key",

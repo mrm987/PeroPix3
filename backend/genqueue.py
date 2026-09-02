@@ -299,7 +299,10 @@ async def _run_one(q: GenerationQueue, ln: Lane, process_job) -> None:
         await process_job(job)
     except Exception as e:  # 한 잡이 죽어도 루프는 계속 돈다
         print(f"[queue] job {job['id']} 실패: {e}")
-        await q.broadcast({"type": "job_error", "job_id": job["id"], "account": ln.id, "error": str(e)})
+        # ★남은 장은 안 나온다 — 총량을 완료에 맞춰 화면의 「돌고 있음」이 영영 안 남게 한다 (진행률도 실어 준다)
+        ln.total_images = ln.completed_images
+        await q.broadcast({"type": "job_error", "job_id": job["id"], "account": ln.id, "error": str(e),
+                           "progress": q.progress()})
     ln.is_processing = False
     ln.current_job = None
     ln.current_cell = None

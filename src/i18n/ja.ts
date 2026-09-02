@@ -607,7 +607,7 @@ export const ja: Dict = {
     accountReplaced: "トークンを差し替えました",
     accountRemoved: "アカウントを削除しました",
     accountDelete: "「{name}」を削除しますか?",
-    accountDeleteBody: "このアカウントを使っていたワークスペースは最初のアカウントに戻ります。生成中の画像は最後まで出ます。",
+    accountDeleteBody: "このアカウントを使っていたワークスペースは最初のアカウントに戻ります。このアカウントで待機中の生成は取り消され、生成中の1枚だけ出ます。",
     engineCli: "ローカル CLI",
     engineCliSub: "{n}件 利用可",
     engineApi: "API キー",

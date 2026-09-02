@@ -628,7 +628,7 @@ export const ko: Dict = {
     accountReplaced: "토큰을 바꿨습니다",
     accountRemoved: "계정을 지웠습니다",
     accountDelete: "「{name}」 계정을 지울까요?",
-    accountDeleteBody: "이 계정을 쓰던 워크스페이스는 첫 계정으로 넘어갑니다. 진행 중인 생성은 끝까지 나옵니다.",
+    accountDeleteBody: "이 계정을 쓰던 워크스페이스는 첫 계정으로 넘어갑니다. 이 계정으로 대기 중인 생성은 취소되고, 지금 만드는 한 장만 나옵니다.",
     engineCli: "로컬 CLI",
     engineCliSub: "{n}개 사용 가능",
     engineApi: "API 키",

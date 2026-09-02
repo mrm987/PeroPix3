@@ -777,10 +777,13 @@ async def update_account(account_id: str, body: AccountBody):
 
 @app.delete("/api/accounts/{account_id}")
 async def delete_account(account_id: str):
-    """★돌고 있는 차선은 건드리지 않는다 — 이미 나간 장은 온다. 다음 요청부터 첫 계정으로 떨어진다."""
+    """★★**그 계정의 차선을 먼저 끊는다** (점검 2026-09-02). 토큰은 잡이 아니라 서버가 그때그때 계정에서 꺼내므로,
+    안 끊으면 남은 장이 **첫 계정의 토큰으로** 조용히 나간다 — 남의 Anlas 로 만드는 셈이다. 이미 NAI 로
+    나간 한 장은 못 끊으니 그것만 온다 (`cancel_queue` 와 같은 규칙)."""
     if not ACCOUNTS.remove(account_id):
         raise HTTPException(404, "그 계정이 없습니다.")
-    return {"ok": True, "hasToken": bool(nai_token())}
+    jobs, images, running = await _cancel_lanes(account_id)
+    return {"ok": True, "hasToken": bool(nai_token()), "cleared_jobs": jobs, "cleared_images": images, "running": running}
 
 
 # ── 에이전트 다리 (바깥에서 앱 도구를 부른다) ─────────────────────
@@ -2183,6 +2186,12 @@ async def cancel_queue(account: str | None = None):
     배치를 못 멈췄다 — v3 는 배치 전체가 잡 하나라, 잡이 시작되면 대기 큐가 비어 있어
     「큐 비우기」가 지울 것이 없었다 (감사 D5).
     """
+    jobs, images, running = await _cancel_lanes(account)
+    return {"ok": True, "cleared_jobs": jobs, "cleared_images": images, "running": running}
+
+
+async def _cancel_lanes(account: str | None) -> tuple[int, int, bool]:
+    """차선 하나(`account`)를, 없으면 전부 끊고 화면에 알린다 — 취소 창구와 계정 삭제가 함께 쓴다."""
     lanes = [Q.lanes[account]] if account and account in Q.lanes else ([] if account else list(Q.lanes.values()))
     jobs = images = 0
     running = False
@@ -2193,13 +2202,15 @@ async def cancel_queue(account: str | None = None):
         jobs += j
         images += i
         running = running or r
+    if not lanes:
+        return jobs, images, running
     await Q.broadcast({"type": "queue_cancelled", "cleared_jobs": jobs,
                        "cleared_images": images, "account": account or None,
                        # ★아직 올 것이 몇 장인가 — 화면은 이 수만큼만 대기 칸을 남긴다.
                        #   돌고 있으면 in-flight 한 장, 아니면 하나도 없다
                        "remaining": 1 if running else 0,
                        "progress": Q.progress()})
-    return {"ok": True, "cleared_jobs": jobs, "cleared_images": images, "running": running}
+    return jobs, images, running
 
 
 @app.get("/api/vibe-cache")
