@@ -2089,7 +2089,9 @@ async def _process_job(job: dict) -> None:
             # ★★**지금 만드는 씬을 알린다** (사용자 실측 2026-08-25). 화면이 자기 대기 목록의
             #   맨 앞을 「생성 중」으로 찍고 있었는데, 배치가 겹치면 그 순서가 실제와 어긋나
             #   **엉뚱한 칸에 「생성 중」이 뜨고 그림은 「대기 중」 칸에 나타났다.**
-            lane.current_cell = {"scene_group_id": one.scene_group_id, "cell_id": one.cell_id}
+            # ★워크스페이스도 싣는다 (사용자 실측 2026-09-02: 복제한 워크스페이스는 씬 그룹 id 가 같아서,
+            #   한쪽에서 생성하면 다른 쪽에도 「생성 중」이 떴다). 화면은 제 워크스페이스 것만 본다
+            lane.current_cell = {"workspace": one.workspace, "scene_group_id": one.scene_group_id, "cell_id": one.cell_id}
             await Q.broadcast({"type": "job_progress", "job_id": job_id, "account": acc, "progress": Q.progress()})
             try:
                 # ★토큰은 **차선의 계정**으로 — 요청이 든 값이 아니라 차선이 정본이다 (같은 값이지만 한 곳만 읽는다)

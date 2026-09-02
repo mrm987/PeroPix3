@@ -36,7 +36,8 @@ export type LaneProgress = {
   completed: number;
   total: number;
   queue_length: number;
-  current_cell?: { scene_group_id: string | null; cell_id: string | null } | null;
+  /** ★`workspace` 가 있다 — 복제한 워크스페이스는 씬 그룹 id 가 같아서, 그것만으로는 어느 쪽인지 모른다 */
+  current_cell?: { workspace?: string; scene_group_id: string | null; cell_id: string | null } | null;
   /** 계정 이름 — 줄에 적는다 */
   name?: string;
 };
@@ -53,7 +54,7 @@ export type QueueProgress = {
    *  진행과 어긋나 **엉뚱한 칸에 「생성 중」이 뜨고 그림은 「대기 중」 칸에 나타났다**
    *  (사용자 실측). 무엇을 만드는지는 서버가 정본이다.
    *  ★옛 백엔드는 안 준다 — 없으면 화면이 옛 방식으로 물러선다. */
-  current_cell?: { scene_group_id: string | null; cell_id: string | null } | null;
+  current_cell?: { workspace?: string; scene_group_id: string | null; cell_id: string | null } | null;
 };
 
 /** 큐가 지금 어느 상태인가 — v2 `statusText` 이식 (`index.html:16119-16127, 16467-16493`).
@@ -74,6 +75,9 @@ export type Pending = {
   cellId: string | null;
   /** 어느 계정(차선)으로 넣었나 — 계정별 취소·마무리가 **자기 것만** 걷어내는 열쇠 */
   account: string;
+  /** ★어느 워크스페이스에 넣었나 (사용자 실측 2026-09-02: 복제한 워크스페이스는 씬 그룹 id 가 같아서
+   *  한쪽에서 생성하면 **모든** 워크스페이스에 「생성 중」 칸이 떴다). 화면은 제 워크스페이스 것만 그린다 */
+  workspace: string;
 };
 
 type S = {
@@ -177,7 +181,9 @@ export function runningPendingId(groupId: string | null | undefined): string | n
   //   차선 정보가 없는 옛 백엔드일 때만 맨 앞으로 물러선다.
   const lanes = progress.lanes ? Object.values(progress.lanes) : null;
   const cells = lanes ? lanes.map((l) => l.current_cell) : [progress.current_cell];
-  const cell = cells.find((c) => c && c.scene_group_id === groupId)?.cell_id ?? null;
+  // ★워크스페이스까지 맞아야 한다 — 복제한 워크스페이스는 씬 그룹 id 가 같다 (`Pending.workspace` 의 ★주)
+  const here = useWs.getState().current;
+  const cell = cells.find((c) => c && c.scene_group_id === groupId && (!c.workspace || c.workspace === here))?.cell_id ?? null;
   if (cell) return mine.find((p) => p.cellId === cell)?.id ?? null;
   return lanes ? null : (mine[0]?.id ?? null);
 }
@@ -267,6 +273,7 @@ export const useQueue = create<S>((set, get) => ({
           cellId: ((it.cell_id as string) ?? (base.cell_id as string)) ?? null,
           // ★넣는 쪽이 해석한 계정이다 (`store/gen`·`store/genRemote`) — 서버의 차선과 같은 값
           account: String(base.account ?? ""),
+          workspace: String(base.workspace ?? ""),
         });
       }
     }
@@ -1060,11 +1067,24 @@ function applyStatus(status: Record<string, any> | undefined, set: Setter, get: 
   const total = status.total_images ?? 0;
   if (idle && total > 0 && done >= total) announceDone(done);
   wasBusy = !idle;
+  // ★★차선도 옮겨 담는다 (사용자 실측 2026-09-02: 재접속 복원이 차선 없이 합계만 넣어서, 나란히 가던
+  //   「0/3 · 0/3」이 잠시 뒤 「0/6」으로 합쳐졌다). 상태의 차선은 `Lane.status()` 꼴이라 이름을 맞춘다
+  const lanesIn = status.lanes as Record<string, Record<string, any>> | undefined;
+  const lanes = lanesIn
+    ? Object.fromEntries(
+        Object.entries(lanesIn).map(([id, l]) => [
+          id,
+          { completed: l.completed_images ?? 0, total: l.total_images ?? 0, queue_length: l.queue_length ?? 0,
+            current_cell: l.current_cell ?? null, name: l.name },
+        ]),
+      )
+    : undefined;
   set({
     progress: {
       completed: status.completed_images ?? 0,
       total: status.total_images ?? 0,
       queue_length: status.queue_length ?? 0,
+      ...(lanes ? { lanes } : {}),
     },
     phase: idle ? "idle" : "running",
   });

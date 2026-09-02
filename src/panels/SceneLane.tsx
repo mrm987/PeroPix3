@@ -371,8 +371,8 @@ export function SceneLane() {
        예전에는 `pending`·`laneSize`·`headw` 도 딸림값이라, **생성이 끝나 큐가 줄기만 해도**
        줄이 저 혼자 굴러갔다 (*"생성 완료시 슬롯을 강제 스크롤"*).
        나머지 값은 굴릴 이유가 아니라 **자리를 셈할 재료**일 뿐이므로 ref 로 읽는다. */
-  const scrollBits = useRef({ pending, headw, laneSize, vert, groupId: tab?.id });
-  scrollBits.current = { pending, headw, laneSize, vert, groupId: tab?.id };
+  const scrollBits = useRef({ pending, headw, laneSize, vert, groupId: tab?.id, ws });
+  scrollBits.current = { pending, headw, laneSize, vert, groupId: tab?.id, ws };
   useEffect(() => {
     const el = scrollRef.current;
     /* ★★**「생성 중」 칸을 골랐을 때도 굴린다** (사용자 지적 2026-08-25: *"생성 중인 걸 휠로
@@ -380,8 +380,8 @@ export function SceneLane() {
        대기 칸에는 **파일이 없다** — 예전에는 `focusFile` 이 비면 통째로 물러나서, 휠로
        대기 칸에 닿는 순간 줄이 멈춘 채였다. 고를 수 있는 것은 둘이므로 둘 다 받는다. */
     if (!el || !focusCell || (!focusFile && !focusPending)) return;
-    const { pending, headw, laneSize, vert, groupId } = scrollBits.current;
-    const waiting = pending.filter((p) => p.groupId === groupId && p.cellId === focusCell).length;
+    const { pending, headw, laneSize, vert, groupId, ws } = scrollBits.current;
+    const waiting = pending.filter((p) => p.groupId === groupId && p.cellId === focusCell && p.workspace === ws).length;
     const cw = Math.min(LANE_MAX, Math.max(LANE_MIN, laneSize));
     const step = cw + GAP;
     /* ★셈은 폴백이다 (아래 ★★주) — 대기 칸은 줄의 **앞쪽**에 늦게 넣은 것부터 선다 */
@@ -560,7 +560,8 @@ export function SceneLane() {
 
   const h = Math.min(LANE_MAX, Math.max(LANE_MIN, laneSize));
   const w = h;
-  const queued = pending.filter((p) => p.groupId === tab.id);
+  // ★**이 워크스페이스**에 넣은 것만 — 씬 그룹 id 는 워크스페이스를 건너 겹칠 수 있다 (`Pending.workspace` 의 ★주)
+  const queued = pending.filter((p) => p.groupId === tab.id && p.workspace === ws);
 
   /** 그 씬의 결과 (숨긴 것 제외).
    *  ★갈 씬이 없는 결과는 **첫 씬**이 받는다 (`takesOfScene`, v2 이식 — 감사 D6)

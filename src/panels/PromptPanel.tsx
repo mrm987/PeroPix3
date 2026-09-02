@@ -12,6 +12,7 @@ import { OptionsPanel } from "./OptionsPanel";
 import { Category } from "./Category";
 import { CharPositionToggle, CharStackedWarning } from "./CharPositioner";
 import { useDrag } from "../cards/dragStore";
+import { QueueLanes } from "./QueueLanes";
 
 /** 좌측 패널 — 카드형 섹션 안에 블록 시퀀스.
  *  스타일 섹션(= NAI 의 공통 prompt/uc) 하나 + 캐릭터 섹션 여럿(= characterPrompts[]). */
@@ -99,6 +100,9 @@ export function PromptPanel({ onThumb }: SectionProps) {
         <div style={{ height: 1, background: "var(--line)", margin: "0 0 var(--sp-4)" }} />
         <OptionsPanel />
       </div>
+
+      {/* ★돌고 있는 계정(차선)마다 한 줄 — 최종 프롬프트 바로 위 (사용자 지시 2026-09-02) */}
+      <QueueLanes />
 
       {/* 최종 프롬프트 미리보기 */}
       <div

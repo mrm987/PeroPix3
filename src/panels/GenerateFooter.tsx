@@ -115,16 +115,16 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
      같은 것을 쓴다 — 자동 승인이 「Anlas 가 나가는가」로 갈리기 때문이다 (사용자 결정).
      여기 조립을 되살리지 말 것: 두 벌이 되면 푸터에 보이는 값과 승인 카드의 값이 갈린다. */
   const cost = costNow(1);
-  const running = progress.total > progress.completed;
-  /** ★★**돌고 있는 차선들** (계정별 큐, 사용자 결정 2026-09-02). 둘 이상이면 줄을 차선마다 그린다 */
-  const lanes = Object.entries(progress.lanes ?? {}).filter(([, l]) => l.total > l.completed || l.queue_length > 0);
-  const laneKey = lanes.map(([id]) => id).join(",");
+  /** ★★**이 워크스페이스의 차선** (계정별 큐, 사용자 결정 2026-09-02). 차선 정보가 없는 옛 백엔드면 합계다.
+   *  `laneId` 가 있으면 숫자·취소가 그 차선 것이다 — 다른 계정이 도는 것은 여기 안 섞인다 */
+  const laneId = progress.lanes && account ? account.id : undefined;
+  const mine = (laneId && progress.lanes?.[laneId]) || progress;
+  const running = mine.total > mine.completed;
+  const laneKey = Object.entries(progress.lanes ?? {}).filter(([, l]) => l.total > l.completed || l.queue_length > 0).map(([id]) => id).join(",");
   useEffect(() => {
     // ★멈춘 차선의 「취소 중」 표시를 걷는다 — 전부 멈추면 전체 것도 (`"*"`)
-    setCancelled((c) =>
-      Object.fromEntries(Object.entries(c).filter(([k]) => (k === "*" ? running : lanes.some(([id]) => id === k)))),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const live = new Set(laneKey.split(",").filter(Boolean));
+    setCancelled((c) => Object.fromEntries(Object.entries(c).filter(([k]) => (k === "*" ? running : live.has(k)))));
   }, [running, laneKey]);
   /** ★★취소를 누르면 **받았다고 말한다** (사용자 지적 2026-08-19: 눌러도 아무 일이 없어
    *  보였다). NAI 는 이미 나간 한 장을 못 끊으므로 **지금 것은 끝까지 나오고** 나머지가
@@ -212,15 +212,15 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
         ? t("queue.stFailed")
         : phase === "partial"
           ? t("queue.stPartial")
-          : `${progress.completed}/${progress.total}`;
+          : `${mine.completed}/${mine.total}`;
   const stateInk =
     phase === "failed" ? "var(--err-ink)" : phase === "partial" ? "var(--warn)" : phase === "done" ? "var(--ok)" : "var(--accent-ink)";
   /** 끝났으면 100% 로 채워 둔다 (v2 `progressFill.style.width = '100%'`) */
   const pct =
     phase === "done" || phase === "failed" || phase === "partial"
       ? 100
-      : progress.total > 0
-        ? Math.min(100, Math.round((progress.completed / progress.total) * 100))
+      : mine.total > 0
+        ? Math.min(100, Math.round((mine.completed / mine.total) * 100))
         : 0;
 
   const genBtn = (
@@ -331,7 +331,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {progress.completed}/{progress.total}
+            {mine.completed}/{mine.total}
           </div>
         )}
       </div>
@@ -545,8 +545,9 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
       >
         {/* ★★**이 워크스페이스의 NAI 계정** (사용자 결정 2026-09-02) — 채팅창 하단의 모델 선택기처럼
             이 줄의 맨 앞에 산다. 잔액·요금·큐 줄이 전부 이 계정을 따른다. 바꿔도 **이미 큐에 넣은 것은
-            안 옮겨진다** (1안 — 큐는 넣을 때의 계정을 든다). 계정이 없으면 위의 토큰 안내가 대신한다. */}
-        {accounts.length > 0 && (
+            안 옮겨진다** (1안 — 큐는 넣을 때의 계정을 든다). ★계정이 **둘 이상일 때만** 뜬다 (사용자 지시
+            2026-09-02) — 하나면 고를 것이 없다. 계정이 없으면 위의 토큰 안내가 대신한다. */}
+        {accounts.length > 1 && (
           <select
             data-account-pick
             value={account?.id ?? ""}
@@ -580,62 +581,33 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
 
         {/* ★★취소·진행은 **이 줄의 빈 자리**에 산다 (사용자 지시 2026-08-21).
             새 줄로 만들면 그만큼 위가 밀려 생성 버튼이 움직인다 — 그래서 여기다. */}
-        {lanes.length > 1 ? (
-          /* ★★계정이 여럿 돌면 **차선마다 한 줄** — 이름 · 진행 · 그 차선만 취소 (사용자 결정 2026-09-02, 1안).
-             한 계정만 돌 때는 아래의 옛 줄 그대로다 (이름을 굳이 적지 않는다). */
-          lanes.map(([id, l]) => (
-            <span
-              key={id}
-              data-queue-lane={id}
-              style={{ display: "inline-flex", alignItems: "center", gap: "var(--sp-2)", color: "var(--accent-ink)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}
-            >
-              <span style={{ color: "var(--ink-dim)" }}>{l.name || id}</span>
-              {l.completed}/{l.total}
-              {l.queue_length > 0 && ` · ${t("queue.waiting", { n: l.queue_length })}`}
-              <button
-                data-queue-cancel={id}
-                onClick={() => void cancelQueue(id)}
-                disabled={!!cancelled[id]}
-                data-tip={t("queue.cancelHint")}
-                style={{
-                  ...qbtn,
-                  padding: "0 var(--sp-2)",
-                  color: cancelled[id] ? "var(--ink-ghost)" : "var(--err-ink)",
-                  borderColor: cancelled[id] ? "var(--line)" : "var(--err)",
-                }}
-              >
-                {cancelled[id] ? t("queue.cancelling") : t("queue.cancel")}
-              </button>
-            </span>
-          ))
-        ) : (
-          <>
-            {(running || phase !== "idle") && (
-              <span
-                data-queue-state={phase}
-                style={{ color: stateInk, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}
-              >
-                {stateText}
-                {running && progress.queue_length > 0 && ` · ${t("queue.waiting", { n: progress.queue_length })}`}
-              </span>
-            )}
-            {running && (
-              <button
-                data-queue-cancel
-                onClick={() => void cancelQueue()}
-                disabled={!!cancelled["*"]}
-                data-tip={t("queue.cancelHint")}
-                style={{
-                  ...qbtn,
-                  padding: "0 var(--sp-2)",
-                  color: cancelled["*"] ? "var(--ink-ghost)" : "var(--err-ink)",
-                  borderColor: cancelled["*"] ? "var(--line)" : "var(--err)",
-                }}
-              >
-                {cancelled["*"] ? t("queue.cancelling") : t("queue.cancel")}
-              </button>
-            )}
-          </>
+        {/* ★★여기 숫자는 **이 워크스페이스의 계정(차선)** 것이다 (사용자 지적 2026-09-02: 합계를 적으니
+            나란히 가던 「0/3 · 0/3」이 「0/6」으로 보였다). 차선 전부는 최종 프롬프트 위의 줄이 보여 준다
+            (`panels/QueueLanes`). 취소도 이 차선만 — 다른 계정의 것은 그 줄에서 끊는다. */}
+        {(running || phase !== "idle") && (
+          <span
+            data-queue-state={phase}
+            style={{ color: stateInk, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}
+          >
+            {stateText}
+            {running && mine.queue_length > 0 && ` · ${t("queue.waiting", { n: mine.queue_length })}`}
+          </span>
+        )}
+        {running && (
+          <button
+            data-queue-cancel
+            onClick={() => void cancelQueue(laneId)}
+            disabled={!!cancelled[laneId ?? "*"]}
+            data-tip={t("queue.cancelHint")}
+            style={{
+              ...qbtn,
+              padding: "0 var(--sp-2)",
+              color: cancelled[laneId ?? "*"] ? "var(--ink-ghost)" : "var(--err-ink)",
+              borderColor: cancelled[laneId ?? "*"] ? "var(--line)" : "var(--err)",
+            }}
+          >
+            {cancelled[laneId ?? "*"] ? t("queue.cancelling") : t("queue.cancel")}
+          </button>
         )}
 
         <span style={{ flex: 1 }} />
