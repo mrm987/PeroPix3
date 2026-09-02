@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { useQueue } from "../store/queue";
+import { useAccounts } from "../store/accounts";
 import { toast } from "../store/toast";
 
 /** **돌고 있는 차선(계정) 전부** — 최종 프롬프트 위에 **한 줄씩 세로로** 쌓인다 (사용자 지시 2026-09-02:
@@ -15,7 +16,9 @@ export function QueueLanes() {
   const cancelAll = useQueue((s) => s.cancelAll);
   /** 취소를 눌러 둔 차선 — 다시 못 누르고 「취소 중」으로 보인다. 그 차선이 멈추면 풀린다 */
   const [sent, setSent] = useState<Record<string, boolean>>({});
-  const lanes = Object.entries(progress.lanes ?? {}).filter(([, l]) => l.total > l.completed || l.queue_length > 0);
+  // ★★**계정이 둘 이상일 때만** (사용자 지시 2026-09-02). 하나면 푸터의 줄이 그 일을 한다 — 같은 정보를 두 곳에 안 띄운다
+  const multi = useAccounts((s) => s.items.length > 1);
+  const lanes = multi ? Object.entries(progress.lanes ?? {}).filter(([, l]) => l.total > l.completed || l.queue_length > 0) : [];
   const laneKey = lanes.map(([id]) => id).join(",");
   useEffect(() => {
     const live = new Set(laneKey.split(",").filter(Boolean));

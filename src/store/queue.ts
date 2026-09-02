@@ -830,6 +830,14 @@ function handle(m: Record<string, any>, set: Setter, get: () => S) {
     //   ★그래도 **자리는 같다**: 씬 줄의 그 씬 칸에 「미저장」 칸으로 들어간다
     //     (v2 `index.html:12146` — 미저장도 저장된 것과 같은 슬롯 카드다).
     case "image_preview": {
+      // ★다른 워크스페이스의 미저장 그림은 이 화면의 미리보기에 넣지 않는다 — 대기 칸만 지운다
+      //   (`render` 의 ★★주와 같은 까닭, 사용자 실측 2026-09-02)
+      if (m.workspace && m.workspace !== useWs.getState().current) {
+        consumePending(m, set, get, false);
+        takeProgress(m.progress, set);
+        bump(String(m.account ?? ""), "ok");
+        break;
+      }
       const take = usePreviews.getState().add(m);
       /* ★★**보고 있던 대기 칸에 미저장 그림이 나오면 그 그림으로 옮겨 간다** (사용자 지적
          2026-08-30: 자동 저장을 끄면 생성 완료 때 선택이 풀렸다). 저장된 그림은 `consumePending`
@@ -1098,10 +1106,11 @@ function applyStatus(status: Record<string, any> | undefined, set: Setter, get: 
 
 /** 이 장에 해당하는 대기 하나를 지운다 (같은 슬롯의 맨 앞 것).
  *  ★저장된 그림과 미저장 그림이 **같이 쓴다** — 어느 쪽이든 대기 칸은 하나 줄어야 한다. */
-function consumePending(m: Record<string, any>, set: Setter, get: () => S) {
-  /* ★그 칸의 중간 그림을 놓는다 — 완성본이 왔는데 남겨 두면 그 위에 흐린 미리보기가 겹친다 */
+function consumePending(m: Record<string, any>, set: Setter, get: () => S, mine = true) {
+  /* ★그 칸의 중간 그림을 놓는다 — 완성본이 왔는데 남겨 두면 그 위에 흐린 미리보기가 겹친다.
+     ★이 화면의 그림일 때만 — 중간 그림은 칸 id 로만 들고 있어서, 다른 워크스페이스의 같은 칸 id 것을 놓으면 안 된다 */
   const cell = String(m.cell_id ?? "");
-  if (cell && get().steps[cell]) {
+  if (mine && cell && get().steps[cell]) {
     const steps = { ...get().steps };
     delete steps[cell];
     set({ steps });
@@ -1117,13 +1126,17 @@ function consumePending(m: Record<string, any>, set: Setter, get: () => S) {
      ★대기 칸을 고르고 있을 때만 돈다 — 이미 어떤 장을 보고 있으면 새 그림이 나와도
        **화면을 뺏지 않는다** (사용자가 보던 것을 지키는 규칙 그대로다). */
   const f0 = useSceneFocus.getState();
-  if (f0.pending && m.file && (m.cell_id ?? null) === (f0.cell || null)) {
+  if (mine && f0.pending && m.file && (m.cell_id ?? null) === (f0.cell || null)) {
     f0.focus(f0.cell, String(m.file));
   }
 
+  // ★워크스페이스까지 맞춘다 — 씬 그룹·칸 id 는 워크스페이스를 건너 겹친다 (`Pending.workspace` 의 ★주).
+  //   서버가 워크스페이스를 안 실어 준 옛 그림(`sync` 복원의 아주 옛 줄)은 예전처럼 id 로만 본다
   const pend = get().pending;
+  const wsOf = m.workspace ? String(m.workspace) : null;
   const at = pend.findIndex(
-    (p) => p.groupId === (m.scene_group_id ?? null) && p.cellId === (m.cell_id ?? null),
+    (p) => p.groupId === (m.scene_group_id ?? null) && p.cellId === (m.cell_id ?? null)
+      && (wsOf === null || p.workspace === wsOf),
   );
   if (at < 0) return;
   set({ pending: pend.filter((_, i) => i !== at) });
@@ -1135,8 +1148,13 @@ function render(m: Record<string, any>, set: Setter, get: () => S) {
   if (seq && get().seen.has(seq)) return;
 
   const ws = useWs.getState();
-  // 다른 워크스페이스의 결과는 이 화면과 무관하다 (큐는 앱 전체가 공유한다)
-  if (m.workspace && m.workspace !== ws.current) return;
+  // ★★다른 워크스페이스의 결과는 이 화면의 목록에 안 넣는다 (큐는 앱 전체가 공유한다). 다만 **대기 칸은
+  //   지운다** — 예전에는 여기서 그냥 돌아가서, 보고 있지 않은 워크스페이스에 건 배치의 대기 칸이 그림이
+  //   나와도 영영 남았다 (사용자 실측 2026-09-02). 그 워크스페이스로 가면 그림은 서버 목록에서 온다.
+  if (m.workspace && m.workspace !== ws.current) {
+    consumePending(m, set, get, false);
+    return;
+  }
 
   ws.addRecord({
     // ★시각은 **서버가 찍은 것**이다 (`_generate_one` 의 `ts`). 화면이 자기 시계로 찍으면

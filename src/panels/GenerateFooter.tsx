@@ -118,6 +118,8 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
   /** ★★**이 워크스페이스의 차선** (계정별 큐, 사용자 결정 2026-09-02). 차선 정보가 없는 옛 백엔드면 합계다.
    *  `laneId` 가 있으면 숫자·취소가 그 차선 것이다 — 다른 계정이 도는 것은 여기 안 섞인다 */
   const laneId = progress.lanes && account ? account.id : undefined;
+  /** 계정이 둘 이상 — 큐 상태는 최종 프롬프트 위의 줄이 맡고 여기서는 안 띄운다 (사용자 지시 2026-09-02) */
+  const multi = accounts.length > 1;
   const mine = (laneId && progress.lanes?.[laneId]) || progress;
   const running = mine.total > mine.completed;
   const laneKey = Object.entries(progress.lanes ?? {}).filter(([, l]) => l.total > l.completed || l.queue_length > 0).map(([id]) => id).join(",");
@@ -516,7 +518,8 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
         <div
           style={{
             height: "100%",
-            width: running || phase !== "idle" ? `${pct}%` : 0,
+            // ★계정이 여럿이면 진행은 위의 차선 줄이 말한다 — 여기는 선만 남는다 (자리는 그대로)
+            width: !multi && (running || phase !== "idle") ? `${pct}%` : 0,
             background: stateInk,
             transition: "width 0.18s linear",
           }}
@@ -582,9 +585,10 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
         {/* ★★취소·진행은 **이 줄의 빈 자리**에 산다 (사용자 지시 2026-08-21).
             새 줄로 만들면 그만큼 위가 밀려 생성 버튼이 움직인다 — 그래서 여기다. */}
         {/* ★★여기 숫자는 **이 워크스페이스의 계정(차선)** 것이다 (사용자 지적 2026-09-02: 합계를 적으니
-            나란히 가던 「0/3 · 0/3」이 「0/6」으로 보였다). 차선 전부는 최종 프롬프트 위의 줄이 보여 준다
-            (`panels/QueueLanes`). 취소도 이 차선만 — 다른 계정의 것은 그 줄에서 끊는다. */}
-        {(running || phase !== "idle") && (
+            나란히 가던 「0/3 · 0/3」이 「0/6」으로 보였다). 취소도 이 차선만.
+            ★★**계정이 하나일 때만** 뜬다 (사용자 지시 2026-09-02) — 둘 이상이면 최종 프롬프트 위의 줄
+            (`panels/QueueLanes`)이 차선 전부를 보여 주므로 여기는 비운다. 같은 정보를 두 곳에 안 띄운다. */}
+        {!multi && (running || phase !== "idle") && (
           <span
             data-queue-state={phase}
             style={{ color: stateInk, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}
@@ -593,7 +597,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
             {running && mine.queue_length > 0 && ` · ${t("queue.waiting", { n: mine.queue_length })}`}
           </span>
         )}
-        {running && (
+        {!multi && running && (
           <button
             data-queue-cancel
             onClick={() => void cancelQueue(laneId)}
