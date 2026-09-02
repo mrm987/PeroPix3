@@ -62,8 +62,9 @@ export class CensorRenderer {
   private plates = new Map<string, Plate>();
   /** 무늬 판을 밝기·진하기까지 입혀 캔버스로 구워 둔 것 */
   private plateCanvas = new Map<string, HTMLCanvasElement>();
-  /** 매 프레임 새로 만들지 않으려고 들고 있는 두 장 */
+  /** 매 프레임 새로 만들지 않으려고 들고 있는 석 장 (모양 · 여백을 두른 모양 · 오려낸 재료) */
   private maskCv: HTMLCanvasElement | null = null;
+  private padCv: HTMLCanvasElement | null = null;
   private cutCv: HTMLCanvasElement | null = null;
 
   constructor(src: Src, w?: number, h?: number) {
@@ -183,17 +184,31 @@ export class CensorRenderer {
     ctx: CanvasRenderingContext2D, how: string, list: RenderBox[],
     s: CoverSettings, scale: number, W: number, H: number,
   ) {
-    if (!this.maskCv || this.maskCv.width !== W || this.maskCv.height !== H) {
+    const expand = s.expand * scale;
+    const feather = s.feather * scale;
+    /* ★★그림 가장자리에 붙은 박스가 **끝에서 옅어지던 결함** (유저 제보 2026-09-02: 흰색 검열이
+       좌·우·상단 가장자리에서 제대로 안 됨). 캔버스 `blur` 필터는 캔버스 **밖을 투명**으로
+       보므로, 마스크를 그림 크기 그대로 흐리면 그림 끝에서 feather 폭만큼 마스크가 빠지고
+       그 자리의 덮개가 반투명이 된다 (실측: feather 10 에서 끝 픽셀의 원본 비침 46%).
+       흰색만이 아니라 검정·색 지정·모자이크·흐리기가 전부 같은 마스크를 지난다.
+       그래서 **여백(`m`)을 두른 판**에 마스크를 놓고, 그림 가장자리 픽셀을 여백으로 늘려
+       깐 뒤(가장자리 복제 = 밖을 「끝과 같은 값」으로 본다) 흐린다. 그림 안쪽에서 끝나는
+       변의 부드러움은 그대로다. 여백은 blur 반경(σ = feather/2)의 4배로, 그 밖의 투명이
+       끝에 미치는 몫은 0.1% 미만이다. */
+    const m = feather > 0 ? Math.ceil(feather * 2) : 0;
+    const PW = W + m * 2;
+    const PH = H + m * 2;
+    if (!this.maskCv || this.maskCv.width !== W || this.maskCv.height !== H
+        || !this.padCv || this.padCv.width !== PW || this.padCv.height !== PH) {
       this.maskCv = c2d(W, H);
-      this.cutCv = c2d(W, H);
+      this.padCv = c2d(PW, PH);
+      this.cutCv = c2d(PW, PH);
     }
     const mask = this.maskCv;
     const mg = mask.getContext("2d")!;
     mg.setTransform(1, 0, 0, 1, 0, 0);
     mg.clearRect(0, 0, W, H);
 
-    const expand = s.expand * scale;
-    const feather = s.feather * scale;
     /* ★★안쪽은 100% 로 남기고 **가장자리만** 부드럽게 한다. 그래서 흐리기 전에 테두리를
        `feather` 만큼 **넓힌다** (파이썬의 MaxFilter → GaussianBlur 과 같은 차례다).
        바로 흐리면 박스 안쪽까지 옅어져, 가려야 할 것이 비친다. */
@@ -207,22 +222,41 @@ export class CensorRenderer {
       if (feather > 0) mg.stroke();
     }
 
+    // 여백을 두른 판 — 가운데에 마스크, 둘레에는 가장자리 한 줄을 늘려 깐다
+    const pad = this.padCv!;
+    const pg = pad.getContext("2d")!;
+    pg.setTransform(1, 0, 0, 1, 0, 0);
+    pg.clearRect(0, 0, PW, PH);
+    pg.imageSmoothingEnabled = false;
+    pg.drawImage(mask, m, m);
+    if (m > 0) {
+      pg.drawImage(mask, 0, 0, 1, H, 0, m, m, H);                 // 왼쪽 띠
+      pg.drawImage(mask, W - 1, 0, 1, H, m + W, m, m, H);         // 오른쪽 띠
+      pg.drawImage(mask, 0, 0, W, 1, m, 0, W, m);                 // 위 띠
+      pg.drawImage(mask, 0, H - 1, W, 1, m, m + H, W, m);         // 아래 띠
+      pg.drawImage(mask, 0, 0, 1, 1, 0, 0, m, m);                 // 네 모서리
+      pg.drawImage(mask, W - 1, 0, 1, 1, m + W, 0, m, m);
+      pg.drawImage(mask, 0, H - 1, 1, 1, 0, m + H, m, m);
+      pg.drawImage(mask, W - 1, H - 1, 1, 1, m + W, m + H, m, m);
+    }
+    pg.imageSmoothingEnabled = true;
+
     const cut = this.cutCv!;
     const cg = cut.getContext("2d")!;
     cg.setTransform(1, 0, 0, 1, 0, 0);
-    cg.clearRect(0, 0, W, H);
+    cg.clearRect(0, 0, PW, PH);
     cg.filter = feather > 0 ? `blur(${feather / 2}px)` : "none";
-    cg.drawImage(mask, 0, 0);
+    cg.drawImage(pad, 0, 0);
     cg.filter = "none";
-    // 마스크가 남긴 자리에만 재료를 남긴다
+    // 마스크가 남긴 자리에만 재료를 남긴다 (재료는 그림 자리에만 — 여백은 어차피 잘려 나간다)
     cg.globalCompositeOperation = "source-in";
-    cg.drawImage(this.layer(how, s, scale, W, H), 0, 0);
+    cg.drawImage(this.layer(how, s, scale, W, H), m, m);
     cg.globalCompositeOperation = "source-over";
 
     // ★모자이크의 「진하기」는 재료를 옅게 얹는 것이다 (파이썬도 마스크에 곱했다)
     ctx.globalAlpha = how === "mosaic"
       ? Math.min(1, Math.max(0, s.mosaicOpacity / 100)) : 1;
-    ctx.drawImage(cut, 0, 0);
+    ctx.drawImage(cut, -m, -m);
     ctx.globalAlpha = 1;
   }
 
