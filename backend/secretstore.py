@@ -45,6 +45,17 @@ class Secrets:
     def has(self, name: str) -> bool:
         return bool(self.get(name))
 
+    # ★계정 목록처럼 **문자열이 아닌 것**도 담는다 (`accounts.py`). 같은 파일·같은 저장 규칙이다
+    def get_obj(self, name: str):
+        return self._d.get(name)
+
+    def set_obj(self, name: str, value) -> None:
+        if value is None:
+            self._d.pop(name, None)
+        else:
+            self._d[name] = value
+        self._save()
+
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # ★임시 파일에 쓰고 바꿔치기한다 — 쓰다 죽어도 옛 파일이 남는다

@@ -15,7 +15,7 @@ import { useWs } from "../store/workspace";
 import { imgUrl } from "../lib/imgUrl";
 import { Icon } from "../components/Icon";
 import { anlasCost, MAX_PER_IMAGE } from "../lib/anlas";
-import { useSub } from "../store/sub";
+import { useCurrentSub } from "../store/sub";
 import { useAnlasMeter } from "../store/anlasMeter";
 import { useSceneFocus } from "../store/sceneFocus";
 import { allScenes } from "../store/workspace";
@@ -64,7 +64,7 @@ export function EnhanceDialog({
 }) {
   const t = useI18n((s) => s.t);
   const { base, params } = useGen();
-  const opus = useSub((s) => (s.sub?.tier ?? 0) >= 3);
+  const opus = (useCurrentSub()?.tier ?? 0) >= 3;
   const ws = useWs((s) => s.current);
   const records = useWs((s) => s.records);
   const setNow = useWs((s) => s.activeSceneGroup());

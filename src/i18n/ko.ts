@@ -313,6 +313,7 @@ export const ko: Dict = {
 
   gen: {
     needToken: "설정에서 NAI 토큰을 넣어야 생성됩니다.",
+    accountHint: "이 워크스페이스가 쓰는 NAI 계정. 잔액과 요금이 이 계정 기준이고, 이미 큐에 넣은 것은 바꿔도 안 옮겨집니다.",
     perSlot: "씬당",
     slotsTimes: "씬 {s} × {p} = {t}장",
     countCost: "{n}장 · {a} Anlas",
@@ -557,9 +558,6 @@ export const ko: Dict = {
   },
   settings: {
     tokenChecking: "확인 중…",
-    tokenRemoved: "토큰을 지웠습니다",
-    tokenDelete: "NAI 토큰을 지울까요?",
-    tokenDeleteBody: "다시 넣기 전까지 생성이 되지 않습니다.",
     bulkWarn: "수 시간 이상 이어서 대량 생성하면 NovelAI 쪽에서 계정이 제한될 수 있습니다.",
     editing: "편집",
     /** 가중치 강조 색 — 칩과 글 상자 둘 다 */
@@ -618,11 +616,19 @@ export const ko: Dict = {
       fileMulti: { k: "Ctrl / Shift + 클릭", v: "여러 파일을 고릅니다" },
       titleDbl: { k: "제목 줄 더블클릭", v: "창을 세로로 끝까지 늘립니다" },
     },
-    token: "NAI 토큰",
-    tokenSet: "저장돼 있습니다. 바꾸려면 새로 붙여 넣으세요",
     tokenEmpty: "pst-… 을 붙여 넣으세요",
     tokenHint:
       "novelai.net 에 로그인한 뒤 Account Settings 의 Get Persistent API Token 으로 발급받습니다. 저장한 값은 다시 보여 주지 않습니다.",
+    accounts: "NAI 계정",
+    accountsHint:
+      "계정을 여럿 두면 워크스페이스마다 고를 수 있고, 계정마다 따로 생성됩니다. 이름은 자동으로 붙고 칸에서 고칠 수 있습니다. 저장한 토큰은 다시 보여 주지 않습니다.",
+    accountAdd: "추가",
+    accountReplace: "토큰 교체",
+    accountAdded: "계정을 추가했습니다: {name}",
+    accountReplaced: "토큰을 바꿨습니다",
+    accountRemoved: "계정을 지웠습니다",
+    accountDelete: "「{name}」 계정을 지울까요?",
+    accountDeleteBody: "이 계정을 쓰던 워크스페이스는 첫 계정으로 넘어갑니다. 진행 중인 생성은 끝까지 나옵니다.",
     engineCli: "로컬 CLI",
     engineCliSub: "{n}개 사용 가능",
     engineApi: "API 키",
@@ -655,7 +661,6 @@ export const ko: Dict = {
     keySet: "설정됨. 바꾸려면 새 키를 넣으세요",
     keyEmpty: "API 키",
     save: "저장",
-    tokenSaved: "토큰을 저장했습니다",
     look: "보기",
     language: "언어",
     theme: "테마",

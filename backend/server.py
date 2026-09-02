@@ -45,6 +45,7 @@ import genqueue
 import cliagent
 import agentsession
 import secretstore
+import accounts as accounts_mod
 import llm as llm_mod
 import agent as agent_mod
 from agent import App, Tools
@@ -391,10 +392,13 @@ CONFIG = load_config()
 SECRETS = secretstore.Secrets(DATA_DIR / "secrets.json")
 if SECRETS.adopt(CONFIG):
     save_config(CONFIG)
+# ★NAI 계정은 **여럿**이다 (사용자 결정 2026-09-02) — 옛 `nai_token` 하나는 첫 계정으로 옮겨진다
+ACCOUNTS = accounts_mod.Accounts(SECRETS)
 
 
-def nai_token() -> str:
-    return os.environ.get("NAI_TOKEN") or SECRETS.get("nai_token")
+def nai_token(account: str | None = None) -> str:
+    """그 계정의 토큰. ★없거나 지워진 계정이면 첫 계정 — 요청을 거절하면 옛 워크스페이스가 통째로 멈춘다."""
+    return ACCOUNTS.token_of(account)
 
 
 def llm_settings(provider: str = "") -> dict:
@@ -437,8 +441,11 @@ _migrate_llm()
 
 
 # ── 모델 ──────────────────────────────────────────────────────────
-class TokenBody(BaseModel):
-    token: str
+class AccountBody(BaseModel):
+    """계정 추가·수정. 둘 다 비어도 되는 것은 수정 때 한쪽만 고치기 때문이다."""
+
+    token: str = ""
+    name: str = ""
 
 
 class RestoreBody(BaseModel):
@@ -460,6 +467,9 @@ class GenBody(BaseModel):
     #   주는 프레임을 그대로 앱에 넘긴다 (`nai.generate_streaming`). 꺼도 결과는 같다 —
     #   **보는 방식**만 달라진다. 화면이 옵션으로 켜고 끈다.
     stream: bool = True
+    #: ★★**어느 NAI 계정으로** (사용자 결정 2026-09-02). 워크스페이스가 고른 것을 화면이 싣는다
+    #   (`spec.account`). 없거나 지워졌으면 첫 계정이다 (`accounts.resolve`). 큐는 이 값으로 차선을 가른다.
+    account: str | None = None
     # 어디에 저장할지
     workspace: str = "새 작업"
     # ★세트 이름 — 저장 경로 한 칸이 된다 (`docs/terms-plan.md` 의 낱말표)
@@ -699,45 +709,78 @@ async def update_cancel():
     return {"ok": False, "error": "받는 중인 것이 없습니다"}
 
 
-@app.post("/api/token")
-async def set_token(body: TokenBody):
-    """토큰 저장·삭제. ★**검사하고 받는다** (backend.py:4470-4500 이식).
+async def _check_nai_token(token: str) -> str:
+    """토큰을 **검사한다** (backend.py:4470-4500 이식). 돌려주는 것은 경고 문구다.
 
-    빈 값이면 지운다 (`secretstore.Secrets.set`). 값이 있으면 형태를 먼저 보고,
-    그 다음 NAI 에 물어본다 — ★**401 일 때만 막는다.** 그 밖의 응답·타임아웃·
+    형태를 먼저 보고, 그 다음 NAI 에 물어본다 — ★**401 일 때만 막는다.** 그 밖의 응답·타임아웃·
     네트워크 오류는 토큰이 틀렸다는 증거가 아니라서, 저장하고 경고만 남긴다
     (NAI 쪽 일시적 400 으로 멀쩡한 토큰이 등록조차 안 되던 문제)."""
+    if any(c.isspace() for c in token):
+        raise HTTPException(400, "토큰에 공백이 섞여 있습니다. 공백 없이 토큰만 붙여 넣으세요.")
+    try:
+        token.encode("ascii")
+    except UnicodeEncodeError:
+        raise HTTPException(400, "토큰에 쓸 수 없는 문자가 있습니다. 다시 복사해 주세요.")
+    if not token.startswith("pst-"):
+        raise HTTPException(400, "Persistent API Token 이 아닙니다. pst- 로 시작하는 값을 넣어 주세요.")
+
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(
+                "https://image.novelai.net/user/subscription",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        if r.status_code == 401:
+            raise HTTPException(400, "토큰이 만료됐거나 유효하지 않습니다. 새로 발급해 주세요.")
+        if r.status_code != 200:
+            return f"저장했지만 NAI 확인은 못 했습니다 (응답 {r.status_code}). 생성이 되면 문제없습니다."
+    except HTTPException:
+        raise
+    except Exception as e:
+        return f"저장했지만 NAI 확인은 못 했습니다 ({type(e).__name__}). 인터넷 연결을 확인해 주세요."
+    return ""
+
+
+# ── NAI 계정 (여럿) ────────────────────────────────────────────────
+# ★옛 `/api/token`(토큰 하나) 은 걷었다 (2026-09-02). 창구는 계정 목록 하나다 — 토큰 값은 어느 응답에도 안 실린다.
+@app.get("/api/accounts")
+async def list_accounts():
+    return {"items": ACCOUNTS.public(), "default": ACCOUNTS.default_id()}
+
+
+@app.post("/api/accounts")
+async def add_account(body: AccountBody):
+    """계정 추가. ★이름을 안 주면 자동 번호(「API n」)다 — 사용자가 나중에 고친다 (사용자 결정 2026-09-02)."""
     token = (body.token or "").strip()
-    warning = ""
-    if token:
-        if any(c.isspace() for c in token):
-            raise HTTPException(400, "토큰에 공백이 섞여 있습니다. 공백 없이 토큰만 붙여 넣으세요.")
-        try:
-            token.encode("ascii")
-        except UnicodeEncodeError:
-            raise HTTPException(400, "토큰에 쓸 수 없는 문자가 있습니다. 다시 복사해 주세요.")
-        if not token.startswith("pst-"):
-            raise HTTPException(400, "Persistent API Token 이 아닙니다. pst- 로 시작하는 값을 넣어 주세요.")
+    if not token:
+        raise HTTPException(400, "토큰을 넣어 주세요.")
+    warning = await _check_nai_token(token)
+    acc = ACCOUNTS.add(token, body.name)
+    return {"ok": True, **acc, "warning": warning, "hasToken": bool(nai_token())}
 
-        import httpx
 
-        try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                r = await client.get(
-                    "https://image.novelai.net/user/subscription",
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-            if r.status_code == 401:
-                raise HTTPException(400, "토큰이 만료됐거나 유효하지 않습니다. 새로 발급해 주세요.")
-            if r.status_code != 200:
-                warning = f"저장했지만 NAI 확인은 못 했습니다 (응답 {r.status_code}). 생성이 되면 문제없습니다."
-        except HTTPException:
-            raise
-        except Exception as e:
-            warning = f"저장했지만 NAI 확인은 못 했습니다 ({type(e).__name__}). 인터넷 연결을 확인해 주세요."
+@app.put("/api/accounts/{account_id}")
+async def update_account(account_id: str, body: AccountBody):
+    """이름 바꾸기·토큰 갈아 끼우기 — 준 것만 고친다. id 는 그대로라 워크스페이스의 선택이 안 끊긴다."""
+    token = (body.token or "").strip()
+    warning = await _check_nai_token(token) if token else ""
+    acc = ACCOUNTS.update(account_id, token=token or None, name=body.name or None)
+    if not acc:
+        raise HTTPException(404, "그 계정이 없습니다.")
+    # ★개명이면 도는 차선의 이름도 따라간다 — 큐 표시가 옛 이름으로 남지 않게
+    if account_id in Q.lanes:
+        Q.lanes[account_id].name = acc["name"]
+    return {"ok": True, **acc, "warning": warning}
 
-    SECRETS.set("nai_token", token)
-    return {"ok": True, "hasToken": bool(nai_token()), "warning": warning}
+
+@app.delete("/api/accounts/{account_id}")
+async def delete_account(account_id: str):
+    """★돌고 있는 차선은 건드리지 않는다 — 이미 나간 장은 온다. 다음 요청부터 첫 계정으로 떨어진다."""
+    if not ACCOUNTS.remove(account_id):
+        raise HTTPException(404, "그 계정이 없습니다.")
+    return {"ok": True, "hasToken": bool(nai_token())}
 
 
 # ── 에이전트 다리 (바깥에서 앱 도구를 부른다) ─────────────────────
@@ -1165,10 +1208,11 @@ async def llm_chat(body: LlmChatBody):
 
 
 @app.get("/api/subscription")
-async def subscription():
+async def subscription(account: str | None = None):
+    """★계정별이다 (`?account=`) — 잔액·Opus 잔량은 계정마다 다르다. 없으면 첫 계정."""
     import httpx
 
-    token = nai_token()
+    token = nai_token(account)
     if not token:
         raise HTTPException(400, "NAI 토큰이 설정되지 않았습니다.")
     async with httpx.AsyncClient(timeout=20) as client:
@@ -1666,7 +1710,8 @@ async def _generate_one(body: GenBody) -> dict:
         tile_rect = (x, y, w, h)
 
     # ★vibe 인코딩은 **조립 전에** 한다 — 유료 호출이라 캐시 판정이 여기서 끝나야 한다
-    await nai.encode_vibes(req, nai_token(), vibes)
+    token = nai_token(body.account)
+    await nai.encode_vibes(req, token, vibes)
     payload = nai.build_payload(req)
     if body.stream:
         # ★★**중간 그림을 흘린다** — 그리는 동안 보여 주면 기다림이 짧게 느껴지고, 잘못 가고
@@ -1717,7 +1762,7 @@ async def _generate_one(body: GenBody) -> dict:
 
         pump = asyncio.create_task(_pump())
         try:
-            png, seed = await nai.generate_streaming(payload, nai_token(), _step)
+            png, seed = await nai.generate_streaming(payload, token, _step)
         finally:
             closed = True
             woke.set()
@@ -1726,7 +1771,7 @@ async def _generate_one(body: GenBody) -> dict:
             except Exception:
                 pump.cancel()
     else:
-        png, seed = await nai.generate_with_payload(payload, nai_token())
+        png, seed = await nai.generate_with_payload(payload, token)
 
     # ★인페인트 결과를 **보낸 원본 위에 소프트 마스크로 되붙인다** (7절).
     #   NAI 결과는 마스크 밖도 미세하게 달라져서, 그대로 저장하면 고치지 않은 자리가 바뀐다.
@@ -1849,6 +1894,8 @@ class UpscaleBody(BaseModel):
     file: str
     #: 버전 뿌리 — 없으면 이 파일이 뿌리다 (강화와 같은 자리를 쓴다)
     enhance_of: str | None = None
+    #: 어느 NAI 계정으로 (`GenBody.account` 와 같다)
+    account: str | None = None
 
 
 @app.post("/api/upscale")
@@ -1871,7 +1918,7 @@ async def upscale_image(body: UpscaleBody):
 
     b64 = base64.b64encode(src.read_bytes()).decode()
     try:
-        png = await nai.upscale(b64, w, h, nai_token())
+        png = await nai.upscale(b64, w, h, nai_token(body.account))
     except RuntimeError as e:
         raise HTTPException(502, str(e))
 
@@ -2016,7 +2063,11 @@ class QueueBody(BaseModel):
 async def _process_job(job: dict) -> None:
     qb: QueueBody = job["request"]
     job_id = job["id"]
-    await Q.broadcast({"type": "job_start", "job_id": job_id, "count": job["count"],
+    # ★★**이 잡의 차선** — 진행률·취소·「지금 만드는 씬」은 차선 것이다 (계정마다 나란히 돈다).
+    #   방송에는 `account` 를 실어 화면이 어느 줄인지 안다. `progress` 는 합계 + 차선별이다 (`Q.progress`).
+    lane: genqueue.Lane = job["lane"]
+    acc = lane.id
+    await Q.broadcast({"type": "job_start", "job_id": job_id, "count": job["count"], "account": acc,
                        "progress": Q.progress()})
 
     units = qb.items or [{}]
@@ -2026,11 +2077,11 @@ async def _process_job(job: dict) -> None:
     #   한 바퀴가 끝날 때마다 전체를 견줄 수 있어야 중간에 멈추고 고칠지 판단이 선다.
     for _ in range(max(1, qb.count)):
         for unit in units:
-            if Q.cancel_current:
+            if lane.cancel_current:
                 # ★취소는 **다음 장부터** 먹는다 — 이미 NAI 에 돈을 낸 장은 버리지 않는다
-                left = Q.total_images - Q.completed_images
-                Q.total_images = Q.completed_images
-                await Q.broadcast({"type": "job_cancelled", "job_id": job_id,
+                left = lane.total_images - lane.completed_images
+                lane.total_images = lane.completed_images
+                await Q.broadcast({"type": "job_cancelled", "job_id": job_id, "account": acc,
                                    "cancelled_images": left, "progress": Q.progress()})
                 return
             # ★단위(셀)마다 다른 값만 base 위에 덮는다 — 나머지 설정은 공유한다
@@ -2038,29 +2089,30 @@ async def _process_job(job: dict) -> None:
             # ★★**지금 만드는 씬을 알린다** (사용자 실측 2026-08-25). 화면이 자기 대기 목록의
             #   맨 앞을 「생성 중」으로 찍고 있었는데, 배치가 겹치면 그 순서가 실제와 어긋나
             #   **엉뚱한 칸에 「생성 중」이 뜨고 그림은 「대기 중」 칸에 나타났다.**
-            Q.current_cell = {"scene_group_id": one.scene_group_id, "cell_id": one.cell_id}
-            await Q.broadcast({"type": "job_progress", "job_id": job_id, "progress": Q.progress()})
+            lane.current_cell = {"scene_group_id": one.scene_group_id, "cell_id": one.cell_id}
+            await Q.broadcast({"type": "job_progress", "job_id": job_id, "account": acc, "progress": Q.progress()})
             try:
-                r = await _generate_one(one)
+                # ★토큰은 **차선의 계정**으로 — 요청이 든 값이 아니라 차선이 정본이다 (같은 값이지만 한 곳만 읽는다)
+                r = await _generate_one(one.model_copy(update={"account": acc}))
             except Exception as e:
                 print(f"[queue] 생성 실패 (job {job_id}, cell={one.cell}): {e}")
                 # ★★실패도 **한 장으로 센다** (v2 `backend.py:3178` 의 "에러도 완료로 카운트").
                 #   안 세면 `completed < total` 이 영원히 유지돼 큐 줄과 「생성 중」이
                 #   안 사라진다 (감사 2026-08-16).
-                Q.completed_images += 1
-                await Q.broadcast({"type": "image_error", "job_id": job_id, "error": str(e),
+                lane.completed_images += 1
+                await Q.broadcast({"type": "image_error", "job_id": job_id, "account": acc, "error": str(e),
                                    "cell": one.cell, "progress": Q.progress()})
                 continue
-            Q.completed_images += 1
+            lane.completed_images += 1
             # ★★자동 저장을 껐으면 **파일이 없다**. 그때는 기록으로 남기는 `image` 가 아니라
             #   미리보기로 보낸다 — 안 가리면 화면이 `file: null` 로 레코드를 만들어
             #   씬 칸에 깨진 칸이 생긴다 (감사 2026-08-16). 되돌려 볼 버퍼에도 안 쌓는다
             #   (몇 MB 짜리 base64 라 500장 버퍼를 금세 채운다).
             if not r.get("file"):
-                await Q.broadcast({"type": "image_preview", "job_id": job_id, **r,
+                await Q.broadcast({"type": "image_preview", "job_id": job_id, "account": acc, **r,
                                    "progress": Q.progress()})
                 continue
-            msg = {"type": "image", "job_id": job_id, **r}
+            msg = {"type": "image", "job_id": job_id, "account": acc, **r}
             # ★★**썸네일을 미리 구워 둔다** (사용자 지적 2026-08-26: *"생성 완료 알림이 오고
             #   1초 정도 지나야 이미지가 뜸"*). 화면이 쓰는 것은 원본이 아니라 파생 썸네일인데
             #   (`/api/thumb`), 그것이 **첫 요청 때** 구워졌다 — 열고·디코드하고·LANCZOS 로
@@ -2078,15 +2130,16 @@ async def _process_job(job: dict) -> None:
             msg["progress"] = Q.progress()
             await Q.broadcast(msg)
 
-    await Q.broadcast({"type": "job_done", "job_id": job_id, "progress": Q.progress()})
-    # ★★큐가 비면 진행률 회계를 0 으로 되돌린다 (v2 `backend.py:3209-3211` 이식).
+    await Q.broadcast({"type": "job_done", "job_id": job_id, "account": acc, "progress": Q.progress()})
+    # ★★차선의 큐가 비면 진행률 회계를 0 으로 되돌린다 (v2 `backend.py:3209-3211` 이식).
     #   안 되돌리면 completed/total 이 앱을 켠 뒤로 계속 쌓여서, 다음 배치가 "0/2" 가 아니라
     #   "8/10" 으로 보이고 진행바가 처음부터 80% 에서 시작한다.
     #   ★알림을 보낸 **뒤에** 되돌린다 — 순서를 바꾸면 끝난 배치의 장 수가 0 으로 나간다.
     #   ★`recent_images`·`image_sequence` 는 그대로 둔다 (새로고침 복원의 근거다).
-    if not Q.queue:
-        Q.completed_images = 0
-        Q.total_images = 0
+    #   ★차선마다 따로다 — 다른 계정이 아직 돌고 있어도 이쪽 회계는 여기서 끝난다.
+    if not lane.queue:
+        lane.completed_images = 0
+        lane.total_images = 0
 
 
 @app.on_event("startup")
@@ -2110,24 +2163,36 @@ async def _stop_queue():
 @app.post("/api/generate/queue")
 async def generate_queue(body: QueueBody):
     n = max(1, len(body.items or [{}])) * max(1, body.count)
-    job_id = Q.add_job(body, n)
-    await Q.broadcast({"type": "queued", "job_id": job_id, "count": n, "progress": Q.progress()})
-    return {"ok": True, "job_id": job_id, "count": n}
+    # ★★차선은 **넣는 순간의 계정**으로 정해진다 (사용자 결정 2026-09-02, 1안). 없거나 지워진 계정은
+    #   첫 계정이다. 이 뒤로 워크스페이스의 계정을 바꿔도 이 잡은 이 차선에 남는다.
+    acc = ACCOUNTS.resolve(body.base.account)
+    job_id = Q.add_job(body, n, acc, ACCOUNTS.name_of(acc))
+    await Q.broadcast({"type": "queued", "job_id": job_id, "count": n, "account": acc, "progress": Q.progress()})
+    return {"ok": True, "job_id": job_id, "count": n, "account": acc}
 
 
 @app.post("/api/cancel-queue")
-async def cancel_queue():
-    """★**취소 창구는 이것 하나다** (사용자 결정 2026-08-18).
+async def cancel_queue(account: str | None = None):
+    """★**취소 창구는 이것 하나다** (사용자 결정 2026-08-18). `?account=` 를 주면 **그 차선만**,
+    없으면 전부다 (계정별 취소 — 사용자 결정 2026-09-02, 1안).
 
     지금 NAI 로 나간 한 장은 그대로 두고(원자적 API 라 못 끊는다) **나머지를 전부** 뺀다.
     예전에는 창구가 둘이었는데(`cancel-current`·`clear-queue`) 어느 쪽도 혼자서는
     배치를 못 멈췄다 — v3 는 배치 전체가 잡 하나라, 잡이 시작되면 대기 큐가 비어 있어
     「큐 비우기」가 지울 것이 없었다 (감사 D5).
     """
-    jobs, images, running = Q.cancel_all()
-    Q.total_images = max(Q.completed_images, Q.total_images - images)
+    lanes = [Q.lanes[account]] if account and account in Q.lanes else ([] if account else list(Q.lanes.values()))
+    jobs = images = 0
+    running = False
+    for ln in lanes:
+        j, i, r = ln.cancel_all()
+        # ★걷어낸 대기 장 수만큼 총량을 줄인다 — 차선마다 자기 것만
+        ln.total_images = max(ln.completed_images, ln.total_images - i)
+        jobs += j
+        images += i
+        running = running or r
     await Q.broadcast({"type": "queue_cancelled", "cleared_jobs": jobs,
-                       "cleared_images": images,
+                       "cleared_images": images, "account": account or None,
                        # ★아직 올 것이 몇 장인가 — 화면은 이 수만큼만 대기 칸을 남긴다.
                        #   돌고 있으면 in-flight 한 장, 아니면 하나도 없다
                        "remaining": 1 if running else 0,

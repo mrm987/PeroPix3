@@ -35,7 +35,8 @@ export const countNow = (rounds = 1): number =>
 export function costNow(rounds = 1): Cost {
   const params = useGen.getState().params;
   const img = useImageInput.getState();
-  const sub = useSub.getState().sub;
+  // ★지금 워크스페이스의 **계정** 것이다 — 계정마다 티어·Opus 잔량이 다르다 (`store/sub`)
+  const sub = useSub.getState().current();
   const cap = modelCaps(params.model);
   // ★해상도 칸이 아니라 **나가는 크기**로 센다 (Focused 인페인트는 서버가 1MP 로 키운다)
   const size = img.costSize();

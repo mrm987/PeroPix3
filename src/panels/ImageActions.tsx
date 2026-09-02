@@ -17,7 +17,8 @@ import { usePrompt } from "../store/prompt";
 import type { ShotEnv } from "../store/workspace";
 import { api } from "../lib/backend";
 import { upscaleCost } from "../lib/anlas";
-import { useSub } from "../store/sub";
+import { useCurrentSub } from "../store/sub";
+import { currentAccountId } from "../store/accounts";
 import { useWs, type Rec } from "../store/workspace";
 import type { ImageMeta } from "../store/gallery";
 import { sendToTagger } from "./tools/TaggerTool";
@@ -105,7 +106,7 @@ export function ImageActions({
   const [busy, setBusy] = useState(false);
   /** 시드 강조는 **커서를 올린 동안만** (사용자 지시 2026-08-19) */
   const [seedHot, setSeedHot] = useState(false);
-  const opus = useSub((s) => (s.sub?.tier ?? 0) >= 3);
+  const opus = (useCurrentSub()?.tier ?? 0) >= 3;
   const [seen, setSeen] = useState<ImageMeta | null>(null);
 
   /** ★쿼리를 하나 붙여 받는다 — 같은 주소를 `<img>` 가 no-cors 로 먼저 캐시해 두면
@@ -245,7 +246,8 @@ export function ImageActions({
         const r = await api<{ file: string; record: Rec }>("/api/upscale", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ workspace: upscale.ws, file: f }),
+          // ★그 워크스페이스의 계정으로 — 잔액을 그쪽에서 쓴다 (`store/accounts`)
+          body: JSON.stringify({ workspace: upscale.ws, file: f, account: currentAccountId() }),
         });
         // ★목록을 **다시 읽지 않는다** — 서버가 돌려준 레코드 한 줄만 얹으면 화면이 따라온다
         useWs.getState().addRecord(r.record);

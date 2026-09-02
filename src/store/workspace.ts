@@ -252,9 +252,13 @@ export type Spec = {
    *    경로로 베껴 적은 것이라 spec 이 덮어써지면 손으로 다시 채워야 했다 — 지금은 서버가 파일이
    *    없는 줄을 목록에서 빼고 준다 (`Store.live_records`). 옛 파일의 것은 `migrate` 가 뗀다. */
   selection: { starred?: string[] };
+  /** ★★**이 워크스페이스가 쓰는 NAI 계정** (사용자 결정 2026-09-02). 잔액·요금·큐 차선이 전부 이것을
+   *  따른다 (`store/accounts`). 없거나 지워진 계정이면 **첫 계정**이다 — 옛 워크스페이스는 값이 없다.
+   *  ★큐는 **넣을 때의 계정**을 들고 간다 — 여기를 바꿔도 이미 넣은 것은 안 옮겨진다 (1안). */
+  account?: string;
 };
 
-export type WsInfo = { name: string; id?: string | null; updatedAt?: string | null };
+export type WsInfo ={ name: string; id?: string | null; updatedAt?: string | null };
 
 type S = {
   list: WsInfo[];
@@ -382,6 +386,8 @@ type S = {
   addTab: (name?: string) => void;
   renameTab: (id: string, name: string) => void;
   removeTab: (id: string) => void;
+  /** 이 워크스페이스가 쓸 NAI 계정 (`Spec.account`). ★이미 큐에 넣은 것은 안 따라온다 */
+  setAccount: (id: string) => void;
   /** ★★**줄에 늘어선 것은 끌어서 차례를 바꾼다** (사용자 지시 2026-08-24).
    *  셋 다 `to` 는 칸이 아니라 **틈 번호**다 (`lib/moveTo` 의 규약, `useReorder` 가 그렇게 준다).
    *  ★`moveSceneGroup` 의 `from`·`to` 는 **지금 탭에 보이는 세트**의 번호다 — 화면에 안 보이는
@@ -505,8 +511,11 @@ async function generating(groupIds: Set<string>): Promise<boolean> {
      (`runRenumber` 가 `gen.ts` 를 부르는 방식과 같다). */
   const { useQueue } = await import("./queue");
   const q = useQueue.getState();
-  const cur = q.progress.current_cell?.scene_group_id ?? null;
-  return q.pending.some((x) => !!x.groupId && groupIds.has(x.groupId)) || (!!cur && groupIds.has(cur));
+  // ★차선(계정)마다 「지금 만드는 씬」이 하나씩이다 (2026-09-02) — 전부 본다. 옛 백엔드면 하나뿐이다
+  const cur = q.progress.lanes
+    ? Object.values(q.progress.lanes).map((l) => l.current_cell?.scene_group_id ?? null)
+    : [q.progress.current_cell?.scene_group_id ?? null];
+  return q.pending.some((x) => !!x.groupId && groupIds.has(x.groupId)) || cur.some((c) => !!c && groupIds.has(c));
 }
 
 /** 씬 그룹 하나를 **다른 탭 밑으로** 옮긴 spec — **화면용 임시 상태**다 (`moveGroupToTab`).
@@ -1365,6 +1374,13 @@ export const useWs = create<S>((set, get) => ({
     const spec = get().spec;
     if (!spec?.tabs) return;
     set({ spec: { ...spec, tabs: spec.tabs.map((c) => (c.id === tabId ? { ...c, gen: params } : c)) } });
+    queueSave(get);
+  },
+
+  setAccount(id) {
+    const spec = get().spec;
+    if (!spec || spec.account === id) return;
+    set({ spec: { ...spec, account: id } });
     queueSave(get);
   },
 

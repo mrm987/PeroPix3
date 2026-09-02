@@ -306,6 +306,7 @@ export const ja: Dict = {
 
   gen: {
     needToken: "設定で NAI トークンを入れると生成できます。",
+    accountHint: "このワークスペースが使う NAI アカウント。残高と料金はこのアカウント基準で、キュー投入済みのものは変えても移りません。",
     perSlot: "スロットごと",
     slotsTimes: "{s}スロット × {p} = {t}枚",
     countCost: "{n}枚 · {a} Anlas",
@@ -537,9 +538,6 @@ export const ja: Dict = {
   },
   settings: {
     tokenChecking: "確認中…",
-    tokenRemoved: "トークンを削除しました",
-    tokenDelete: "NAI トークンを削除しますか?",
-    tokenDeleteBody: "入れ直すまで生成できなくなります。",
     bulkWarn: "何時間も続けて大量生成すると NovelAI 側でアカウントが制限されることがあります。",
     editing: "編集",
     weightHl: "強調の色分け",
@@ -597,11 +595,19 @@ export const ja: Dict = {
       fileMulti: { k: "Ctrl / Shift + クリック", v: "複数のファイルを選びます" },
       titleDbl: { k: "タイトルバーをダブルクリック", v: "ウィンドウを縦いっぱいに広げます" },
     },
-    token: "NAI トークン",
-    tokenSet: "保存済み",
     tokenEmpty: "pst-… を貼り付け",
     tokenHint:
       "novelai.net にログインし、Account Settings の Get Persistent API Token で発行します。保存した値は再表示しません。",
+    accounts: "NAI アカウント",
+    accountsHint:
+      "アカウントを複数置くとワークスペースごとに選べ、アカウントごとに別々に生成されます。名前は自動で付き、欄で直せます。保存したトークンは再表示しません。",
+    accountAdd: "追加",
+    accountReplace: "トークン差し替え",
+    accountAdded: "アカウントを追加しました: {name}",
+    accountReplaced: "トークンを差し替えました",
+    accountRemoved: "アカウントを削除しました",
+    accountDelete: "「{name}」を削除しますか?",
+    accountDeleteBody: "このアカウントを使っていたワークスペースは最初のアカウントに戻ります。生成中の画像は最後まで出ます。",
     engineCli: "ローカル CLI",
     engineCliSub: "{n}件 利用可",
     engineApi: "API キー",
@@ -634,7 +640,6 @@ export const ja: Dict = {
     keySet: "設定済み。変更するには新しいキーを入力",
     keyEmpty: "API キー",
     save: "保存",
-    tokenSaved: "トークンを保存しました",
     look: "見た目",
     language: "言語",
     theme: "テーマ",

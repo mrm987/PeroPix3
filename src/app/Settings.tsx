@@ -4,7 +4,7 @@ import { api } from "../lib/backend";
 import { useTheme } from "../store/theme";
 import { playDoneSound } from "../lib/notifySound";
 import { useUi, FONTS, type SettingsTabId } from "../store/ui";
-import { useSub } from "../store/sub";
+import { useAccounts, type Account } from "../store/accounts";
 import { useHealth } from "../store/health";
 import { mb, useUpdate } from "../store/update";
 import { ask } from "../store/ask";
@@ -58,59 +58,9 @@ export function Settings({
   const artistPrefix = useUi((s) => s.artistPrefix);
   const setArtistPrefix = useUi((s) => s.setArtistPrefix);
   // ★토큰 유무·앱 버전·요청 창구는 **백엔드가 정본**이다 (`store/health.ts`)
-  const has = useHealth((s) => !!s.health?.hasToken);
   const version = useHealth((s) => s.health?.version ?? "");
   const support = useHealth((s) => s.health?.support ?? "");
-  const [token, setToken] = useState("");
-  const [busy, setBusy] = useState(false);
-  /** 저장이 되짚어야 할 것을 알려 왔을 때 — ★토스트로 흘리지 않는다. "왜 안 되지"의 답이라
-   *  **칸 옆에 남아 있어야** 한다 (v2 `naiTokenSettingsError`) */
-  const [note, setNote] = useState("");
   const [tab, setTab] = useState<TabId>(initialTab);
-
-  /** 저장과 삭제가 **같은 창구**를 쓴다 — 빈 값이 곧 삭제다 (`backend/secretstore.py:36-41`).
-   *
-   *  ★검사는 서버가 한다 (공백·비ASCII·`pst-` 접두 + NAI 401 확인). 화면에서 한 번 더 재면
-   *    두 곳이 어긋나고, 401 확인은 어차피 화면에서 못 한다. 지금까지는 오타 난 토큰이
-   *    조용히 저장돼 생성할 때가 되어서야 실패했다 (감사 C5). */
-  const putToken = async (value: string) => {
-    if (busy) return;
-    setBusy(true);
-    setNote("");
-    try {
-      const r = await api<{ hasToken: boolean; warning?: string }>("/api/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: value }),
-      });
-      useHealth.getState().setHasToken(r.hasToken);
-      setToken("");
-      if (r.warning) setNote(r.warning);
-      toast(t(value ? "settings.tokenSaved" : "settings.tokenRemoved"));
-      // ★토큰이 생겼으니 **곧바로 잔액을 묻는다** (v2 `index.html:15736, 15828`).
-      //   부팅 때 한 번만 읽던 값이라, 여기서 안 부르면 앱을 다시 켜기 전까지 Anlas 가 빈다
-      if (r.hasToken) void useSub.getState().load();
-      else useSub.getState().set(null);
-    } catch (e) {
-      setNote(String(e).replace(/^Error:\s*/, ""));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const removeToken = async () => {
-    if (
-      !(await ask({
-        title: t("settings.tokenDelete"),
-        body: t("settings.tokenDeleteBody"),
-        ok: t("common.delete"),
-        cancel: t("common.cancel"),
-        danger: true,
-      }))
-    )
-      return;
-    await putToken("");
-  };
 
   return (
     <div
@@ -201,59 +151,7 @@ export function Settings({
           >
             {tab === "general" && (
               <>
-                <Group label={t("settings.token")} help={t("settings.tokenHint")}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
-                    <input
-                      data-token
-                      type="password"
-                      value={token}
-                      placeholder={has ? t("settings.tokenSet") : t("settings.tokenEmpty")}
-                      onChange={(e) => setToken(e.target.value)}
-                      // ★빈 칸에서 Enter 로 지워지지 않게 — 삭제는 삭제 단추뿐이다
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && token.trim()) void putToken(token.trim());
-                      }}
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        background: "var(--panel)",
-                        border: "1px solid var(--line)",
-                        borderRadius: "var(--r-2)",
-                        padding: "4px var(--sp-3)",
-                        fontSize: "var(--text-2xs)",
-                        fontFamily: "var(--font-mono)",
-                      }}
-                    />
-                    <button
-                      data-token-save
-                      onClick={() => void putToken(token.trim())}
-                      disabled={busy || !token.trim()}
-                      style={btn}
-                    >
-                      {t(busy ? "settings.tokenChecking" : "settings.save")}
-                    </button>
-                    {/* ★지우는 창구 — 백엔드는 빈 값이면 지우도록 이미 돼 있었고 여기만 없었다 */}
-                    {has && (
-                      <button
-                        data-token-delete
-                        onClick={() => void removeToken()}
-                        disabled={busy}
-                        style={{ ...btn, color: "var(--err-ink)" }}
-                      >
-                        {t("common.delete")}
-                      </button>
-                    )}
-                  </div>
-                  {note && (
-                    <span data-token-note style={{ fontSize: "var(--text-2xs)", color: "var(--warn)", lineHeight: 1.6 }}>
-                      {note}
-                    </span>
-                  )}
-                  {/* ★NAI 계정이 걸린 경고라 눈에 띄어야 한다 (v2 index.html:10558) */}
-                  <span style={{ fontSize: "var(--text-2xs)", color: "var(--warn)", lineHeight: 1.6 }}>
-                    {t("settings.bulkWarn")}
-                  </span>
-                </Group>
+                <AccountSettings />
 
                 <Group label={t("settings.editing")} help={t("settings.tagSuggestHint")}>
                   <label
@@ -720,5 +618,166 @@ const accentBtn = {
 function Row({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", flexWrap: "wrap" }}>{children}</div>
+  );
+}
+
+/** **NAI 계정 목록** (사용자 결정 2026-09-02) — 여럿을 두고 워크스페이스마다 고른다 (`store/accounts`).
+ *
+ *  ★이름은 자동 번호(「API n」)로 태어나고 **여기서 고친다** — 칸을 고치고 나가면 저장된다.
+ *  ★토큰 값은 되읽지 않는다 (옛 규칙 그대로) — **갈아 끼우기**만 된다. 지우고 다시 넣으면 번호가 바뀌어
+ *    워크스페이스의 선택이 끊기므로, 같은 계정의 새 토큰은 교체로 넣는다.
+ *  ★검사는 서버가 한다 (공백·비ASCII·`pst-` 접두 + NAI 401 확인). 화면에서 한 번 더 재면 두 곳이 어긋난다.
+ *  ★되짚어야 할 것(경고)은 토스트가 아니라 **칸 옆에 남긴다** — "왜 안 되지"의 답이다. */
+function AccountSettings() {
+  const t = useI18n((s) => s.t);
+  const items = useAccounts((s) => s.items);
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  /** 토큰을 갈아 끼우는 중인 계정 — 그 줄 아래에 입력칸이 열린다 */
+  const [replacing, setReplacing] = useState<string | null>(null);
+  const [replaceToken, setReplaceToken] = useState("");
+
+  const run = async (fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    setNote("");
+    try {
+      await fn();
+    } catch (e) {
+      setNote(String(e).replace(/^Error:\s*/, ""));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const add = () =>
+    run(async () => {
+      const r = await useAccounts.getState().add(token.trim());
+      setToken("");
+      if (r.warning) setNote(r.warning);
+      toast(t("settings.accountAdded", { name: r.name }));
+    });
+  const replace = (id: string) =>
+    run(async () => {
+      const r = await useAccounts.getState().replaceToken(id, replaceToken.trim());
+      setReplacing(null);
+      setReplaceToken("");
+      if (r.warning) setNote(r.warning);
+      toast(t("settings.accountReplaced"));
+    });
+  const remove = async (a: Account) => {
+    if (
+      !(await ask({
+        title: t("settings.accountDelete", { name: a.name }),
+        body: t("settings.accountDeleteBody"),
+        ok: t("common.delete"),
+        cancel: t("common.cancel"),
+        danger: true,
+      }))
+    )
+      return;
+    await run(async () => {
+      await useAccounts.getState().remove(a.id);
+      toast(t("settings.accountRemoved"));
+    });
+  };
+  const input = {
+    flex: 1,
+    minWidth: 0,
+    background: "var(--panel)",
+    border: "1px solid var(--line)",
+    borderRadius: "var(--r-2)",
+    padding: "4px var(--sp-3)",
+    fontSize: "var(--text-2xs)",
+  } as const;
+  const row = { display: "flex", alignItems: "center", gap: "var(--sp-2)" } as const;
+
+  return (
+    <Group label={t("settings.accounts")} help={t("settings.accountsHint")}>
+      {items.map((a) => (
+        <div key={a.id} data-account={a.id} style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+          <div style={row}>
+            {/* ★이름은 그 자리에서 고친다 — 나가면 저장. 비우면 원래 이름으로 돌아간다 */}
+            <input
+              key={a.name}
+              data-account-name
+              defaultValue={a.name}
+              disabled={!!a.env}
+              onBlur={(e) => {
+                const v = e.currentTarget.value.trim();
+                if (v && v !== a.name) void useAccounts.getState().rename(a.id, v);
+                else e.currentTarget.value = a.name;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              style={input}
+            />
+            {!a.env && (
+              <button
+                data-account-replace
+                onClick={() => {
+                  setReplacing(replacing === a.id ? null : a.id);
+                  setReplaceToken("");
+                }}
+                disabled={busy}
+                style={btn}
+              >
+                {t("settings.accountReplace")}
+              </button>
+            )}
+            {!a.env && (
+              <button data-account-delete onClick={() => void remove(a)} disabled={busy} style={{ ...btn, color: "var(--err-ink)" }}>
+                {t("common.delete")}
+              </button>
+            )}
+          </div>
+          {replacing === a.id && (
+            <div style={row}>
+              <input
+                data-account-token
+                type="password"
+                value={replaceToken}
+                placeholder={t("settings.tokenEmpty")}
+                onChange={(e) => setReplaceToken(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && replaceToken.trim()) void replace(a.id);
+                }}
+                style={{ ...input, fontFamily: "var(--font-mono)" }}
+              />
+              <button onClick={() => void replace(a.id)} disabled={busy || !replaceToken.trim()} style={btn}>
+                {t(busy ? "settings.tokenChecking" : "settings.save")}
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+      {/* 새 계정 — 토큰만 넣으면 이름은 자동 번호다 */}
+      <div style={row}>
+        <input
+          data-token
+          type="password"
+          value={token}
+          placeholder={t("settings.tokenEmpty")}
+          onChange={(e) => setToken(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && token.trim()) void add();
+          }}
+          style={{ ...input, fontFamily: "var(--font-mono)" }}
+        />
+        <button data-token-save onClick={() => void add()} disabled={busy || !token.trim()} style={btn}>
+          {t(busy ? "settings.tokenChecking" : "settings.accountAdd")}
+        </button>
+      </div>
+      {note && (
+        <span data-token-note style={{ fontSize: "var(--text-2xs)", color: "var(--warn)", lineHeight: 1.6 }}>
+          {note}
+        </span>
+      )}
+      {/* ★NAI 계정이 걸린 경고라 눈에 띄어야 한다 (v2 index.html:10558) */}
+      <span style={{ fontSize: "var(--text-2xs)", color: "var(--warn)", lineHeight: 1.6 }}>
+        {t("settings.bulkWarn")}
+      </span>
+    </Group>
   );
 }

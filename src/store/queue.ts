@@ -31,10 +31,23 @@ import { t } from "../i18n";
  *      실제로 렌더한 집합으로 판정하므로, 브로드캐스트가 앞서도 복원분을 안 건너뛴다.
  */
 
+/** 차선(계정) 하나의 진행률 — 서버 `Lane.progress()` 그대로 */
+export type LaneProgress = {
+  completed: number;
+  total: number;
+  queue_length: number;
+  current_cell?: { scene_group_id: string | null; cell_id: string | null } | null;
+  /** 계정 이름 — 줄에 적는다 */
+  name?: string;
+};
+
 export type QueueProgress = {
   completed: number;
   total: number;
   queue_length: number;
+  /** ★★**계정별 차선** (사용자 결정 2026-09-02). 계정이 여럿이면 나란히 돈다 — 위 세 값은 그 합계다.
+   *  줄은 차선마다 하나씩 그린다 (`GenerateFooter`·`App` 의 `QueueStatus`). 옛 백엔드는 안 준다. */
+  lanes?: Record<string, LaneProgress>;
   /** ★★**서버가 지금 만들고 있는 씬** (2026-08-25). 화면의 「생성 중」 표시가 이것을 본다 —
    *  예전에는 화면이 **자기 대기 목록의 맨 앞**을 찍었는데, 배치가 겹치면 그 순서가 실제
    *  진행과 어긋나 **엉뚱한 칸에 「생성 중」이 뜨고 그림은 「대기 중」 칸에 나타났다**
@@ -55,7 +68,13 @@ export type QueuePhase = "idle" | "running" | "done" | "failed" | "partial";
  *  `queued` 카드를 띄운다 (`batch.ts start`) — 눌렀는지 알 수 있고 어디에 생길지도 보인다.
  *  우리 레코드는 **완료된 파일**뿐이라 이 목록이 그 자리를 대신한다.
  *  그림이 도착하면 같은 (scene_group_id, cell_id) 의 대기 하나를 지운다. */
-export type Pending = { id: string; groupId: string | null; cellId: string | null };
+export type Pending = {
+  id: string;
+  groupId: string | null;
+  cellId: string | null;
+  /** 어느 계정(차선)으로 넣었나 — 계정별 취소·마무리가 **자기 것만** 걷어내는 열쇠 */
+  account: string;
+};
 
 type S = {
   connected: boolean;
@@ -80,8 +99,9 @@ type S = {
   enqueue: (base: Record<string, unknown>, items?: Record<string, unknown>[], count?: number) => Promise<void>;
   /** 이 탭의 대기 목록 (슬롯 순서대로). 맨 앞이 **지금 만드는 중**이다 */
   pendingOf: (groupId: string) => Pending[];
-  /** ★취소는 **하나**다 — 지금 나간 장만 남기고 나머지를 전부 뺀다 (사용자 결정 2026-08-18) */
-  cancelAll: () => Promise<void>;
+  /** ★취소는 **하나**다 — 지금 나간 장만 남기고 나머지를 전부 뺀다 (사용자 결정 2026-08-18).
+   *  `account` 를 주면 **그 계정의 차선만** (계정별 취소, 사용자 결정 2026-09-02) */
+  cancelAll: (account?: string) => Promise<void>;
 };
 
 const KEY = "peropix.ws_client_id";
@@ -92,9 +112,13 @@ let seqId = 1;
 /** 직전에 돌고 있었나 — 멈추는 **그 순간**만 알린다 */
 let wasBusy = false;
 let retry = 0;
-/** 이번 배치의 성공·실패 장 수 (v2 `batchImageCount`·`batchErrorCount`). 끝날 때 문구를 가른다 */
-let batchOk = 0;
-let batchErr = 0;
+/** 이번 배치의 성공·실패 장 수 (v2 `batchImageCount`·`batchErrorCount`). 끝날 때 문구를 가른다.
+ *  ★계정(차선)마다 따로 센다 — 한 계정의 실패가 다른 계정의 「완료」를 「일부 실패」로 만들면 안 된다 */
+const batch: Record<string, { ok: number; err: number }> = {};
+const bump = (account: string, key: "ok" | "err") => {
+  const b = (batch[account] ??= { ok: 0, err: 0 });
+  b[key]++;
+};
 /** 끝난 문구를 잠시 보여 준 뒤 `idle` 로 (v2 `resetTimer`, 2초) */
 let phaseTimer: ReturnType<typeof setTimeout> | null = null;
 /** 마지막 수신 시각 — 하트비트의 근거 (`performance.now()` 라 시계 변경과 무관하다) */
@@ -148,9 +172,14 @@ export function runningPendingId(groupId: string | null | undefined): string | n
   const { progress, pending } = useQueue.getState();
   if (!(progress.total > progress.completed)) return null;
   const mine = pending.filter((p) => p.groupId === groupId);
-  const cur = progress.current_cell;
-  const cell = cur && cur.scene_group_id === groupId ? cur.cell_id : null;
-  return (cell ? mine.find((p) => p.cellId === cell)?.id : mine[0]?.id) ?? null;
+  // ★★차선(계정)마다 「지금 만드는 씬」이 하나씩이다 (2026-09-02). **이 씬 그룹을 만드는 차선**을 찾는다 —
+  //   다른 계정이 다른 워크스페이스를 만드는 중이라고 이 그룹의 맨 앞 칸에 「생성 중」을 찍으면 안 된다.
+  //   차선 정보가 없는 옛 백엔드일 때만 맨 앞으로 물러선다.
+  const lanes = progress.lanes ? Object.values(progress.lanes) : null;
+  const cells = lanes ? lanes.map((l) => l.current_cell) : [progress.current_cell];
+  const cell = cells.find((c) => c && c.scene_group_id === groupId)?.cell_id ?? null;
+  if (cell) return mine.find((p) => p.cellId === cell)?.id ?? null;
+  return lanes ? null : (mine[0]?.id ?? null);
 }
 
 export const useQueue = create<S>((set, get) => ({
@@ -236,6 +265,8 @@ export const useQueue = create<S>((set, get) => ({
           id: `p${seqId++}`,
           groupId,
           cellId: ((it.cell_id as string) ?? (base.cell_id as string)) ?? null,
+          // ★넣는 쪽이 해석한 계정이다 (`store/gen`·`store/genRemote`) — 서버의 차선과 같은 값
+          account: String(base.account ?? ""),
         });
       }
     }
@@ -255,7 +286,7 @@ export const useQueue = create<S>((set, get) => ({
       const ids = new Set(add.map((x) => x.id));
       set({ pending: get().pending.filter((x) => !ids.has(x.id)) });
       // ★재려고 적어 둔 기준선도 버린다. 안 버리면 **다음 배치**가 이 기준선으로 재진다
-      useAnlasMeter.getState().disarm();
+      useAnlasMeter.getState().disarm(String(base.account ?? "") || undefined);
       throw e;
     }
   },
@@ -265,8 +296,8 @@ export const useQueue = create<S>((set, get) => ({
    *  `pending` 을 통째로 비웠는데, 서버는 이미 나간 한 장을 끝까지 받아 낸다 —
    *  **카드는 사라지는데 그림은 계속 나오는** 상태가 됐다.
    *  실제로 멈춘 것이 몇 장인지는 서버만 알고, `queue_cancelled` 가 그것을 실어 온다. */
-  async cancelAll() {
-    await api("/api/cancel-queue", { method: "POST" });
+  async cancelAll(account) {
+    await api(`/api/cancel-queue${account ? `?account=${encodeURIComponent(account)}` : ""}`, { method: "POST" });
   },
 }));
 
@@ -808,7 +839,7 @@ function handle(m: Record<string, any>, set: Setter, get: () => S) {
       //   끝날 때까지 남는다 (`settleBatch` 가 마지막에야 비운다)
       consumePending(m, set, get);
       takeProgress(m.progress, set);
-      batchOk++;
+      bump(String(m.account ?? ""), "ok");
       break;
     }
     /* ★★**그리는 중인 그림** (사용자 지시 2026-08-26) — 서버가 NAI 스트림에서 받은 프레임을
@@ -843,7 +874,7 @@ function handle(m: Record<string, any>, set: Setter, get: () => S) {
       break;
     case "image":
       render(m, set, get);
-      batchOk++;
+      bump(String(m.account ?? ""), "ok");
       takeProgress(m.progress, set);
       break;
     case "queued":
@@ -852,34 +883,44 @@ function handle(m: Record<string, any>, set: Setter, get: () => S) {
     case "job_progress":
       takeProgress(m.progress, set);
       break;
-    case "job_done":
+    case "job_done": {
       takeProgress(m.progress, set);
-      // ★생성이 끝났으면 **잔액을 다시 묻는다** (v2 `index.html:16429-16432`).
+      const acc = String(m.account ?? "") || null;
+      // ★생성이 끝났으면 **그 계정의 잔액을 다시 묻는다** (v2 `index.html:16429-16432`).
       //   안 물으면 화면의 Anlas 는 앱을 켠 순간 값에 영영 멈춰 있다
-      void useSub.getState().load();
-      // 대기 잡이 남아 있으면 아직 배치가 안 끝났다 (v2 도 `queue_length === 0` 으로 갈랐다)
-      if ((m.progress?.queue_length ?? 0) === 0) settleBatch(false, set, get);
+      void useSub.getState().load(acc ?? undefined);
+      // 대기 잡이 남아 있으면 아직 배치가 안 끝났다 (v2 도 `queue_length === 0` 으로 갈랐다).
+      // ★★**그 차선의** 대기다 — 다른 계정이 아직 돌고 있어도 이쪽 배치는 여기서 끝난다
+      if (laneLeft(m.progress, acc) === 0) settleBatch(false, acc, set, get);
       break;
-    case "job_cancelled":
+    }
+    case "job_cancelled": {
       takeProgress(m.progress, set);
+      const acc = String(m.account ?? "") || null;
       // ★취소는 **끝난 문구를 안 남긴다** — v2 도 상태를 「준비」로 되돌리기만 했다
-      if ((m.progress?.queue_length ?? 0) === 0) settleBatch(true, set, get);
+      if (laneLeft(m.progress, acc) === 0) settleBatch(true, acc, set, get);
       break;
+    }
     // ★취소 — **실제로 멈춘 것만** 걷어낸다 (감사 D5).
     //   `remaining` 은 아직 올 장 수다: 돌고 있었으면 지금 NAI 로 나간 한 장, 아니면 0.
     //   대기 칸은 서버가 만드는 순서 그대로 쌓이므로(`enqueue`), 남길 것은 **맨 앞** 것이다.
     case "queue_cancelled": {
       takeProgress(m.progress, set);
       const keep = Math.max(0, Number(m.remaining ?? 0));
+      const acc = String(m.account ?? "") || null;
       const pend = get().pending;
-      if (pend.length > keep) set({ pending: pend.slice(0, keep) });
+      // ★계정별 취소면 **그 차선의 대기 칸**만 걷어낸다 — 다른 계정의 것은 그대로 돈다
+      const mine = acc ? pend.filter((p) => p.account === acc) : pend;
+      if (mine.length > keep) {
+        const drop = new Set(mine.slice(keep).map((p) => p.id));
+        set({ pending: pend.filter((p) => !drop.has(p.id)) });
+      }
       // 남은 장이 없으면 여기서 배치가 끝난 것이다 — 돌고 있으면 그 장이 온 뒤
       // `job_cancelled` 가 마무리한다 (거기서도 같은 `settleBatch` 를 부른다)
-      if (keep === 0) settleBatch(true, set, get);
+      if (keep === 0) settleBatch(true, acc, set, get);
       else {
         // 배치 회계만 되돌린다 (v2 `index.html:16542-16544`)
-        batchOk = 0;
-        batchErr = 0;
+        for (const a of acc ? [acc] : Object.keys(batch)) delete batch[a];
       }
       break;
     }
@@ -910,7 +951,7 @@ function handle(m: Record<string, any>, set: Setter, get: () => S) {
       //   화면이 하나도 없어서, 20장이 전부 실패해도 아무 일도 안 일어났다 (감사 2026-08-16).
       set({ error: String(m.error ?? "") });
       toast(queueErrorText(String(m.error ?? "")), "warn");
-      batchErr++;
+      bump(String(m.account ?? ""), "err");
       takeProgress(m.progress, set);
       break;
   }
@@ -931,28 +972,47 @@ function takeProgress(p: QueueProgress | undefined, set: Setter) {
  *    돌아서, 취소·실패로 큐가 끝나면 **대기 카드가 유령으로 남고** 완료 알림도 안 울렸다
  *    (감사 A7). v2 는 `job_done`·`job_cancelled` 에서 각각 정리했다
  *    (`index.html:16460, 16483, 16504-16511`). */
-function settleBatch(cancelled: boolean, set: Setter, get: () => S) {
-  // ★큐가 다 비면 남은 대기는 **오지 않는다** (취소·실패). 자리를 계속 잡고 있으면 유령이 된다
-  if (get().pending.length) set({ pending: [] });
+/** 그 차선에 **아직 안 시작한 잡**이 몇이나 남았나. 차선 정보가 없으면(옛 백엔드) 전체 대기다 */
+function laneLeft(p: QueueProgress | undefined, account: string | null): number {
+  if (!p) return 0;
+  if (account && p.lanes?.[account]) return p.lanes[account].queue_length ?? 0;
+  return p.queue_length ?? 0;
+}
 
+/** `account` 가 있으면 **그 차선의** 배치가 끝난 것이다 — 대기 칸·회계·잔액 재기를 그쪽 것만 마무리한다.
+ *  없으면(옛 백엔드) 전부다. */
+function settleBatch(cancelled: boolean, account: string | null, set: Setter, get: () => S) {
+  // ★큐가 다 비면 남은 대기는 **오지 않는다** (취소·실패). 자리를 계속 잡고 있으면 유령이 된다
+  const pend = get().pending;
+  const rest = account ? pend.filter((p) => p.account !== account) : [];
+  if (rest.length !== pend.length) set({ pending: rest });
+
+  let okN = 0;
+  let errN = 0;
+  for (const a of account ? [account] : Object.keys(batch)) {
+    const b = batch[a];
+    if (!b) continue;
+    okN += b.ok;
+    errN += b.err;
+    delete batch[a];
+  }
   // 취소는 성패를 따지지 않는다 — 그냥 「준비」로 돌아간다
   const phase: QueuePhase = cancelled
     ? "idle"
-    : batchErr > 0 && batchOk === 0
+    : errN > 0 && okN === 0
       ? "failed"
-      : batchErr > 0
+      : errN > 0
         ? "partial"
         : "done";
-  const done = batchOk;
-  batchOk = 0;
-  batchErr = 0;
+  const done = okN;
   set({ phase });
 
   // ★**실제로 청구된 Anlas 를 잰다** (`store/anlasMeter`). 잰다는 것은 잔액 차이다.
   //   ★온전히 끝난 배치에서만 잰다. 취소·실패·일부 실패는 몇 장이 실제로 나갔는지
   //     알 수 없어 숫자가 틀리게 나온다. 그때는 아무 말도 하지 않는다.
-  if (phase === "done") void useAnlasMeter.getState().settle();
-  else useAnlasMeter.getState().disarm();
+  //   ★계정마다 따로 잰다 — 끝난 차선의 계정으로 (`store/anlasMeter` 머리 주석)
+  if (phase === "done") void useAnlasMeter.getState().settle(account ?? undefined);
+  else useAnlasMeter.getState().disarm(account ?? undefined);
 
   if (!cancelled) announceDone(done);
 

@@ -307,6 +307,7 @@ export const en = {
 
   gen: {
     needToken: "Enter your NAI token in Settings to generate.",
+    accountHint: "The NAI account this workspace uses. Balance and cost follow it; items already queued keep their account.",
     perSlot: "Per scene",
     slotsTimes: "{s} slots × {p} = {t}",
     countCost: "{n} × {a} Anlas",
@@ -539,9 +540,6 @@ export const en = {
   },
   settings: {
     tokenChecking: "Checking…",
-    tokenRemoved: "Token removed",
-    tokenDelete: "Remove the NAI token?",
-    tokenDeleteBody: "Generation stops working until you enter a token again.",
     bulkWarn: "Generating in bulk for hours on end can get your NovelAI account limited.",
     editing: "Editing",
     weightHl: "Weight highlight",
@@ -599,11 +597,19 @@ export const en = {
       fileMulti: { k: "Ctrl / Shift + click", v: "Picks several files" },
       titleDbl: { k: "Double-click the title bar", v: "Stretches the window to full height" },
     },
-    token: "NAI token",
-    tokenSet: "Saved. Paste a new one to replace it",
     tokenEmpty: "Paste pst-…",
     tokenHint:
       "Sign in at novelai.net, then open Account Settings and use Get Persistent API Token. The saved value is never shown again.",
+    accounts: "NAI accounts",
+    accountsHint:
+      "With several accounts, each workspace picks one and each account generates on its own. Names are numbered automatically and can be edited in place. Saved tokens are never shown again.",
+    accountAdd: "Add",
+    accountReplace: "Replace token",
+    accountAdded: "Account added: {name}",
+    accountReplaced: "Token replaced",
+    accountRemoved: "Account removed",
+    accountDelete: "Remove the account \"{name}\"?",
+    accountDeleteBody: "Workspaces using it fall back to the first account. Images already generating still finish.",
     engineCli: "Local CLI",
     engineCliSub: "{n} available",
     engineApi: "API key",
@@ -636,7 +642,6 @@ export const en = {
     keySet: "Set. Enter a new key to replace it",
     keyEmpty: "API key",
     save: "Save",
-    tokenSaved: "Token saved",
     look: "Look",
     language: "Language",
     theme: "Theme",

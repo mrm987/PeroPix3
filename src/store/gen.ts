@@ -4,6 +4,7 @@ import { backendUrl } from "../lib/backend";
 import { usePrompt } from "./prompt";
 import { allCells, allScenes, onBeforeWsSwitch, useWs } from "./workspace";
 import { useQueue } from "./queue";
+import { currentAccountId } from "./accounts";
 import { useImageInput } from "./imageInput";
 import { useUi } from "./ui";
 import { sizeForBase } from "../lib/baseSize";
@@ -260,6 +261,8 @@ export const useGen = create<S>((set, get) => ({
         ...get().params,
         ...useImageInput.getState().payload(),
         workspace: ws.current,
+        // ★★**이 워크스페이스의 계정**으로 — 큐는 이 값으로 차선을 가른다 (`store/accounts`)
+        account: currentAccountId(),
         tab: ws.activeTabOf()?.name ?? null,
         scene_group: tab.name,
         scene_group_id: tab.id,

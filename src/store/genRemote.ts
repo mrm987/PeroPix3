@@ -5,6 +5,7 @@ import { wildcardPools } from "./wildcards";
 import { allScenes, promptOf, type SceneGroup, type Spec } from "./workspace";
 import { useQueue } from "./queue";
 import { useGen } from "./gen";
+import { resolveAccount, useAccounts } from "./accounts";
 
 /** **다른 워크스페이스**로 생성을 넣는다 (사용자 지시 2026-08-08: "워크스페이스2에 큐 10개").
  *
@@ -87,6 +88,8 @@ export async function queueToWorkspace(
           prompt: resolveWildcards(cellPrompt, wildcardPools()),
           negative_prompt: resolveWildcards(uc, wildcardPools()),
           workspace,
+          // ★**그쪽 워크스페이스의 계정**으로 — 화면의 계정이 아니다 (`store/accounts`)
+          account: resolveAccount(spec.account, useAccounts.getState().items),
           characters: chars,
           scene_group: tab.name,
           scene_group_id: tab.id,

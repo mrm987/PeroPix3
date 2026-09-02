@@ -11,7 +11,7 @@ import { useUi, applyFont, applyTextScale } from "./store/ui";
 import { useTheme } from "./store/theme";
 import { useDeckPeek } from "./cards/deckPeek";
 import { useGen } from "./store/gen";
-import { useQueue } from "./store/queue";
+import { useQueue, type LaneProgress } from "./store/queue";
 import { scheduleSave, useWs } from "./store/workspace";
 import { setPromptSaver } from "./store/prompt";
 import { WorkspaceGate } from "./app/WorkspaceGate";
@@ -39,6 +39,7 @@ import { DeckPanel } from "./cards/DeckPanel";
 import { DragLayer } from "./cards/DragLayer";
 import { SaveDialog, type SaveAsk } from "./cards/SaveDialog";
 import { useSub } from "./store/sub";
+import { useAccounts } from "./store/accounts";
 import { BlockDrawer } from "./blocks/BlockDrawer";
 import { TagDrawer } from "./blocks/TagDrawer";
 import { WildcardModal } from "./panels/WildcardModal";
@@ -165,7 +166,8 @@ export function App() {
              구독 정보는 NAI 공홈에 물어보는 것이라 인터넷 왕복이 통째로 부팅 사슬에 얹혔다.
              화면이 뜨는 데 필요한 값이 아니다 — 도착하면 그때 배지가 채워진다.
              ★실패는 삼킨다: 토큰이 틀렸다고 앱이 안 뜨면 고칠 자리로 갈 수가 없다. */
-          if (h.hasToken) void useSub.getState().load().catch(() => {});
+          // ★계정 목록을 먼저 받고 **계정마다** 잔액을 묻는다 (`store/accounts`·`store/sub`)
+          void useAccounts.getState().load().then(() => useSub.getState().loadAll()).catch(() => {});
           // 프롬프트 편집이 워크스페이스 저장을 예약하도록 연결 (순환 참조 회피)
           // ★**워크스페이스 스토어의 타이머를 쓴다.** 여기서 setTimeout 을 따로 만들면
           //   디바운스가 두 개가 되고, 탭을 바꿀 때 흘려보내는 쪽이 그 하나를 못 본다 —
@@ -519,28 +521,36 @@ function QueueStatus() {
   const { progress, cancelAll } = useQueue();
   const running = progress.total > progress.completed;
   if (!running) return null;
+  // ★★계정이 여럿 돌면 **차선마다** 숫자와 취소 (사용자 결정 2026-09-02, 1안). 하나면 이름 없이 옛 모양이다
+  const lanes = Object.entries(progress.lanes ?? {}).filter(([, l]) => l.total > l.completed || l.queue_length > 0);
+  const rows: [string, LaneProgress][] = lanes.length > 1 ? lanes : [["", progress]];
   return (
     <span
       data-queue-status
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: "var(--sp-2)",
+        gap: "var(--sp-3)",
         padding: "0 var(--sp-4)",
         fontSize: "var(--text-2xs)",
         color: "var(--ink-dim)",
       }}
     >
-      <b style={{ fontFamily: "var(--font-mono)", color: "var(--ink-soft)" }}>
-        {progress.completed}/{progress.total}
-      </b>
-      {progress.queue_length > 0 && (
-        <span data-tip={t("queue.waiting", { n: progress.queue_length })}>+{progress.queue_length}</span>
-      )}
-      {/* ★취소는 **버튼 하나**다 (사용자 결정 2026-08-18) — 생성 푸터와 같은 창구다 */}
-      <button onClick={() => void cancelAll()} style={navBtn} data-tip={t("queue.cancelHint")}>
-        {t("queue.cancel")}
-      </button>
+      {rows.map(([id, p]) => (
+        <span key={id} data-queue-lane={id || undefined} style={{ display: "inline-flex", alignItems: "center", gap: "var(--sp-2)" }}>
+          {id && <span>{p.name || id}</span>}
+          <b style={{ fontFamily: "var(--font-mono)", color: "var(--ink-soft)" }}>
+            {p.completed}/{p.total}
+          </b>
+          {p.queue_length > 0 && (
+            <span data-tip={t("queue.waiting", { n: p.queue_length })}>+{p.queue_length}</span>
+          )}
+          {/* ★취소는 **버튼 하나**다 (사용자 결정 2026-08-18) — 생성 푸터와 같은 창구다. 차선 줄이면 그 차선만 */}
+          <button onClick={() => void cancelAll(id || undefined)} style={navBtn} data-tip={t("queue.cancelHint")}>
+            {t("queue.cancel")}
+          </button>
+        </span>
+      ))}
     </span>
   );
 }
