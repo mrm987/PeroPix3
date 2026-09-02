@@ -24,6 +24,18 @@ export type TrashEntry = { file: string; at: string };
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const base = await backendUrl();
   const res = await fetch(base + path, init);
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    /* ★★**서버가 말한 까닭을 싣는다** (사용자 실측 2026-09-02: 토큰을 넣었더니 「400 Bad Request」만 떴다).
+       백엔드는 거절할 때 `detail` 에 무엇이 틀렸는지 적어 보내는데(공백·`pst-` 아님·NAI 401 …),
+       상태 줄만 던지면 그 답이 화면에 닿지 않는다. 상태는 앞에 남긴다 — 409 처럼 번호로 가르는 곳이 있다. */
+    let why = "";
+    try {
+      const d = (await res.json()) as { detail?: unknown };
+      if (typeof d.detail === "string") why = d.detail;
+    } catch {
+      /* 본문이 JSON 이 아니면 상태 줄만 */
+    }
+    throw new Error(`${res.status} ${res.statusText}${why ? `: ${why}` : ""}`);
+  }
   return (await res.json()) as T;
 }
