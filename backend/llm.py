@@ -108,6 +108,16 @@ PROVIDERS: dict[str, dict] = {
 }
 DEFAULT_PROVIDER = "openrouter"
 
+# ★★로컬 공급자는 **아직 닫아 둔다** (사용자 지시 2026-09-03: "로컬 공급자는 아직 올리면 안 됨").
+#   코드·판정·설정 화면의 주소 칸은 그대로 두고 **목록에서만 뺀다** — 열 때는 이 값을 True 로.
+#   닫힌 동안 설정에 `local` 이 남아 있어도 기본 공급자로 돈다 (`provider_of`).
+LOCAL_READY = False
+
+
+def exposed(pid: str) -> bool:
+    """화면에 내놓고 고를 수 있는 공급자인가."""
+    return pid in PROVIDERS and (pid != "local" or LOCAL_READY)
+
 
 def local_base(llm: dict) -> str:
     """로컬 서버 주소 — 설정이 비면 기본값. 끝의 `/` 는 뗀다 (뒤에 경로를 붙인다)."""
@@ -159,7 +169,7 @@ EFFORT_ORDER = ["max", "xhigh", "high", "medium", "low", "minimal", "none"]
 
 def provider_of(llm: dict) -> str:
     p = llm.get("provider") or DEFAULT_PROVIDER
-    return p if p in PROVIDERS else DEFAULT_PROVIDER
+    return p if exposed(p) else DEFAULT_PROVIDER
 
 
 def config_view(cfg: dict, has_key=None) -> dict:
@@ -189,7 +199,7 @@ def config_view(cfg: dict, has_key=None) -> dict:
         "providers": [
             {"id": pid, "label": p["label"], "hint": p["hint"], "hasKey": has(pid),
              "nokey": bool(p.get("nokey"))}
-            for pid, p in PROVIDERS.items()
+            for pid, p in PROVIDERS.items() if exposed(pid)
         ],
     }
 

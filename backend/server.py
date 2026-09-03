@@ -1129,7 +1129,8 @@ async def set_llm_config(body: LlmConfigBody):
     cur = dict(CONFIG.get("llm") or {})
     cur.pop("key", None)  # ★설정 파일에는 키가 **없다** - 비밀 파일로 간다
     pid = body.provider or llm_mod.provider_of(cur)
-    if pid not in llm_mod.PROVIDERS:
+    # ★닫아 둔 공급자(`local`, `llm.LOCAL_READY`)도 여기서 막힌다
+    if not llm_mod.exposed(pid):
         raise HTTPException(400, f"모르는 공급자: {pid}")
     cur["provider"] = pid
     models = dict(cur.get("models") or {})
