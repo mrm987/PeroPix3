@@ -661,6 +661,8 @@ export const ja: Dict = {
     mcpNote: "ツールが動くにはアプリが起動している必要があります。鍵は一度作れば使い続けます。",
     agentApproveHint: "取り消せないもの: カード・シーンの削除と、Anlas を消費する生成。Opus 残量内の生成は自動で通ります。",
     streamPreview: "描画中の画像を見る",
+    focusNewPending: "生成したら新しい待機セルへ移動",
+    focusNewPendingHint: "生成を押すと、直前に入れた待機セル（最新のもの）を選びます。画像が届くとその一枚に引き継がれます。",
     streamPreviewHint: "NAI が描いている途中の画像を待機セルに表示します（結果は変わりません）。",
     notifyDone: "キュー完了を知らせる",
     notifyHint: "キューが終わるとシステム通知を出します。",

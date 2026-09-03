@@ -663,6 +663,8 @@ export const en = {
     mcpNote: "The app must be running for the tools to work. The key is created once and reused.",
     agentApproveHint: "Cannot be undone: deleting cards and scenes, and generation that spends Anlas. Generation within the Opus allowance passes automatically.",
     streamPreview: "Show the image as it draws",
+    focusNewPending: "Jump to the new waiting cell on Generate",
+    focusNewPendingHint: "Selects the waiting cell you just queued (the newest one). When the image arrives, the selection follows it.",
     streamPreviewHint: "Shows NAI's in-progress frames in the waiting cell (the result is unchanged).",
     notifyDone: "Tell me when the queue finishes",
     notifyHint: "Shows a system notification when the queue finishes.",

@@ -118,6 +118,10 @@ type Persisted = {
    *  ★**결과는 달라지지 않는다** — 보는 방식만 달라진다. 그래서 생성 옵션(`gen.params`)이
    *    아니라 화면 설정에 둔다: 탭마다 갈릴 값이 아니고, 그림에도 안 남는다. */
   streamPreview: boolean;
+  /** ★생성을 누르면 **방금 넣은 대기 칸(가장 최근 것)** 을 고른다 (사용자 지시 2026-09-03).
+   *  기본은 끔 — 켜기 전의 동작(고른 자리 그대로)이 기본이다. `streamPreview` 와 같은
+   *  성격(결과는 그대로, 보는 방식만)이라 같은 묶음에 둔다. */
+  focusNewPending: boolean;
   convertOpenFolder: boolean;
   /** 씬 줄의 PIP — 칸에 커서를 올리면 그 장이 떠 있는 창에 크게 뜬다 (v2 `pipModeEnabled`) */
   /** ★인핸스 창을 **마지막에 쓴 강도로** 연다 (v2 `enhanceLast`, index.html:24045).
@@ -204,6 +208,7 @@ const DEFAULTS: Persisted = {
   weightHl: true,
   fmView: "grid",
   streamPreview: true,
+  focusNewPending: false,
   convertOpenFolder: true,
   // v2 `enhanceLast` 의 초기값 그대로 (magnitude 3 = strength 0.5 · noise 0)
   enhanceLast: { mag: 3, adv: false, strength: 0.5, noise: 0 },
@@ -274,6 +279,7 @@ type S = Persisted & {
   /** 일괄 변환의 마지막 설정을 얹는다 (한 칸씩 바뀐다) */
   setConvertLast: (v: Partial<Persisted["convertLast"]>) => void;
   setStreamPreview: (v: boolean) => void;
+  setFocusNewPending: (v: boolean) => void;
   /** 그 방향에서 마지막에 고른 크기를 적어 둔다 */
   setSizeLast: (dir: "landscape" | "portrait" | "square", wh: [number, number]) => void;
   setLaneSide: (v: "bottom" | "right") => void;
@@ -427,6 +433,10 @@ export const useUi = create<S>((set, get) => ({
     set({ streamPreview: v });
     get().commitLayout();
   },
+  setFocusNewPending: (v) => {
+    set({ focusNewPending: v });
+    get().commitLayout();
+  },
   setConvertLast: (v) => {
     set({ convertLast: { ...get().convertLast, ...v } });
     get().commitLayout();
@@ -495,7 +505,7 @@ export const useUi = create<S>((set, get) => ({
     const { leftWidth, rightWidth, leftCollapsed, rightCollapsed, cols, laneSize, laneHeadW,
       laneHeight, font, textScale, importPick, aiWidth, aiCollapsed,
       notifyDone, notifySound, notifyVolume, perSlot, curated, agentAuto, agentAskHard,
-      tagSuggest, artistPrefix, weightHl, fmView, streamPreview, convertOpenFolder, enhanceLast, convertLast, sizeLast,
+      tagSuggest, artistPrefix, weightHl, fmView, streamPreview, focusNewPending, convertOpenFolder, enhanceLast, convertLast, sizeLast,
       laneSide, laneWidth, laneHeadH, view } = get();
     try {
       localStorage.setItem(
@@ -526,6 +536,7 @@ export const useUi = create<S>((set, get) => ({
           weightHl,
           fmView,
           streamPreview,
+          focusNewPending,
           convertOpenFolder,
           enhanceLast,
           convertLast,

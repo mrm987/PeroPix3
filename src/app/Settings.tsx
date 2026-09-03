@@ -45,6 +45,7 @@ export function Settings({
   const setTextScale = useUi((s) => s.setTextScale);
   /** 그리는 중인 그림 보기 — ★결과를 바꾸지 않는 **보는 방식**이라 여기 산다 */
   const stream = useUi((s) => s.streamPreview);
+  const focusNew = useUi((s) => s.focusNewPending);
   const notify = useUi((s) => s.notifyDone);
   const sound = useUi((s) => s.notifySound);
   const setSound = useUi((s) => s.setNotifySound);
@@ -210,6 +211,17 @@ export function Settings({
                       onChange={(e) => useUi.getState().setStreamPreview(e.target.checked)}
                     />
                     {t("settings.streamPreview")}
+                  </label>
+                  {/* ★생성을 누르면 방금 넣은 대기 칸으로 이동 (사용자 지시 2026-09-03).
+                      결과를 바꾸지 않는 「보는 방식」이라 위 항목과 같은 묶음이다. 기본은 끔. */}
+                  <label style={checkRow} data-tip={t("settings.focusNewPendingHint")}>
+                    <input
+                      type="checkbox"
+                      data-focus-new-pending
+                      checked={focusNew}
+                      onChange={(e) => useUi.getState().setFocusNewPending(e.target.checked)}
+                    />
+                    {t("settings.focusNewPending")}
                   </label>
                   <label
                     style={checkRow}

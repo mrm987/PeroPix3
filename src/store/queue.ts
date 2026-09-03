@@ -287,6 +287,15 @@ export const useQueue = create<S>((set, get) => ({
       }
     }
     set({ pending: [...get().pending, ...add] });
+    /* ★생성을 누르면 **방금 넣은 대기 칸(가장 최근 것)** 을 고른다 (사용자 지시 2026-09-03,
+       `useUi.focusNewPending`, 기본 끔). 대기 칸은 줄의 앞쪽에 늦게 넣은 것부터 서므로
+       `add` 의 마지막이 곧 맨 앞 칸이다. 그림이 나오면 `consumePending` 이 그 장으로 옮긴다.
+       ★보고 있는 워크스페이스에 넣은 것일 때만 — 다른 워크스페이스로 보낸 생성(MCP·원격)에
+         화면이 끌려가면 안 된다. 칸이 없는 항목(씬 없는 강화)은 고를 자리가 없으니 건너뛴다. */
+    const last = add[add.length - 1];
+    if (useUi.getState().focusNewPending && last?.cellId && last.workspace === useWs.getState().current) {
+      useSceneFocus.getState().focusPending(last.cellId, last.id);
+    }
     try {
       await api("/api/generate/queue", {
         method: "POST",

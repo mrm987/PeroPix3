@@ -682,6 +682,8 @@ export const ko: Dict = {
     mcpNote: "앱이 켜져 있어야 도구가 동작합니다. 열쇠는 한 번 만들면 계속 씁니다.",
     agentApproveHint: "되돌릴 수 없는 것: 카드·씬 삭제, 그리고 Anlas 가 나가는 생성. Opus 잔량 안의 생성은 자동으로 넘어갑니다.",
     streamPreview: "그리는 중인 그림 보기",
+    focusNewPending: "생성하면 새 대기 칸으로 이동",
+    focusNewPendingHint: "생성을 누르면 방금 넣은 대기 칸(가장 최근 것)을 고릅니다. 그림이 나오면 그 장으로 이어집니다.",
     streamPreviewHint: "NAI 가 그리는 도중의 그림을 대기 칸에 보여 줍니다 (결과는 그대로).",
     notifyDone: "큐가 다 끝나면 알리기",
     notifyHint: "큐가 다 끝나면 시스템 알림을 띄웁니다.",
