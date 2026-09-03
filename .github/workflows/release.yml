@@ -22,6 +22,13 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# ★같은 태그로 두 번 오면 하나만 남긴다 (실측 2026-09-03: v3.0.9 공개 때 태그 push 이벤트가
+#   5초 간격으로 두 번 들어와 릴리즈가 두 번 돌았다 — 같은 자산을 동시에 올리는 경쟁이 된다).
+#   뒤의 실행이 앞의 것을 취소한다. 다른 태그·수동 실행끼리는 서로 안 막는다.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
