@@ -35,6 +35,9 @@ CLAUDE.md
 dev.bat
 stop.bat
 test.bat
+# ★촬영 모드(가짜 NAI) — 격리해서 깃 밖에 둔다 (사용자 지시 2026-09-03). 추적 코드는 안 건드린다
+demo.bat
+demo/
 tsconfig.tsbuildinfo
 backend/test_*.py
 *.test.ts
