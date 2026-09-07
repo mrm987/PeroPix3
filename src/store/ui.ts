@@ -4,13 +4,15 @@ import { useEffect, useRef } from "react";
 
 /** 모드 = 하단 네비의 자리. v2.x 의 모드 전환이 여기로 온다.
  *  싱글·세트는 모드가 아니라 캔버스 탭이므로 여기 없다. */
-export type ModeId = "generate" | "gallery" | "censor" | "utility";
+export type ModeId = "generate" | "gallery" | "censor" | "utility" | "plugins";
 
 export const MODES: { id: ModeId; label: string; color: string }[] = [
   { id: "generate", label: "생성", color: "var(--mode-single)" },
   { id: "gallery", label: "갤러리", color: "var(--mode-gallery)" },
   { id: "censor", label: "자동검열", color: "var(--mode-censor)" },
   { id: "utility", label: "보조 도구", color: "var(--mode-utility)" },
+  // ★플러그인 — 설치된 플러그인의 캔버스 + 관리 (사용자 제안 2026-09-07, `docs/plugin-design.md`)
+  { id: "plugins", label: "플러그인", color: "var(--mode-plugins)" },
 ];
 
 const KEY = "peropix.ui";
@@ -249,6 +251,10 @@ function load(): Persisted {
       // ★접힘도 같은 길을 밟는다 — 불리언 하나였던 저장본을 모드마다 그 값으로 채운다
       for (const k of ["leftCollapsed", "rightCollapsed"] as const) {
         if (typeof got[k] === "boolean") got[k] = folds(got[k]);
+      }
+      // ★모드가 늘면(플러그인, 2026-09-07) 옛 저장본의 표에 그 칸이 없다 — 기본값으로 채운다
+      for (const k of ["leftWidth", "rightWidth", "leftCollapsed", "rightCollapsed"] as const) {
+        if (got[k] && typeof got[k] === "object") got[k] = { ...DEFAULTS[k], ...got[k] };
       }
       return { ...DEFAULTS, ...got };
     }

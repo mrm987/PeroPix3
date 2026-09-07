@@ -11,6 +11,8 @@ __pycache__/
 data/
 
 workspaces/
+# 사용자가 설치한 플러그인 (`docs/plugin-design.md`) — 앱 것이 아니다
+plugins/
 qa-sandbox/share/
 
 _tmp/

@@ -33,6 +33,7 @@ import { CanvasTabs } from "./panels/CanvasTabs";
 import { Gallery } from "./panels/Gallery";
 import { Censor } from "./panels/Censor";
 import { Tools } from "./panels/Tools";
+import { Plugins } from "./panels/Plugins";
 import { GalleryFolders } from "./panels/GalleryFolders";
 import { GalleryMeta } from "./panels/GalleryMeta";
 import { DeckPanel } from "./cards/DeckPanel";
@@ -356,6 +357,8 @@ export function App() {
             <Censor />
           ) : mode === "utility" ? (
             <Tools />
+          ) : mode === "plugins" ? (
+            <Plugins />
           ) : (
             <Placeholder mode={mode} />
           )

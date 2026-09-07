@@ -66,7 +66,16 @@ export const ko: Dict = {
     gallery: "갤러리",
     censor: "자동검열",
     utility: "보조 도구",
+    plugins: "플러그인",
     comingSoon: "7단계에서 v2.x 기능을 이관합니다",
+  },
+
+  plugins: {
+    manage: "관리",
+    none: "설치된 플러그인이 없습니다.",
+    hint: "플러그인 폴더에 플러그인을 넣고 앱을 다시 켜면 나타납니다. 못 읽은 플러그인은 까닭이 함께 보입니다.",
+    openDir: "플러그인 폴더 열기",
+    broken: "못 읽음",
   },
 
   prompt: {

@@ -92,6 +92,7 @@
   --mode-gallery: #6b5bb8;
   --mode-censor: #a8433b;
   --mode-utility: #7a7f86;
+  --mode-plugins: #2f7a63;
 
   /* ── 타입 ──
      ★Pretendard 는 같은 px 에서 한글 글자속이 넓어 11px 도 읽힌다 (globals.css 에서 번들).
@@ -256,6 +257,7 @@
     --mode-gallery: #9d8cf5;
     --mode-censor: #e05555;
     --mode-utility: #a8a8b6;
+    --mode-plugins: #3fbf9a;
 
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.45);
@@ -329,6 +331,7 @@
   --mode-gallery: #9d8cf5;
   --mode-censor: #e05555;
   --mode-utility: #a8a8b6;
+  --mode-plugins: #3fbf9a;
 
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.45);

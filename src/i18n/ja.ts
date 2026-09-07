@@ -66,7 +66,16 @@ export const ja: Dict = {
     gallery: "ギャラリー",
     censor: "自動検閲",
     utility: "補助ツール",
+    plugins: "プラグイン",
     comingSoon: "v2.x の機能はステージ 7 で移行します",
+  },
+
+  plugins: {
+    manage: "管理",
+    none: "インストールされたプラグインはありません。",
+    hint: "プラグインフォルダにプラグインを入れてアプリを再起動すると表示されます。読み込めなかったプラグインは理由が表示されます。",
+    openDir: "プラグインフォルダを開く",
+    broken: "読み込み失敗",
   },
 
   prompt: {

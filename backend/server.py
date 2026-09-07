@@ -59,6 +59,7 @@ import trash
 import agentlog
 import migrate_terms
 import migrate_thumbs
+import plugins as plugins_mod
 import nai
 import update as update_mod
 import vibe as vibe_mod
@@ -3300,6 +3301,20 @@ def files_thumb(rel: str):
     head = rel.replace("\\", "/").split("/", 1)[0]
     t = thumbs.derive(p, WS_ROOT / head / ".thumbs" / thumbs.flat_name(rel))
     return FileResponse(t or p)
+
+
+# ── 플러그인 (`docs/plugin-design.md`) ─────────────────────────────
+#: 사용자가 플러그인을 넣는 자리 — 앱 뿌리(사용자 영역)라 업데이트가 `app/` 을 갈아 끼워도 남는다
+PLUGINS_DIR = APP_DIR / "plugins"
+# ★★라우트를 다 만든 **뒤에** 붙인다 — 플러그인이 `/plug/<id>/…` 를 얻고, 앱 창구는 그대로다.
+#   같은 프로세스라 KeyGate 도 그대로 지난다 (화면은 `/k/<열쇠>/plug/…` 로 부른다).
+PLUGINS = plugins_mod.load_all(app, PLUGINS_DIR)
+
+
+@app.get("/api/plugins")
+async def plugins_list():
+    """설치된 플러그인 — 캔버스 주소·확장 JS·기여 지점·못 읽은 까닭. 화면의 플러그인 모드가 읽는다."""
+    return {"dir": str(PLUGINS_DIR), "items": [p.info() for p in PLUGINS]}
 
 
 def main():

@@ -66,7 +66,16 @@ export const en = {
     gallery: "Gallery",
     censor: "Censoring",
     utility: "Utilities",
+    plugins: "Plugins",
     comingSoon: "v2.x features arrive in stage 7",
+  },
+
+  plugins: {
+    manage: "Manage",
+    none: "No plugins installed.",
+    hint: "Put a plugin in the plugins folder and restart the app. A plugin that failed to load shows why.",
+    openDir: "Open plugins folder",
+    broken: "Failed to load",
   },
 
   prompt: {
