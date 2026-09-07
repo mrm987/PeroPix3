@@ -158,3 +158,215 @@ def load_all(app: FastAPI, root: Path) -> list[Plugin]:
         bad = [p.id for p in out if p.error]
         print(f"[plugins] loaded {ok}" + (f" · failed {bad}" if bad else ""), flush=True)
     return out
+
+
+# ── 플러그인 파이썬이 앱에 닿는 창구 ──────────────────────────────────
+class _Host:
+    """`from plugins import host` — 플러그인 `server.py` 가 앱 액션을 시킬 때 쓴다.
+
+    ★★승인 카드를 지나지 않는다 (`outside=True`, 사용자 결정 2026-09-07: 플러그인은 앱의 규칙 밖에서
+      돌고 결과는 플러그인 몫이다). 앱 액션 목록은 `GET /api/agent/tools` 와 같다.
+    ★`server.py` 가 켜질 때 `tools`·`app_dir` 를 채운다 — 플러그인이 import 될 때는 이미 차 있다."""
+
+    tools = None
+    app_dir: Path | None = None
+
+    async def action(self, name: str, args: dict | None = None) -> dict:
+        if self.tools is None:
+            raise RuntimeError("앱이 아직 준비되지 않았습니다")
+        return await self.tools.call(name, args or {}, outside=True)
+
+
+host = _Host()
+
+
+# ── 관리: 목록·설치·삭제 (설계 문서 3단계) ──────────────────────────────
+#  ★공식 플러그인은 앱 저장소의 `plugins-official/` 에 있고 배포물에 함께 담긴다 (사용자 결정 2026-09-07).
+#    설치 = 그 사본을 `plugins/` 로 복사 — 네트워크가 없어도 되고 업데이트는 앱과 함께 온다.
+#  ★남의 플러그인은 zip 주소로 받는다 (원격 목록 `plugin_registry` 또는 직접 넣은 주소).
+#  ★설치·삭제는 **사용자가 누를 때만** 돈다. 자동 갱신은 없다 (`CLAUDE.md` 「상한은 ComfyUI」).
+#  ★★지우지 않는다: 갈아 끼우는 옛 폴더는 `_old-<id>-<시각>` 으로, 지운 것은 OS 휴지통(안 되면 `_removed-…`)으로.
+#    `_` 접두 폴더는 `load_all` 이 건너뛴다.
+
+def _manifest_of(d: Path) -> dict | None:
+    try:
+        m = json.loads((d / "plugin.json").read_text(encoding="utf-8"))
+        return m if isinstance(m, dict) and m.get("id") else None
+    except Exception:
+        return None
+
+
+def _entry(m: dict, pid: str, source: str, **extra) -> dict:
+    return {
+        "id": pid, "name": str(m.get("name") or pid), "version": str(m.get("version") or ""),
+        "description": str(m.get("description") or ""), "source": source, **extra,
+    }
+
+
+def official_list(official: Path) -> list[dict]:
+    out: list[dict] = []
+    if not official.is_dir():
+        return out
+    for d in sorted(official.iterdir()):
+        m = _manifest_of(d) if d.is_dir() else None
+        if m and str(m["id"]) == d.name and ID_RE.match(d.name):
+            out.append(_entry(m, d.name, "bundled"))
+    return out
+
+
+async def remote_list(url: str) -> list[dict]:
+    """원격 목록 — `{"items": [{id, name, version, description, zip, sha256}]}`. zip 이 없는 항목은 버린다."""
+    if not url:
+        return []
+    import httpx
+
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as c:
+        r = await c.get(url)
+        r.raise_for_status()
+        data = r.json()
+    items = data.get("items") if isinstance(data, dict) else data
+    out: list[dict] = []
+    for it in items or []:
+        if isinstance(it, dict) and it.get("id") and it.get("zip") and ID_RE.match(str(it["id"])):
+            out.append(_entry(it, str(it["id"]), "zip", zip=str(it["zip"]), sha256=str(it.get("sha256") or "")))
+    return out
+
+
+def installed_versions(root: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if root.is_dir():
+        for d in root.iterdir():
+            if d.is_dir() and not d.name.startswith((".", "_")):
+                m = _manifest_of(d)
+                if m:
+                    out[d.name] = str(m.get("version") or "")
+    return out
+
+
+def _vt(v: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in re.findall(r"\d+", v or "")) or (0,)
+
+
+async def registry(root: Path, official: Path, url: str) -> dict:
+    """받을 수 있는 것 전부 — 번들(공식) + 원격. 같은 id 면 판이 높은 쪽. `installed` 는 지금 깔린 판."""
+    by_id: dict[str, dict] = {}
+    remote_error = ""
+    try:
+        remote = await remote_list(url)
+    except Exception as e:  # noqa: BLE001 — 인터넷이 없어도 번들 목록은 보인다
+        remote, remote_error = [], f"{type(e).__name__}: {e}"
+    for it in official_list(official) + remote:
+        cur = by_id.get(it["id"])
+        if cur is None or _vt(it["version"]) > _vt(cur["version"]):
+            by_id[it["id"]] = it
+    have = installed_versions(root)
+    for it in by_id.values():
+        it["installed"] = have.get(it["id"])
+    return {"items": sorted(by_id.values(), key=lambda x: x["id"]), "remoteError": remote_error}
+
+
+async def install(root: Path, official: Path, python: str, *, id: str = "", zip: str = "",
+                  sha256: str = "", url: str = "") -> dict:
+    """번들 사본을 복사하거나 zip 을 받아 `plugins/<id>/` 에 놓고, `requirements.txt` 가 있으면 `_lib/` 에 pip 으로 넣는다.
+    붙는 것은 다음에 켤 때다 (라우터는 켤 때 mount 한다)."""
+    import asyncio
+    import hashlib
+    import shutil
+    import subprocess
+    import time
+    import zipfile
+
+    root.mkdir(parents=True, exist_ok=True)
+    src_dir: Path | None = None
+    zip_url, want = zip, sha256
+    if id and (official / id).is_dir() and _manifest_of(official / id):
+        src_dir = official / id
+    elif id and not zip_url:
+        try:
+            remote = await remote_list(url)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": f"원격 목록을 못 받았습니다: {e}"}
+        hit = next((r for r in remote if r["id"] == id), None)
+        if not hit:
+            return {"ok": False, "error": f"「{id}」 를 목록에서 못 찾았습니다"}
+        zip_url, want = hit["zip"], hit.get("sha256", "")
+    if src_dir is None and not zip_url:
+        return {"ok": False, "error": "무엇을 설치할지 없습니다 (id 또는 zip 주소)"}
+
+    stage = root / f"_stage-{int(time.time() * 1000)}"
+    shutil.rmtree(stage, ignore_errors=True)
+    stage.mkdir(parents=True)
+    try:
+        if src_dir is not None:
+            new = stage / src_dir.name
+            shutil.copytree(src_dir, new, ignore=shutil.ignore_patterns("__pycache__", "_lib", ".git"))
+        else:
+            import httpx
+
+            zpath = stage / "plugin.zip"
+            async with httpx.AsyncClient(timeout=None, follow_redirects=True) as c:
+                r = await c.get(zip_url)
+                r.raise_for_status()
+                zpath.write_bytes(r.content)
+            if want and hashlib.sha256(zpath.read_bytes()).hexdigest().lower() != want.lower():
+                return {"ok": False, "error": "받은 파일의 sha256 이 목록과 다릅니다"}
+            un = stage / "unzip"
+            un.mkdir()
+            with zipfile.ZipFile(zpath) as z:
+                # ★zip 밖으로 나가는 경로를 막는다 (`..`·절대경로) — 남이 만든 zip 이다
+                for name in z.namelist():
+                    p = (un / name).resolve()
+                    if un.resolve() not in p.parents and p != un.resolve():
+                        return {"ok": False, "error": f"수상한 경로가 들어 있습니다: {name}"}
+                z.extractall(un)
+            kids = list(un.iterdir())
+            new = kids[0] if len(kids) == 1 and kids[0].is_dir() and (kids[0] / "plugin.json").is_file() else un
+        m = _manifest_of(new)
+        if not m:
+            return {"ok": False, "error": "plugin.json 이 없거나 id 가 없습니다"}
+        pid = str(m["id"])
+        if not ID_RE.match(pid):
+            return {"ok": False, "error": f"id 「{pid}」 — 소문자·숫자·-·_ 만 됩니다"}
+        if id and pid != id:
+            return {"ok": False, "error": f"꾸러미의 id 「{pid}」 가 「{id}」 와 다릅니다"}
+        target = root / pid
+        if target.exists():
+            # ★지우지 않는다 — 옛 것은 `_old-…` 로 물러나고, 사람이 되돌릴 수 있다
+            target.rename(root / f"_old-{pid}-{time.strftime('%Y%m%d-%H%M%S')}")
+        shutil.move(str(new), str(target))
+
+        pip_log = ""
+        req = target / "requirements.txt"
+        if req.is_file():
+            proc = await asyncio.create_subprocess_exec(
+                python, "-m", "pip", "install", "--no-warn-script-location", "--disable-pip-version-check",
+                "--target", str(target / "_lib"), "-r", str(req),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            out, _ = await proc.communicate()
+            pip_log = out.decode("utf-8", "replace")[-2000:]
+            if proc.returncode != 0:
+                return {"ok": False, "error": "의존성 설치에 실패했습니다 (플러그인 파일은 놓아 두었습니다)",
+                        "pip": pip_log, "id": pid}
+        return {"ok": True, "id": pid, "version": str(m.get("version") or ""), "restart": True, "pip": pip_log}
+    except Exception as e:  # noqa: BLE001 — 못 받음·못 풂·못 옮김 전부 **답**으로 돌려준다 (창구가 500 을 내지 않게)
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+
+
+def remove(root: Path, pid: str) -> dict:
+    """OS 휴지통으로 보낸다 (안 되면 `_removed-…` 로 이름만 바꾼다). 이미 붙은 라우터는 다음에 켤 때 사라진다."""
+    import time
+
+    if not ID_RE.match(pid):
+        return {"ok": False, "error": f"id 「{pid}」 가 이상합니다"}
+    target = root / pid
+    if not target.is_dir():
+        return {"ok": False, "error": f"「{pid}」 가 없습니다"}
+    import trash
+
+    if not trash.send_os([target]):
+        target.rename(root / f"_removed-{pid}-{time.strftime('%Y%m%d-%H%M%S')}")
+    return {"ok": True, "id": pid, "restart": True}

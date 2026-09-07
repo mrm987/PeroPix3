@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
+import { PluginSlot } from "../components/PluginSlot";
 
 /** ★키를 조립하지 않는다 — i18n 검사가 동적 접두사를 잡는다 (`i18n.test.ts`) */
 const SEED_LABELS = ["options.seedFixed", "options.seedRound", "options.seedScene"] as const;
@@ -300,6 +301,8 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
     return (
       <div style={{ padding: "var(--sp-2)", borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 4 }}>
         {genBtn}
+        {/* ★플러그인이 둔 단추 — 없으면 아무것도 안 그린다 (`lib/pluginHost`, 자리 이름 generate.footer) */}
+        <PluginSlot slot="generate.footer" compact={compact} />
         {/* ★★`CQ` 는 **늘 있다** (사용자 지시 2026-08-19, v2 `collapsedClearQBtn`) —
             돌 때만 나타나면 멈추려는 순간에 자리를 찾게 된다. 돌지 않을 때는 눌러도
             할 일이 없으므로 흐리게 둔다. */}
@@ -507,6 +510,8 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
       </div>
 
       {genBtn}
+        {/* ★플러그인이 둔 단추 — 없으면 아무것도 안 그린다 (`lib/pluginHost`, 자리 이름 generate.footer) */}
+        <PluginSlot slot="generate.footer" compact={compact} />
 
       {/* ★★진행바는 **언제나 자리를 차지한다** (사용자 지시 2026-08-21: 생성 버튼이 움직였다).
           돌 때만 나타나게 하면 버튼이 그만큼 밀려 올라가, 연달아 누르려던 손이 빗나간다.

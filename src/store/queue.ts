@@ -364,7 +364,8 @@ async function flushSpec(out: Record<string, unknown>) {
  *    갖고, 화면 버튼은 확인 창으로, 조수는 **승인 카드**로 묻는다 (`docs/…` 2-5).
  *  ★등록되지 않은 이름은 아래 옛 분기로 내려간다 — 프롬프트 편집처럼 아직 옮기지 않은 것들이다.
  */
-async function runAction(action: string, args: Record<string, any>, ask = true): Promise<Record<string, unknown>> {
+// ★플러그인 호스트(`lib/pluginHost`)도 이 창구를 쓴다 — `ask=false` 로, 승인 카드를 지나지 않는다 (2026-09-07)
+export async function runAction(action: string, args: Record<string, any>, ask = true): Promise<Record<string, unknown>> {
   /* ★★**보낸 시점의 화면이 「지금 자리」다** (사용자 지시 2026-09-07). 사용자가 말을 건 뒤 탭을
      옮겨도 조수의 편집·생성은 말을 건 그 자리에 간다 — 실행 직전에 화면을 그 주소로 맞춘다
      (`lib/promptEdit.alignToTurn`). 워크스페이스가 다르면 거절이다.

@@ -1,55 +1,45 @@
 import { useEffect, useState } from "react";
 import { useUi } from "../store/ui";
 import { useI18n } from "../i18n";
-import { api, backendUrl } from "../lib/backend";
+import { api } from "../lib/backend";
 import { useFiles } from "../store/files";
 import { toast } from "../store/toast";
 import { FolderOpenButton } from "../components/FolderOpenButton";
+import { usePlugins, type PluginInfo } from "../lib/pluginHost";
 
 /** 플러그인 모드 — **설치된 플러그인마다 캔버스 하나** + 「관리」 탭 (설계: `docs/plugin-design.md`).
  *
  *  ★캔버스는 백엔드가 서빙하는 플러그인 페이지를 iframe 으로 띄운 것이다 (`/plug/<id>/web/`).
  *    같은 오리진(백엔드)이라 페이지가 백엔드 API 를 **직접** 부른다 — 열쇠는 주소에 이미 들어 있다.
+ *    앱에 시킬 것은 `postMessage` 로 (`lib/pluginHost` 의 창구).
  *  ★한 번 연 캔버스는 **숨기기만** 한다 (`hidden`) — 탭을 오가도 플러그인의 상태가 살아 있어야 한다
  *    (PeroPixfy 런처가 iframe 을 한 번만 만드는 것과 같은 까닭). 안 연 것은 만들지 않는다.
- *  ★관리 탭은 1단계에서는 **목록과 폴더 열기**뿐이다. 받기·설치·삭제는 3단계. */
-
-export type PluginInfo = {
-  id: string;
-  name: string;
-  version: string;
-  /** 캔버스 주소 — 비면 캔버스가 없는 플러그인 (버튼만 두는 것) */
-  web: string;
-  ext: string[];
-  contributes: Record<string, unknown>;
-  /** 못 읽었으면 까닭. 비면 정상 */
-  error: string;
-  dir: string;
-};
+ *  ★관리 탭: 설치됨(삭제) · 받을 수 있음(공식 번들 + 원격 목록, 설치/업데이트) · zip 주소로 설치.
+ *    ★★설치·삭제는 파일만 바꾼다 — **다시 켜야 적용**된다 (라우터·확장 JS 는 켤 때 붙는다). */
 
 const MANAGE = "manage";
 
+type RegItem = {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  source: "bundled" | "zip";
+  installed: string | null;
+};
+
 export function Plugins() {
   const t = useI18n((s) => s.t);
-  const [items, setItems] = useState<PluginInfo[]>([]);
-  const [dir, setDir] = useState("");
-  const [base, setBase] = useState("");
+  const items = usePlugins((s) => s.items);
+  const dir = usePlugins((s) => s.dir);
+  const base = usePlugins((s) => s.base);
   /** 어느 탭을 보고 있나 — ★**저장되는 작업 상태**다 (`useUi.view.tab`, 보조 도구와 같다) */
   const tab = useUi((u) => (u.view.tab["plugins"] as string | undefined) ?? "");
   const setTab = (k: string) => useUi.getState().setView("tab", "plugins", k as never);
   const [seen, setSeen] = useState<string[]>([]);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const r = await api<{ dir: string; items: PluginInfo[] }>("/api/plugins");
-        setItems(r.items);
-        setDir(r.dir);
-        setBase(await backendUrl());
-      } catch (e) {
-        toast(String(e), "warn");
-      }
-    })();
+    void usePlugins.getState().load().catch((e) => toast(String(e), "warn"));
   }, []);
 
   const canvases = items.filter((p) => p.web && !p.error);
@@ -103,52 +93,178 @@ export function Plugins() {
             />
           ))}
 
-      <div hidden={cur !== MANAGE} style={{ flex: 1, minHeight: 0, display: cur === MANAGE ? "flex" : "none", flexDirection: "column", gap: "var(--sp-3)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", fontSize: "var(--text-xs)", color: "var(--ink-soft)" }}>
-          <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} data-plugins-dir>
-            {dir}
+      {cur === MANAGE && <Manage items={items} dir={dir} />}
+    </div>
+  );
+}
+
+const row: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr auto auto",
+  alignItems: "center",
+  gap: "var(--sp-1) var(--sp-3)",
+  padding: "var(--sp-2) var(--sp-3)",
+  border: "1px solid var(--line)",
+  borderRadius: "var(--r-2)",
+  background: "var(--panel)",
+};
+const btn: React.CSSProperties = {
+  minHeight: 24,
+  padding: "0 var(--sp-3)",
+  fontSize: "var(--text-2xs)",
+  color: "var(--ink-soft)",
+  border: "1px solid var(--line)",
+  borderRadius: "var(--r-2)",
+  background: "var(--bg)",
+};
+const head: React.CSSProperties = { fontSize: "var(--text-2xs)", color: "var(--ink-faint)", letterSpacing: 0.3, textTransform: "uppercase" };
+
+function Manage({ items, dir }: { items: PluginInfo[]; dir: string }) {
+  const t = useI18n((s) => s.t);
+  const [reg, setReg] = useState<RegItem[] | null>(null);
+  const [remoteError, setRemoteError] = useState("");
+  const [busy, setBusy] = useState("");
+  const [zip, setZip] = useState("");
+  /** 설치·삭제 뒤 — 파일은 바뀌었지만 붙는 것은 다음에 켤 때다 */
+  const [restart, setRestart] = useState(false);
+
+  const loadReg = async () => {
+    try {
+      const r = await api<{ items: RegItem[]; remoteError: string }>("/api/plugins/registry");
+      setReg(r.items);
+      setRemoteError(r.remoteError);
+    } catch (e) {
+      setReg([]);
+      setRemoteError(String(e));
+    }
+  };
+  useEffect(() => {
+    void loadReg();
+  }, []);
+
+  const install = async (body: { id?: string; zip?: string }) => {
+    const key = body.id ?? body.zip ?? "";
+    setBusy(key);
+    try {
+      const r = await api<{ ok: boolean; id: string; pip?: string }>("/api/plugins/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      toast(t("plugins.installed", { n: r.id }));
+      setRestart(true);
+      setZip("");
+      await Promise.all([loadReg(), usePlugins.getState().load()]);
+    } catch (e) {
+      toast(String(e), "warn");
+    } finally {
+      setBusy("");
+    }
+  };
+  const remove = async (id: string) => {
+    setBusy(id);
+    try {
+      await api(`/api/plugins/${encodeURIComponent(id)}`, { method: "DELETE" });
+      toast(t("plugins.removed", { n: id }));
+      setRestart(true);
+      await Promise.all([loadReg(), usePlugins.getState().load()]);
+    } catch (e) {
+      toast(String(e), "warn");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const available = (reg ?? []).filter((r) => !r.installed || (r.version && r.installed !== r.version));
+
+  return (
+    <div data-plugins-manage style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", fontSize: "var(--text-xs)", color: "var(--ink-soft)" }}>
+        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} data-plugins-dir>
+          {dir}
+        </span>
+        <FolderOpenButton
+          data-plugins-open
+          tip={t("plugins.openDir")}
+          disabled={!dir}
+          onClick={() => void useFiles.getState().openDir(dir).catch((e) => toast(String(e), "warn"))}
+        />
+        {restart && (
+          <span data-plugins-restart style={{ marginLeft: "auto", fontSize: "var(--text-2xs)", color: "var(--accent-ink)" }}>
+            {t("plugins.restart")}
           </span>
-          <FolderOpenButton
-            data-plugins-open
-            tip={t("plugins.openDir")}
-            disabled={!dir}
-            onClick={() => void useFiles.getState().openDir(dir).catch((e) => toast(String(e), "warn"))}
-          />
-        </div>
+        )}
+      </div>
+
+      <section style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+        <div style={head}>{t("plugins.installedHead")}</div>
         {items.length === 0 ? (
           <div style={{ fontSize: "var(--text-sm)", color: "var(--ink-dim)" }}>{t("plugins.none")}</div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
-            {items.map((p) => (
-              <div
-                key={p.id}
-                data-plugin-row={p.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr auto",
-                  gap: "var(--sp-1) var(--sp-3)",
-                  padding: "var(--sp-2) var(--sp-3)",
-                  border: "1px solid var(--line)",
-                  borderRadius: "var(--r-2)",
-                  background: "var(--panel)",
-                }}
-              >
-                <span style={{ fontSize: "var(--text-sm)", color: "var(--ink)" }}>
-                  {p.name}
-                  <span style={{ marginLeft: "var(--sp-2)", fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{p.id}</span>
-                </span>
-                <span style={{ fontSize: "var(--text-2xs)", color: p.error ? "var(--minus-ink)" : "var(--ink-faint)", fontVariantNumeric: "tabular-nums" }}>
-                  {p.error ? t("plugins.broken") : p.version}
-                </span>
-                {p.error && (
-                  <span style={{ gridColumn: "1 / -1", fontSize: "var(--text-2xs)", color: "var(--ink-dim)", whiteSpace: "pre-wrap" }}>{p.error}</span>
-                )}
-              </div>
-            ))}
-          </div>
+          items.map((p) => (
+            <div key={p.id} data-plugin-row={p.id} style={row}>
+              <span style={{ fontSize: "var(--text-sm)", color: "var(--ink)", minWidth: 0 }}>
+                {p.name}
+                <span style={{ marginLeft: "var(--sp-2)", fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{p.id}</span>
+              </span>
+              <span style={{ fontSize: "var(--text-2xs)", color: p.error ? "var(--minus-ink)" : "var(--ink-faint)", fontVariantNumeric: "tabular-nums" }}>
+                {p.error ? t("plugins.broken") : p.version}
+              </span>
+              <button data-plugin-remove={p.id} disabled={!!busy} onClick={() => void remove(p.id)} style={btn}>
+                {t("plugins.remove")}
+              </button>
+              {p.error && (
+                <span style={{ gridColumn: "1 / -1", fontSize: "var(--text-2xs)", color: "var(--ink-dim)", whiteSpace: "pre-wrap" }}>{p.error}</span>
+              )}
+            </div>
+          ))
         )}
-        <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", lineHeight: 1.6 }}>{t("plugins.hint")}</div>
-      </div>
+      </section>
+
+      <section style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+        <div style={head}>{t("plugins.availableHead")}</div>
+        {reg === null ? (
+          <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>…</div>
+        ) : available.length === 0 ? (
+          <div style={{ fontSize: "var(--text-sm)", color: "var(--ink-dim)" }}>{t("plugins.noAvailable")}</div>
+        ) : (
+          available.map((r) => (
+            <div key={r.id} data-plugin-avail={r.id} style={row}>
+              <span style={{ fontSize: "var(--text-sm)", color: "var(--ink)", minWidth: 0 }}>
+                {r.name}
+                <span style={{ marginLeft: "var(--sp-2)", fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>
+                  {r.id}
+                  {r.source === "bundled" ? ` · ${t("plugins.official")}` : ""}
+                </span>
+                {r.description && (
+                  <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--ink-dim)" }}>{r.description}</span>
+                )}
+              </span>
+              <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", fontVariantNumeric: "tabular-nums" }}>{r.version}</span>
+              <button data-plugin-install={r.id} disabled={!!busy} onClick={() => void install({ id: r.id })} style={btn}>
+                {busy === r.id ? t("plugins.installing") : r.installed ? t("plugins.update") : t("plugins.install")}
+              </button>
+            </div>
+          ))
+        )}
+        {remoteError && (
+          <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{t("plugins.registryFail")}</div>
+        )}
+        <div style={{ display: "flex", gap: "var(--sp-2)", alignItems: "center" }}>
+          <input
+            data-plugin-zip
+            value={zip}
+            onChange={(e) => setZip(e.target.value)}
+            placeholder={t("plugins.zipUrl")}
+            style={{ flex: 1, minWidth: 0, height: 26, padding: "0 var(--sp-2)", fontSize: "var(--text-xs)", border: "1px solid var(--line)", borderRadius: "var(--r-2)", background: "var(--bg)", color: "var(--ink)" }}
+          />
+          <button data-plugin-install-zip disabled={!!busy || !/^https?:\/\//.test(zip.trim())} onClick={() => void install({ zip: zip.trim() })} style={btn}>
+            {busy && busy === zip.trim() ? t("plugins.installing") : t("plugins.installZip")}
+          </button>
+        </div>
+      </section>
+
+      <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", lineHeight: 1.6 }}>{t("plugins.hint")}</div>
     </div>
   );
 }

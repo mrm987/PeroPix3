@@ -4,6 +4,7 @@ import { useDropZone } from "../cards/dragStore";
 import { useGallery } from "../store/gallery";
 import { useWs } from "../store/workspace";
 import { toast } from "../store/toast";
+import { PluginSlot } from "../components/PluginSlot";
 
 /** 하단 네비 = v2.x 의 모드 전환 자리 (ui-guide.md 6절).
  *  모드마다 고유색이 있고, 활성 모드는 상단에 1.5px 색 선이 그어진다.
@@ -66,7 +67,9 @@ export function BottomNav({ right }: { right?: React.ReactNode }) {
           </button>
         );
       })}
-      <span style={{ flex: 1, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
+      <span style={{ flex: 1, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "var(--sp-2)" }}>
+        {/* ★플러그인이 둔 단추 (`lib/pluginHost`, 자리 이름 nav.right) — 없으면 아무것도 안 그린다 */}
+        <PluginSlot slot="nav.right" />
         {right}
       </span>
     </nav>

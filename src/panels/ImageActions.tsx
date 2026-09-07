@@ -8,6 +8,7 @@ import { pushUndo } from "../lib/undo";
 import { useUi } from "../store/ui";
 import { ask } from "../store/ask";
 import { toast } from "../store/toast";
+import { usePlugins } from "../lib/pluginHost";
 import {
   applyMeta,
   applyMetaParams,
@@ -473,6 +474,7 @@ export function ImageActions({
             ★단추는 일괄변환이 쓰던 아이콘, 갈래는 **글자**로 (같은 지시). */}
         <SendMenu
           busy={busy}
+          img={{ url, name }}
           items={[
             onClone && { mark: "clone", label: t("act.clone"), run: runClone },
             onKeep && { mark: "keep", label: t("gallery.keep"), run: onKeep },
@@ -745,8 +747,15 @@ type SendItem = { mark: string; label: string; run: () => void | Promise<void> }
  *    아이콘이 동일한데 동작이 달라서 헷갈림"*). 예전에는 한 줄짜리 목록이 누르는 수만 늘린다고 바로
  *    실행했는데, 같은 아이콘이 자리마다 다른 일을 하게 되어 무엇이 일어날지 알 수 없었다.
  */
-function SendMenu({ busy, items }: { busy: boolean; items: SendItem[] }) {
+function SendMenu({ busy, items: given, img }: { busy: boolean; items: SendItem[]; img?: { url: string; name: string } }) {
   const t = useI18n((s) => s.t);
+  /* ★플러그인이 「보내기」에 둔 갈래 (`lib/pluginHost`, 메뉴 이름 image.send) — 앱 갈래 뒤에 붙는다.
+     그림은 주소와 이름만 넘긴다 (개별 책임: 무엇을 하든 플러그인 몫이다). */
+  const plug = usePlugins((s) => s.menus["image.send"]);
+  const items: SendItem[] = [
+    ...given,
+    ...(img ? (plug ?? []).map((m) => ({ mark: `plugin:${m.key}`, label: m.label, run: () => m.onClick(img) })) : []),
+  ];
   const [open, setOpen] = useState(false);
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   const ref = useRef<HTMLButtonElement | null>(null);

@@ -34,6 +34,7 @@ import { Gallery } from "./panels/Gallery";
 import { Censor } from "./panels/Censor";
 import { Tools } from "./panels/Tools";
 import { Plugins } from "./panels/Plugins";
+import { usePlugins } from "./lib/pluginHost";
 import { GalleryFolders } from "./panels/GalleryFolders";
 import { GalleryMeta } from "./panels/GalleryMeta";
 import { DeckPanel } from "./cards/DeckPanel";
@@ -184,6 +185,8 @@ export function App() {
           // 카드는 워크스페이스와 무관한 공용 저장소라 여기서 한 번만 읽는다
           await loadCards();
           mark("카드");
+          // ★플러그인 목록과 확장 JS — 기다리지 않는다. 플러그인이 터져도 앱은 뜬다 (`lib/pluginHost`)
+          void usePlugins.getState().load().catch((e) => console.error("[plugins]", e));
           void flushBootTime();
           // ★와일드카드 풀도 여기서 한 번 읽는다 (카드와 같은 공용 문서).
           //   ★**생성보다 먼저 준비돼야 한다.** 비어 있으면 `#이름` 이 그대로 프롬프트에

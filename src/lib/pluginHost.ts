@@ -1,0 +1,214 @@
+/** 플러그인 호스트 — 설치된 플러그인의 확장 JS 를 앱 페이지에 불러들이고, 기여 지점(단추·메뉴)과
+ *  캔버스(iframe)의 postMessage 창구를 한 자리에서 맡는다 (설계: `docs/plugin-design.md` 5절).
+ *
+ *  ★★플러그인은 앱의 규칙 밖에서 돈다 (사용자 결정 2026-09-07). 승인 카드를 지나지 않고(`runAction(…, false)`),
+ *    공개 API 밖의 `window`·DOM·스토어에 닿는 것도 막지 않는다. 일반 사용자가 넣는 것이라 결과는 전부
+ *    플러그인 몫이다. 앱이 지키는 것은 하나 — **플러그인 하나가 터져도 앱은 계속 뜬다** (전부 try 로 감싼다).
+ *  ★공개 API 는 작게 시작한다: 단추·메뉴 자리, 캔버스 열기, 앱 액션, 지금 화면 주소, 토큰, 번역, 토스트.
+ *    앱 개정으로 그 밖의 것이 깨지면 플러그인이 고친다 (ComfyUI 와 같은 계약).
+ *
+ *  확장 JS (`plugin.json` 의 `ext`):
+ *      window.peropix.registerExtension({ name: "x", setup(api) { api.addButton("generate.footer", { label, onClick }); } });
+ *  캔버스 페이지(iframe)는 같은 것을 postMessage 로 부른다:
+ *      parent.postMessage({ type: "peropix", id: 1, call: "action", name: "add_style_card", args: {...} }, "*");
+ *      window.addEventListener("message", (e) => { if (e.data?.type === "peropix" && e.data.id === 1) … });
+ */
+import { create } from "zustand";
+import { api, backendUrl } from "./backend";
+import { useUi } from "../store/ui";
+import { toast } from "../store/toast";
+import { screenAddr } from "./promptEdit";
+import { runAction } from "../store/queue";
+import { t } from "../i18n";
+
+export type PluginInfo = {
+  id: string;
+  name: string;
+  version: string;
+  /** 캔버스 주소 — 비면 캔버스가 없는 플러그인 (단추만 두는 것) */
+  web: string;
+  /** 앱 페이지 안에서 돌 JS 주소들 */
+  ext: string[];
+  contributes: { buttons?: DeclaredButton[] } & Record<string, unknown>;
+  /** 못 읽었으면 까닭. 비면 정상 */
+  error: string;
+  dir: string;
+};
+
+/** `plugin.json` 의 `contributes.buttons[]` — JS 없이 단추 하나를 두는 길 */
+export type DeclaredButton = {
+  slot: string;
+  label: string;
+  /** SVG 마크업 (선택) — 앱은 그대로 그린다 */
+  icon?: string;
+  /** `"openCanvas"` 또는 `{ action, args }` */
+  do?: "openCanvas" | { action: string; args?: Record<string, unknown> };
+};
+
+export type PluginButton = { key: string; plugin: string; label: string; icon?: string; onClick: () => void };
+export type PluginImage = { url: string; name: string };
+export type PluginMenuItem = { key: string; plugin: string; label: string; onClick: (img: PluginImage) => void };
+
+/** 자리 이름 — 여기 없는 이름으로 등록하면 아무 데도 안 그려진다 (오류는 아니다) */
+export const SLOTS = ["generate.footer", "nav.right"] as const;
+export const MENUS = ["image.send"] as const;
+
+type S = {
+  items: PluginInfo[];
+  dir: string;
+  base: string;
+  loaded: boolean;
+  buttons: Record<string, PluginButton[]>;
+  menus: Record<string, PluginMenuItem[]>;
+  /** 목록을 읽고(언제나) 확장 JS 를 불러들인다(처음 한 번) */
+  load: () => Promise<void>;
+};
+
+let extDone = false;
+/** 지금 확장 JS 를 불러들이는 중인 플러그인 — `registerExtension` 이 누구 것인지 알기 위해 */
+let current: PluginInfo | null = null;
+
+export const usePlugins = create<S>((set) => ({
+  items: [],
+  dir: "",
+  base: "",
+  loaded: false,
+  buttons: {},
+  menus: {},
+  async load() {
+    const base = await backendUrl();
+    const r = await api<{ dir: string; items: PluginInfo[] }>("/api/plugins");
+    set({ items: r.items, dir: r.dir, base, loaded: true });
+    if (extDone) return;
+    extDone = true;
+    installBridge();
+    for (const p of r.items) {
+      if (p.error) continue;
+      // 선언된 단추 — JS 없이도 된다
+      for (const b of p.contributes?.buttons ?? []) {
+        try {
+          if (!b?.slot || !b?.label) continue;
+          hostApi(p).addButton(b.slot, {
+            label: b.label,
+            icon: b.icon,
+            onClick: () => {
+              if (!b.do || b.do === "openCanvas") hostApi(p).openCanvas(p.id);
+              else void hostApi(p).action(b.do.action, b.do.args ?? {});
+            },
+          });
+        } catch (e) {
+          console.error(`[plugins] ${p.id} 단추`, e);
+        }
+      }
+      for (const u of p.ext) {
+        current = p;
+        try {
+          // ★모듈로 불러들인다 — 백엔드 오리진이라 CSP 의 script-src 에 127.0.0.1 이 있어야 한다 (tauri.conf.json)
+          await import(/* @vite-ignore */ `${base}${u}`);
+        } catch (e) {
+          console.error(`[plugins] ${p.id} ext`, e);
+          toast(t("plugins.extFail", { n: p.name, e: String((e as Error)?.message ?? e) }), "warn");
+        } finally {
+          current = null;
+        }
+      }
+    }
+  },
+}));
+
+function push<T extends { key: string }>(map: Record<string, T[]>, k: string, item: T): Record<string, T[]> {
+  const list = (map[k] ?? []).filter((x) => x.key !== item.key);
+  return { ...map, [k]: [...list, item] };
+}
+
+/** 플러그인 하나에게 주는 공개 API */
+export function hostApi(p: PluginInfo) {
+  const st = () => usePlugins.getState();
+  return {
+    plugin: p,
+    backend: st().base,
+    addButton(slot: string, b: { label: string; icon?: string; onClick: () => void }) {
+      usePlugins.setState({ buttons: push(st().buttons, slot, { key: `${p.id}:${b.label}`, plugin: p.id, label: b.label, icon: b.icon, onClick: b.onClick }) });
+    },
+    addMenuItem(menu: string, m: { label: string; onClick: (img: PluginImage) => void }) {
+      usePlugins.setState({ menus: push(st().menus, menu, { key: `${p.id}:${m.label}`, plugin: p.id, label: m.label, onClick: m.onClick }) });
+    },
+    openCanvas(id: string = p.id) {
+      useUi.getState().setMode("plugins");
+      useUi.getState().setView("tab", "plugins", id as never);
+    },
+    /** 앱 액션 — 조수가 쓰는 것과 같은 목록. ★승인 카드를 지나지 않는다 */
+    action: (name: string, args: Record<string, unknown> = {}) => runAction(name, args, false),
+    /** 지금 보고 있는 화면 주소 (workspace · tab · sceneGroup) */
+    state: () => screenAddr(),
+    /** 디자인 토큰 값 — `theme("--accent")` */
+    theme: (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim(),
+    t,
+    toast,
+  };
+}
+
+export type HostApi = ReturnType<typeof hostApi>;
+
+declare global {
+  interface Window {
+    peropix?: { registerExtension: (ext: { name?: string; setup?: (api: HostApi) => void | Promise<void> }) => void };
+  }
+}
+
+if (typeof window !== "undefined" && !window.peropix) {
+  window.peropix = {
+    registerExtension(ext) {
+      const p = current;
+      if (!p) {
+        console.error("[plugins] registerExtension 은 플러그인 확장 JS 가 불려 오는 동안만 부를 수 있습니다");
+        return;
+      }
+      try {
+        void Promise.resolve(ext.setup?.(hostApi(p))).catch((e) => console.error(`[plugins] ${p.id} setup`, e));
+      } catch (e) {
+        console.error(`[plugins] ${p.id} setup`, e);
+      }
+    },
+  };
+}
+
+/** 캔버스(iframe) → 앱: postMessage 창구. 한 번만 단다. */
+let bridged = false;
+function installBridge() {
+  if (bridged) return;
+  bridged = true;
+  window.addEventListener("message", (e: MessageEvent) => {
+    const d = e.data as { type?: string; id?: unknown; call?: string; name?: string; args?: Record<string, unknown>; text?: string; key?: string } | null;
+    if (!d || d.type !== "peropix" || !d.call) return;
+    const base = usePlugins.getState().base;
+    let origin = "";
+    try { origin = new URL(base).origin; } catch { /* 아직 모르면 아래 프레임 대조만 */ }
+    if (origin && e.origin !== origin) return;
+    const frame = [...document.querySelectorAll<HTMLIFrameElement>("iframe[data-plugin-canvas]")].find((f) => f.contentWindow === e.source);
+    if (!frame) return;
+    const pid = frame.getAttribute("data-plugin-canvas") ?? "";
+    const p = usePlugins.getState().items.find((x) => x.id === pid);
+    if (!p) return;
+    const reply = (msg: Record<string, unknown>) => (e.source as Window | null)?.postMessage({ type: "peropix", id: d.id, ...msg }, e.origin || "*");
+    void (async () => {
+      try {
+        const a = hostApi(p);
+        let result: unknown;
+        switch (d.call) {
+          case "action": result = await a.action(String(d.name ?? ""), d.args ?? {}); break;
+          case "state": result = a.state(); break;
+          case "openCanvas": a.openCanvas(String(d.name ?? p.id)); break;
+          case "toast": toast(String(d.text ?? "")); break;
+          case "theme": result = a.theme(String(d.name ?? "")); break;
+          case "t": result = t(String(d.key ?? d.name ?? ""), d.args as Record<string, string | number> | undefined); break;
+          case "plugin": result = { id: p.id, name: p.name, version: p.version, backend: base }; break;
+          default: throw new Error(`모르는 호출: ${d.call}`);
+        }
+        reply({ ok: true, result });
+      } catch (err) {
+        reply({ ok: false, error: String((err as Error)?.message ?? err) });
+      }
+    })();
+  });
+}
