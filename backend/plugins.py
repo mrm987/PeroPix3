@@ -183,7 +183,8 @@ host = _Host()
 # ── 관리: 목록·설치·삭제 (설계 문서 3단계) ──────────────────────────────
 #  ★공식 플러그인은 앱 저장소의 `plugins-official/` 에 있고 배포물에 함께 담긴다 (사용자 결정 2026-09-07).
 #    설치 = 그 사본을 `plugins/` 로 복사 — 네트워크가 없어도 되고 업데이트는 앱과 함께 온다.
-#  ★남의 플러그인은 zip 주소로 받는다 (원격 목록 `plugin_registry` 또는 직접 넣은 주소).
+#  ★남의 플러그인은 제작자 저장소에서 받는다 — 목록 저장소 `peropix-plugins/index.json` 에 `{id, repo, tag}` 만 오르고
+#    (`remote_items`), 코드·라이선스는 제작자 것이다 (ComfyUI 레지스트리와 같은 꼴, 사용자 결정 2026-09-08). zip 주소 직접 넣기도 된다.
 #  ★설치·삭제는 **사용자가 누를 때만** 돈다. 자동 갱신은 없다 (`CLAUDE.md` 「상한은 ComfyUI」).
 #  ★★지우지 않는다: 갈아 끼우는 옛 폴더는 `_old-<id>-<시각>` 으로, 지운 것은 OS 휴지통(안 되면 `_removed-…`)으로.
 #    `_` 접두 폴더는 `load_all` 이 건너뛴다.
@@ -214,8 +215,34 @@ def official_list(official: Path) -> list[dict]:
     return out
 
 
+REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+TAG_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def remote_items(data) -> list[dict]:
+    """목록 파일의 항목을 받을 수 있는 꼴로. 항목은 둘 중 하나다:
+    - `{id, repo: "owner/name", tag}` — 제작자 저장소의 태그 (ComfyUI 처럼 코드는 제작자 것, 목록은 주소만.
+      사용자 결정 2026-09-08). zip 은 GitHub 의 태그 압축 주소로 만든다 — 폴더 한 겹은 `install` 이 벗긴다.
+    - `{id, zip, sha256?}` — 아무 zip 주소.
+    `version` 을 안 적으면 태그에서 앞의 `v` 를 뗀 것이다. 둘 다 없는 항목은 버린다."""
+    items = data.get("items") if isinstance(data, dict) else data
+    out: list[dict] = []
+    for it in items or []:
+        if not (isinstance(it, dict) and it.get("id") and ID_RE.match(str(it["id"]))):
+            continue
+        pid = str(it["id"])
+        repo, tag = str(it.get("repo") or ""), str(it.get("tag") or "")
+        if repo and tag and REPO_RE.match(repo) and TAG_RE.match(tag):
+            it = {**it, "version": it.get("version") or re.sub(r"^v", "", tag)}
+            out.append(_entry(it, pid, "repo", zip=f"https://github.com/{repo}/archive/refs/tags/{tag}.zip",
+                              sha256=str(it.get("sha256") or ""), repo=repo, tag=tag))
+        elif it.get("zip"):
+            out.append(_entry(it, pid, "zip", zip=str(it["zip"]), sha256=str(it.get("sha256") or "")))
+    return out
+
+
 async def remote_list(url: str) -> list[dict]:
-    """원격 목록 — `{"items": [{id, name, version, description, zip, sha256}]}`. zip 이 없는 항목은 버린다."""
+    """원격 목록 — `{"items": [...]}` (`remote_items` 참고)."""
     if not url:
         return []
     import httpx
@@ -224,12 +251,7 @@ async def remote_list(url: str) -> list[dict]:
         r = await c.get(url)
         r.raise_for_status()
         data = r.json()
-    items = data.get("items") if isinstance(data, dict) else data
-    out: list[dict] = []
-    for it in items or []:
-        if isinstance(it, dict) and it.get("id") and it.get("zip") and ID_RE.match(str(it["id"])):
-            out.append(_entry(it, str(it["id"]), "zip", zip=str(it["zip"]), sha256=str(it.get("sha256") or "")))
-    return out
+    return remote_items(data)
 
 
 def installed_versions(root: Path) -> dict[str, str]:

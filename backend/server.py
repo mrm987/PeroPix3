@@ -3310,7 +3310,7 @@ PLUGINS_DIR = APP_DIR / "plugins"
 #  설치 = 여기서 `plugins/` 로 복사. 남의 것은 zip 주소로 받는다.
 OFFICIAL_DIR = INNER_DIR / "plugins-official"
 #: 원격 목록 주소 — 설정 `plugin_registry` 로 바꾼다. 못 받아도 번들 목록은 보인다
-PLUGIN_REGISTRY = "https://raw.githubusercontent.com/mrm987/PeroPix3/main/plugins-official/index.json"
+PLUGIN_REGISTRY = "https://raw.githubusercontent.com/mrm987/peropix-plugins/main/index.json"
 # ★플러그인 파이썬이 앱 액션을 시키는 창구 — import 되기 **전에** 채운다
 plugins_mod.host.tools = tools
 plugins_mod.host.app_dir = APP_DIR

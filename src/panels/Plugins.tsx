@@ -6,6 +6,7 @@ import { useFiles } from "../store/files";
 import { toast } from "../store/toast";
 import { FolderOpenButton } from "../components/FolderOpenButton";
 import { usePlugins, type PluginInfo } from "../lib/pluginHost";
+import { openExternal } from "../lib/openExternal";
 
 /** 플러그인 모드 — **설치된 플러그인마다 캔버스 하나** + 「관리」 탭 (설계: `docs/plugin-design.md`).
  *
@@ -24,9 +25,14 @@ type RegItem = {
   name: string;
   version: string;
   description: string;
-  source: "bundled" | "zip";
+  source: "bundled" | "repo" | "zip";
   installed: string | null;
 };
+
+/** 남의 플러그인이 오르는 목록 저장소 — 만드는 법·올리는 법(PR)은 저 README 가 정본이다. 여기엔 링크만 둔다
+ *  (같은 안내를 앱에도 적으면 두 곳이 되고, 절차가 바뀔 때마다 앱을 다시 배포해야 한다. 사용자 결정 2026-09-08).
+ *  백엔드의 기본 목록 주소(`server.py` `PLUGIN_REGISTRY`)와 같은 저장소다. */
+const PLUGIN_LIST_REPO = "https://github.com/mrm987/peropix-plugins";
 
 export function Plugins() {
   const t = useI18n((s) => s.t);
@@ -277,6 +283,13 @@ function Manage({ items, dir }: { items: PluginInfo[]; dir: string }) {
       </section>
 
       <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", lineHeight: 1.6 }}>{t("plugins.hint")}</div>
+      <button
+        data-plugins-author
+        onClick={() => openExternal(PLUGIN_LIST_REPO)}
+        style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "var(--text-2xs)", color: "var(--accent-ink)", textDecoration: "underline" }}
+      >
+        {t("plugins.author")}
+      </button>
     </div>
   );
 }

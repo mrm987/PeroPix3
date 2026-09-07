@@ -92,6 +92,7 @@ export const en = {
     zipUrl: "Plugin zip URL (https://…)",
     installZip: "Install from URL",
     extFail: "Could not load the extension of plugin \"{n}\": {e}",
+    author: "Make or publish a plugin (list repository)",
   },
 
   prompt: {

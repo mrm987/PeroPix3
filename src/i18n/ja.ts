@@ -92,6 +92,7 @@ export const ja: Dict = {
     zipUrl: "プラグイン zip の URL (https://…)",
     installZip: "URL からインストール",
     extFail: "プラグイン「{n}」の拡張を読み込めませんでした: {e}",
+    author: "プラグインを作る・公開する (一覧リポジトリ)",
   },
 
   prompt: {

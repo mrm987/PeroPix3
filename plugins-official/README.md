@@ -5,6 +5,7 @@
 업데이트는 앱과 함께 온다.
 
 - 플러그인의 모양(`plugin.json`·`server.py`·`web/`·`ext/`·`requirements.txt`)은 `docs/plugin-design.md` 3절.
-- `index.json` 은 **원격 목록**이다 — 앱이 `plugin_registry` 설정(기본: 이 저장소의 raw 주소)에서 받아 번들 목록과 합친다.
-  zip 주소가 있는 항목만 받을 수 있는 것으로 친다 (여기 폴더로 있는 것은 이미 번들이라 적을 필요가 없다).
+- 남의 플러그인은 여기 두지 않는다. 코드는 제작자 저장소에 있고, 목록 저장소 `mrm987/peropix-plugins` 의 `index.json` 에
+  `{id, repo, tag}` 만 오른다 (ComfyUI 레지스트리와 같은 꼴 — 라이선스도 제작자 것). 앱은 그 목록을 `plugin_registry`
+  설정(기본: 목록 저장소의 raw 주소)에서 받아 번들 목록과 합친다. 여기 폴더로 있는 것은 이미 번들이라 목록에 적지 않는다.
 - 플러그인은 앱과 같은 권한으로 돈다. 격리하지 않는다 (`CLAUDE.md` 「자유도가 안전보다 앞이다」).

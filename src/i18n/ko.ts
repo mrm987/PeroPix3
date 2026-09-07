@@ -92,6 +92,7 @@ export const ko: Dict = {
     zipUrl: "플러그인 zip 주소 (https://…)",
     installZip: "주소로 설치",
     extFail: "플러그인 「{n}」 의 확장을 못 불렀습니다: {e}",
+    author: "플러그인 만들기 · 올리기 (목록 저장소)",
   },
 
   prompt: {
