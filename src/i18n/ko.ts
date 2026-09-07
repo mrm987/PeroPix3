@@ -86,6 +86,7 @@ export const ko: Dict = {
     installed: "「{n}」 을(를) 설치했습니다. 앱을 다시 켜면 적용됩니다.",
     removed: "「{n}」 을(를) 지웠습니다. 앱을 다시 켜면 목록에서 사라집니다.",
     restart: "다시 켜야 적용됩니다",
+    restartBtn: "다시 켜기",
     noAvailable: "받을 수 있는 플러그인이 없습니다.",
     registryFail: "원격 목록은 못 받았습니다. 공식 플러그인만 보입니다.",
     zipUrl: "플러그인 zip 주소 (https://…)",

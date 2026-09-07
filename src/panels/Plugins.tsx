@@ -190,8 +190,20 @@ function Manage({ items, dir }: { items: PluginInfo[]; dir: string }) {
           onClick={() => void useFiles.getState().openDir(dir).catch((e) => toast(String(e), "warn"))}
         />
         {restart && (
-          <span data-plugins-restart style={{ marginLeft: "auto", fontSize: "var(--text-2xs)", color: "var(--accent-ink)" }}>
+          <span data-plugins-restart style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "var(--sp-2)", fontSize: "var(--text-2xs)", color: "var(--accent-ink)" }}>
             {t("plugins.restart")}
+            {/* ★설치·삭제는 다음에 켤 때 붙는다 — 여기서 바로 켜게 한다 (사용자 지시 2026-09-08). 껍데기의 `restart_app` */}
+            <button
+              data-plugins-restart-btn
+              onClick={() =>
+                void import("@tauri-apps/api/core")
+                  .then((m) => m.invoke("restart_app"))
+                  .catch((e) => toast(String(e), "warn"))
+              }
+              style={{ ...btn, background: "var(--accent)", color: "var(--accent-on)", borderColor: "var(--accent)" }}
+            >
+              {t("plugins.restartBtn")}
+            </button>
           </span>
         )}
       </div>

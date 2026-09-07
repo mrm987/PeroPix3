@@ -86,6 +86,7 @@ export const ja: Dict = {
     installed: "「{n}」をインストールしました。アプリを再起動すると反映されます。",
     removed: "「{n}」を削除しました。再起動すると一覧から消えます。",
     restart: "再起動が必要です",
+    restartBtn: "今すぐ再起動",
     noAvailable: "入手可能なプラグインはありません。",
     registryFail: "リモート一覧を取得できませんでした。公式プラグインのみ表示します。",
     zipUrl: "プラグイン zip の URL (https://…)",

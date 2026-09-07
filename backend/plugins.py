@@ -367,6 +367,14 @@ def remove(root: Path, pid: str) -> dict:
         return {"ok": False, "error": f"「{pid}」 가 없습니다"}
     import trash
 
-    if not trash.send_os([target]):
-        target.rename(root / f"_removed-{pid}-{time.strftime('%Y%m%d-%H%M%S')}")
+    try:
+        if not trash.send_os([target]):
+            target.rename(root / f"_removed-{pid}-{time.strftime('%Y%m%d-%H%M%S')}")
+    except PermissionError as e:
+        # ★★예외를 던지면 안 된다 (실측 2026-09-08): 던진 500 은 CORS 머리가 없어 화면에 「Failed to fetch」 로만
+        #   보였다. 폴더가 탐색기 등에 열려 있으면 휴지통도 이름 바꾸기도 거부된다 — 까닭을 답으로 돌려준다.
+        return {"ok": False, "error": "폴더가 다른 프로그램(탐색기 등)에 열려 있어 지우지 못했습니다. 닫고 다시 시도하세요.",
+                "detail": str(e)}
+    except OSError as e:
+        return {"ok": False, "error": f"지우지 못했습니다: {type(e).__name__}: {e}"}
     return {"ok": True, "id": pid, "restart": True}

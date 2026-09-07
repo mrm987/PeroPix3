@@ -86,6 +86,7 @@ export const en = {
     installed: "Installed \"{n}\". Restart the app to activate it.",
     removed: "Removed \"{n}\". It leaves the list after a restart.",
     restart: "Restart to apply",
+    restartBtn: "Restart now",
     noAvailable: "Nothing available to install.",
     registryFail: "Could not fetch the remote list. Only official plugins are shown.",
     zipUrl: "Plugin zip URL (https://…)",
