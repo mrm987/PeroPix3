@@ -13,6 +13,7 @@
       "name": "Tag Roll",
       "version": "1.0.0",
       "server": "server.py",       (선택) `router: APIRouter` 를 내놓는다 → /plug/<id>/…
+                                   플러그인 안의 다른 모듈은 `from . import x` 로 (폴더가 패키지다)
       "web": "web",                (선택) 캔버스 폴더 (index.html) → /plug/<id>/web/
       "ext": "ext/main.js",        (선택) 앱 페이지 안에서 돌 JS (문자열 또는 목록) → /plug/<id>/ext/…
       "contributes": { ... }       (선택) 기여 지점 — 화면이 읽는다 (2단계)
@@ -84,18 +85,22 @@ def _load_one(app: FastAPI, d: Path) -> Plugin:
         p.version = str(m.get("version") or "")
         p.contributes = m.get("contributes") if isinstance(m.get("contributes"), dict) else {}
 
-        # ★import 보다 먼저 — 플러그인이 제 `_lib`(pip 격리 설치)와 제 폴더를 앞에서 찾게
-        for extra in (d / "_lib", d):
-            s = str(extra)
-            if extra.is_dir() and s not in sys.path:
-                sys.path.insert(0, s)
+        # ★★플러그인 폴더 자체는 `sys.path` 에 넣지 않는다 (실측 2026-09-07, 게스트 QA): 앞에 넣었더니 플러그인의
+        #   `server.py` 가 백엔드의 `server` 모듈을 가려, 리로드 워커가 `server:app` 을 그쪽에서 찾다 죽었다
+        #   (`Attribute "app" not found in module "server"`). 플러그인 안의 모듈은 **패키지 상대 import**
+        #   (`from . import x`) 로 쓴다 — 아래 `submodule_search_locations` 가 플러그인 폴더를 패키지 자리로 준다.
+        # ★`_lib`(설치 때 pip 으로 격리 설치한 의존성)은 **뒤에** 붙인다 — 앱이 이미 가진 패키지(fastapi 등)를
+        #   플러그인 것이 덮으면 백엔드 전체가 흔들린다. 앱에 없는 것만 거기서 온다.
+        lib = d / "_lib"
+        if lib.is_dir() and str(lib) not in sys.path:
+            sys.path.append(str(lib))
 
         if m.get("server"):
             src = _inside(d, str(m["server"]))
             if not src.is_file():
                 raise ValueError(f"server 「{m['server']}」 가 없습니다")
             name = "peropix_plugin_" + d.name.replace("-", "_")
-            spec = importlib.util.spec_from_file_location(name, src)
+            spec = importlib.util.spec_from_file_location(name, src, submodule_search_locations=[str(d)])
             if spec is None or spec.loader is None:
                 raise ValueError(f"「{src.name}」 을 모듈로 못 읽습니다")
             mod = importlib.util.module_from_spec(spec)
