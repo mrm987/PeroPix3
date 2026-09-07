@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>카메라 구도</title>
+<!--
+  PeroPix 공식 플러그인 「카메라 구도」 — docs/camera-view-mockup.html (2026-08-11) 을 그대로 옮긴 것.
+  카메라 위치를 고르는 게 아니라 **보이는 모습**을 보면서 옮긴다. 설 수 있는 자리는 실측으로 확정한 것뿐이다
+  (방위 16 · 높이 12 · 거리 11). 실측 표와 그리기·조작은 목업과 같고, 앱에 닿는 것만 더했다:
+    · 「지금 씬에 넣기」 — 스타일 카드의 「카메라」 블록을 갈아 끼우고, 없으면 새로 붙인다 (postMessage → action edit_style_card)
+    · 「복사」 — 프롬프트 문자열을 클립보드로
+    · 색은 앱의 토큰(--bg 등)을 받아 쓴다 (못 받으면 목업 색)
+-->
+<style>
+  :root{
+    --bg-deep:#14181d; --bg:#1c2127; --panel:#232931; --line:#39424d;
+    --ink:#e8eef5; --ink-soft:rgba(232,238,245,.72); --ink-dim:rgba(232,238,245,.55);
+    --ink-faint:rgba(232,238,245,.42); --accent:#75b9ff; --gold:#ffd76b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg-deep);color:var(--ink);
+       font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif}
+  .wrap{max-width:800px;margin:0 auto;padding:12px 14px 30px}
+  .bar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .bar .sub{color:var(--ink-dim);font-size:12px;flex:1;min-width:0}
+  .bar button{padding:5px 12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);
+              border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap}
+  .bar button.primary{background:var(--accent);color:#0f141a;border-color:var(--accent);font-weight:650}
+  .bar button:disabled{opacity:.5;cursor:default}
+  .card{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px}
+  canvas{display:block;width:100%;border-radius:9px;background:#10141a;cursor:grab;
+         touch-action:none;user-select:none}
+  canvas:active{cursor:grabbing}
+  .hint{color:var(--ink-faint);font-size:11px;margin-top:8px}
+  .stat{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+        color:var(--ink-dim);font-size:12px;margin-top:10px}
+  .stat b{color:var(--gold);font-weight:600}
+  .mulrow{display:flex;align-items:center;gap:8px;margin-top:8px;
+          color:var(--ink-faint);font-size:11px}
+  .mulrow label{color:var(--accent);font-weight:650;font-size:12px}
+  .mulrow input{width:74px;padding:4px 7px;color:var(--gold);background:#10141a;
+    border:1px solid var(--line);border-radius:5px;font:12px Consolas,monospace}
+  pre{margin:8px 0 0;padding:9px 10px;background:#10141a;border:1px solid var(--line);border-radius:8px;
+      color:#fff2a6;font:12px/1.5 Consolas,monospace;white-space:pre-wrap;word-break:break-all}
+  .note{color:var(--ink-faint);font-size:11px;min-height:16px;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <button class="primary" id="btnPut" data-put>지금 씬에 넣기</button>
+    <button id="btnCopy" data-copy>복사</button>
+    <span class="sub">드래그로 둘러보기 · 휠로 거리. 넣기는 스타일 카드의 「카메라」 블록을 갈아 끼웁니다.</span>
+  </div>
+
+  <div class="card">
+    <canvas id="cv"></canvas>
+    <div class="stat">
+      <span>방위 <b id="vAz">정면</b> · 높이 <b id="vEl">수평</b> · 거리 <b id="vDist">전신</b></span>
+      <span><span style="color:#7fb9f0">■</span> 앞 &nbsp;<span style="color:#d98a5c">■</span> 뒤</span>
+    </div>
+    <pre id="out"></pre>
+    <div class="note" id="note"></div>
+    <div class="mulrow">
+      <label for="mulN">배율</label>
+      <input type="number" id="mulN" min="0.1" max="5" step="0.1" value="1.0">
+      <span>모든 가중치에 곱합니다. 실측 최적 1.0 · 2.5 부근부터 그림이 무너집니다.</span>
+    </div>
+    <div class="hint">
+      <b>드래그</b>로 둘러보기 · <b>휠</b>로 거리 · <b>← →</b> 방위 · <b>↑ ↓</b> 높이 · <b>Home</b> 정면
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 앱과의 창구 (lib/pluginHost 의 postMessage) ─────────────────────────────
+let seq = 0; const pending = new Map();
+window.addEventListener("message", (e) => {
+  const d = e.data;
+  if (d && d.type === "peropix" && pending.has(d.id)) { pending.get(d.id)(d); pending.delete(d.id); }
+});
+const host = (msg) => new Promise((resolve) => {
+  const id = ++seq; pending.set(id, resolve);
+  parent.postMessage({ type: "peropix", id, ...msg }, "*");
+  setTimeout(() => { if (pending.has(id)) { pending.delete(id); resolve({ ok: false, error: "앱이 답하지 않습니다" }); } }, 20000);
+});
+const inApp = window.parent !== window;
+
+// 앱의 토큰 색을 받아 쓴다 — 못 받으면 위의 기본색 그대로
+if (inApp) (async () => {
+  const map = { "--bg-deep": "--bg-deep", "--bg": "--bg", "--panel": "--panel", "--line": "--line", "--ink": "--ink", "--accent": "--accent" };
+  for (const [mine, theirs] of Object.entries(map)) {
+    const r = await host({ call: "theme", name: theirs });
+    if (r.ok && r.result) document.documentElement.style.setProperty(mine, r.result);
+  }
+})();
+
+// ── 실측 표 ────────────────────────────────────────────────────────────────
+const EL = [
+  { i:  6, y: 1.000, tag:"directly above, from above", w:1.50, kr:"바로 위" },
+  { i:  5, y: 0.875, tag:"directly above, from above", w:1.31, kr:"거의 위" },
+  { i:  4, y: 0.750, tag:"directly above, from above", w:1.13, kr:"직부감" },
+  { i:  3, y: 0.650, tag:"high angle, from above",     w:0.98, kr:"강한 부감" },
+  { i:  2, y: 0.450, tag:"high angle, from above",     w:0.68, kr:"부감" },
+  { i:  1, y: 0.250, tag:"high angle, from above",     w:0.38, kr:"약한 부감" },
+  { i:  0, y: 0.000, tag:"",                           w:0,    kr:"수평" },
+  { i: -1, y:-0.350, tag:"low angle, from below",      w:0.53, kr:"약한 앙각" },
+  { i: -2, y:-0.650, tag:"low angle, from below",      w:0.98, kr:"앙각" },
+  { i: -3, y:-0.750, tag:"directly below",             w:1.13, kr:"강한 앙각" },
+  { i: -4, y:-0.875, tag:"directly below",             w:1.31, kr:"거의 아래" },
+  { i: -5, y:-1.000, tag:"directly below",             w:1.50, kr:"바로 아래" },
+];
+
+const RUNG = ["portrait","upper body","cowboy shot","full body","wide shot","very wide shot"];
+const RUNG_KR = ["얼굴","상반신","허벅지","전신","원경","광각"];
+// 칸마다 화면에 담을 몸의 범위 — { 중심 높이, 담을 높이 } (발 0, 머리끝 1.8 기준)
+const FRAME = [ {c:1.62,h:0.46}, {c:1.30,h:1.06}, {c:1.06,h:1.56},
+                {c:0.92,h:2.08}, {c:0.92,h:3.40}, {c:0.92,h:6.00} ];
+const DIST = [];
+for (let k = 0; k < RUNG.length; k++) {
+  DIST.push({ tags:[RUNG[k]], kr:RUNG_KR[k], f:FRAME[k], mix:false });
+  if (k < RUNG.length-1) DIST.push({
+    tags:[RUNG[k],RUNG[k+1]], kr:RUNG_KR[k]+"+"+RUNG_KR[k+1], mix:true,
+    f:{ c:(FRAME[k].c+FRAME[k+1].c)/2, h:(FRAME[k].h+FRAME[k+1].h)/2 } });
+}
+
+const DIR = { front:"from front", back:"from behind", left:"from right", right:"from left" };
+const DEADZONE = 0.2;
+// ★순수 측면(x = ±0.5)만 총량이 3.0 이다. 2.0 으로는 `full body` 의 정면 편향에 밀려
+//   5장 모두 3/4 에서 멈췄고, 3.0 에서 4/5 가 완전한 옆모습이 됐다 (실측 side5.jpg).
+//   `profile` 을 얹는 쪽이 5/5 였지만 그 태그는 **좌우를 무작위로 바꿔** 방위축을 깬다.
+const azTotal = (x) => (Math.abs(Math.abs(x) - 0.5) < 1e-6 ? 3.0 : 2.0);
+function azTags(x){
+  const a = x*Math.PI, total = azTotal(x);
+  const r = { front:Math.max(0,Math.cos(a)), back:Math.max(0,-Math.cos(a)),
+              right:Math.max(0,Math.sin(a)), left:Math.max(0,-Math.sin(a)) };
+  const s = Object.values(r).reduce((p,v)=>p+v,0);
+  if (s) for (const k in r) r[k] /= s;
+  return ["front","back","left","right"]
+    .filter((n)=> r[n] > 0 && r[n]*total >= DEADZONE)
+    .map((n)=> ({ tag:DIR[n], w:r[n]*total }));
+}
+
+// ── 상태 ───────────────────────────────────────────────────────────────────
+const AZ_PINS = Array.from({length:16},(_,k)=> -0.875 + k*0.125);
+let azIdx = AZ_PINS.indexOf(0), elIdx = 6, distIdx = 6, mul = 1;   // elIdx 는 EL 배열 인덱스
+
+// ── 마네킹 (발 0 · 머리끝 1.8 · +z 가 정면) ─────────────────────────────────
+const B = [   // [시작, 끝, 굵기]
+  [[0,0.90,0],[0,1.33,0],0.36],                    // 몸통 — 캡슐 위끝 1.51 (머리와 겹침)
+  [[-0.195,1.36,0],[-0.300,0.75,0],0.115],         // 왼팔 — 몸통에서 조금 떼어 A 포즈
+  [[ 0.195,1.36,0],[ 0.300,0.75,0],0.115],         // 오른팔
+  [[-0.11,0.95,0],[-0.12,0.08,0],0.155],           // 왼다리
+  [[ 0.11,0.95,0],[ 0.12,0.08,0],0.155],           // 오른다리
+];
+const HEAD = { c:[0,1.64,0], r:0.155 };
+// ★앞뒤는 밝기가 아니라 **색**으로 가른다 (밝기로 하면 멀어서 어두운 건지 뒤라서 어두운 건지 헷갈린다)
+const C_FRONT = "#7fb9f0", C_BACK = "#d98a5c";
+
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const VW = 720, VH = 520;
+function fit(){ const dpr = Math.min(devicePixelRatio||1,2);
+  cv.style.aspectRatio = VW+"/"+VH; cv.width = VW*dpr; cv.height = VH*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0); }
+fit(); addEventListener("resize",()=>{ fit(); draw(); });
+
+// 몸 좌표 → 시점 좌표. 방위만큼 세계를 돌리고, 높이만큼 기울인다.
+function view(p){
+  const th = AZ_PINS[azIdx]*Math.PI, ph = EL[elIdx].y*Math.PI/2;
+  const x1 = p[0]*Math.cos(th) - p[2]*Math.sin(th);
+  const z1 = p[0]*Math.sin(th) + p[2]*Math.cos(th);
+  return { x:x1,
+           y: p[1]*Math.cos(ph) - z1*Math.sin(ph),
+           d: p[1]*Math.sin(ph) + z1*Math.cos(ph) };
+}
+function draw(){
+  const f = DIST[distIdx].f, scale = (VH-40)/f.h;
+  const anchor = view([0,f.c,0]);                  // 프레임 중심을 화면 중앙에
+  const S = (p) => { const v = view(p);
+    return { x:VW/2 + v.x*scale, y:VH/2 - (v.y-anchor.y)*scale, d:v.d }; };
+
+  ctx.clearRect(0,0,VW,VH);
+  const g = ctx.createLinearGradient(0,0,0,VH);
+  g.addColorStop(0,"#161c23"); g.addColorStop(1,"#11151a");
+  ctx.fillStyle = g; ctx.fillRect(0,0,VW,VH);
+
+  // 인물을 감싸는 고리 둘 — 가로(수평면)와 세로(앞뒤 수직면)
+  const ORB_Y = 0.90, ORB_R = 0.90;
+  const ringPts = (fn) => Array.from({length:97}, (_,k) => S(fn(k/96*Math.PI*2)));
+  const HORZ = ringPts((t)=>[Math.sin(t)*ORB_R, ORB_Y, Math.cos(t)*ORB_R]);
+  const VERT = ringPts((t)=>[0, ORB_Y + Math.sin(t)*ORB_R, Math.cos(t)*ORB_R]);
+  function ringPass(pts, near, col, w) {
+    ctx.strokeStyle = col; ctx.lineWidth = w; ctx.setLineDash([4,7]);
+    ctx.beginPath();
+    let pen = false;
+    for (const q of pts) {
+      const on = near ? q.d >= 0 : q.d < 0;
+      if (on) { pen ? ctx.lineTo(q.x,q.y) : ctx.moveTo(q.x,q.y); pen = true; }
+      else pen = false;
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  ringPass(HORZ, false, "rgba(140,180,225,.30)", 1.3);
+  ringPass(VERT, false, "rgba(140,180,225,.22)", 1.3);
+
+  // 바닥
+  ctx.beginPath();
+  for (let k=0;k<=64;k++){ const t=k/64*Math.PI*2;
+    const q=S([Math.cos(t)*ORB_R,0,Math.sin(t)*ORB_R]); k?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y); }
+  ctx.closePath(); ctx.strokeStyle="rgba(117,185,255,.16)"; ctx.lineWidth=1.2;
+  ctx.setLineDash([5,7]); ctx.stroke(); ctx.setLineDash([]);
+
+  const f0 = view([0,0,0]), f1 = view([0,0,1]);
+  const FWD = { sx:f1.x-f0.x, sy:-(f1.y-f0.y), d:f1.d-f0.d };
+
+  const clipHalf = (px,py,nx,ny) => {
+    const L = 4000, ex = -ny*L, ey = nx*L;
+    ctx.beginPath();
+    ctx.moveTo(px+ex, py+ey);           ctx.lineTo(px-ex, py-ey);
+    ctx.lineTo(px-ex+nx*L, py-ey+ny*L); ctx.lineTo(px+ex+nx*L, py+ey+ny*L);
+    ctx.closePath(); ctx.clip();
+  };
+  const splitT = (fn) => {
+    const m = Math.hypot(fn, FWD.d) || 1;
+    return Math.max(-1, Math.min(1, -FWD.d/m));
+  };
+
+  const hr = HEAD.r*scale;
+  const H = S(HEAD.c);
+  const items = B.map(([a,b,w])=>{ const A=S(a),C=S(b); return {t:"limb",A,C,w,d:(A.d+C.d)/2}; });
+  items.push({ t:"head", d:H.d });
+  items.sort((m,n)=>m.d-n.d);
+
+  for (const it of items) {
+    if (it.t === "limb") {
+      const half = it.w*scale/2;
+      let ux = it.C.x-it.A.x, uy = it.C.y-it.A.y;
+      const ul = Math.hypot(ux,uy);
+      let nx, ny, fn;
+      if (ul < half) {
+        const hl = Math.hypot(FWD.sx, FWD.sy);
+        if (hl < 1e-6) { nx = 1; ny = 0; fn = 0; }
+        else { nx = FWD.sx/hl; ny = FWD.sy/hl; fn = hl; }
+      } else {
+        ux/=ul; uy/=ul; nx = -uy; ny = ux; fn = FWD.sx*nx + FWD.sy*ny;
+        if (fn < 0) { nx=-nx; ny=-ny; fn=-fn; }
+      }
+      const t = splitT(fn);
+      const line = () => { ctx.beginPath(); ctx.moveTo(it.A.x,it.A.y); ctx.lineTo(it.C.x,it.C.y); ctx.stroke(); };
+      ctx.lineWidth = it.w*scale; ctx.lineCap = "round";
+      if (t <= -0.999) { ctx.strokeStyle = C_FRONT; line(); continue; }
+      ctx.strokeStyle = C_BACK; line();
+      if (t < 1) { ctx.save(); clipHalf(it.A.x+nx*t*half, it.A.y+ny*t*half, nx, ny);
+                   ctx.strokeStyle = C_FRONT; line(); ctx.restore(); }
+      continue;
+    }
+    const hl = Math.hypot(FWD.sx, FWD.sy);
+    const circle = () => { ctx.beginPath(); ctx.arc(H.x,H.y,hr,0,Math.PI*2); ctx.fill(); };
+    const ht = hl < 1e-6 ? (FWD.d > 0 ? -1 : 1) : splitT(hl);
+    if (ht <= -0.999) { ctx.fillStyle = C_FRONT; circle(); }
+    else {
+      ctx.fillStyle = C_BACK; circle();
+      if (ht < 1 && hl >= 1e-6) {
+        const nx = FWD.sx/hl, ny = FWD.sy/hl;
+        ctx.save(); clipHalf(H.x+nx*ht*hr, H.y+ny*ht*hr, nx, ny);
+        ctx.fillStyle = C_FRONT; circle(); ctx.restore();
+      }
+    }
+    if (FWD.d > 0) {
+      ctx.fillStyle = "#14202a";
+      for (const sx of [-0.40,0.40]) {
+        const e = S([sx*HEAD.r, HEAD.c[1]+0.03, HEAD.r*0.88]);
+        ctx.beginPath(); ctx.arc(e.x, e.y, Math.max(1.3,hr*.14), 0, Math.PI*2); ctx.fill();
+      }
+    }
+  }
+
+  ringPass(HORZ, true, "rgba(160,200,240,.42)", 1.4);
+  ringPass(VERT, true, "rgba(160,200,240,.30)", 1.4);
+
+  ctx.strokeStyle="rgba(232,238,245,.10)"; ctx.lineWidth=1;
+  ctx.strokeRect(14.5,14.5,VW-29,VH-29);
+
+  // 거리 눈금 — 휠이 바꾸는 값
+  const gx = VW-42, gyT = 96, gyB = 424;
+  const at = (i) => gyT + i/(DIST.length-1)*(gyB-gyT);
+  ctx.strokeStyle = "rgba(232,238,245,.20)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(gx, gyT); ctx.lineTo(gx, gyB); ctx.stroke();
+  ctx.textAlign = "right";
+  for (let i = 0; i < DIST.length; i++) {
+    const named = !DIST[i].mix;
+    ctx.strokeStyle = named ? "rgba(232,238,245,.40)" : "rgba(232,238,245,.20)";
+    ctx.lineWidth = named ? 1.6 : 1;
+    ctx.beginPath(); ctx.moveTo(gx-(named?12:6), at(i)); ctx.lineTo(gx, at(i)); ctx.stroke();
+    if (named) {
+      ctx.fillStyle = i === distIdx ? "#e8eef5" : "rgba(232,238,245,.36)";
+      ctx.font = (i === distIdx ? "600 " : "") + "10px 'Malgun Gothic',sans-serif";
+      ctx.fillText(DIST[i].kr, gx-16, at(i)+3);
+    }
+  }
+  ctx.fillStyle = "rgba(232,238,245,.34)"; ctx.font = "10px 'Malgun Gothic',sans-serif";
+  ctx.fillText("거리", gx+4, gyT-13);
+  ctx.fillStyle = "#7fb9f0";
+  ctx.beginPath(); ctx.arc(gx, at(distIdx), 5.5, 0, Math.PI*2); ctx.fill();
+  sync();
+}
+
+// ── 출력 ───────────────────────────────────────────────────────────────────
+function promptTags(){
+  const x = AZ_PINS[azIdx], e = EL[elIdx], d = DIST[distIdx];
+  // ★가중치 1.00 은 안 적는다 — `1.00::tag::` 와 `tag` 는 NAI 에서 같은 것이다
+  const parts = [];
+  const wt = (w, tag) => { const v = (w*mul).toFixed(2); return v === "1.00" ? tag : `${v}::${tag}::`; };
+  for (const t of azTags(x)) parts.push(wt(t.w, t.tag));
+  if (e.tag) for (const t of e.tag.split(",")) parts.push(wt(e.w, t.trim()));
+  for (const t of d.tags) parts.push(wt(1, t));
+  return parts;
+}
+function sync(){
+  const x = AZ_PINS[azIdx], e = EL[elIdx], d = DIST[distIdx];
+  const parts = promptTags();
+  document.getElementById("out").textContent = parts.join(", ") + (parts.length?",":"");
+  const deg = Math.round(x*180);
+  document.getElementById("vAz").textContent =
+    Math.abs(deg)===180 ? "후면" : deg===0 ? "정면" : (deg>0?"오른쪽 ":"왼쪽 ")+Math.abs(deg)+"°";
+  document.getElementById("vEl").textContent = e.kr;
+  document.getElementById("vDist").textContent = d.kr;
+}
+
+// ── 조작 ───────────────────────────────────────────────────────────────────
+let drag = null;
+cv.addEventListener("pointerdown",(ev)=>{ cv.setPointerCapture(ev.pointerId);
+  drag = { x:ev.clientX, y:ev.clientY, az:azIdx, el:elIdx, id:ev.pointerId }; });
+cv.addEventListener("pointermove",(ev)=>{
+  if (!drag || drag.id !== ev.pointerId) return;
+  // 인물을 손으로 잡아 돌리는 감각 — 끄는 방향으로 인물이 돌아간다
+  const stepX = Math.round((ev.clientX-drag.x)/26), stepY = Math.round((ev.clientY-drag.y)/34);
+  azIdx = ((drag.az - stepX) % 16 + 16) % 16;
+  elIdx = Math.max(0, Math.min(EL.length-1, drag.el - stepY));
+  draw();
+});
+const stop = () => drag = null;
+cv.addEventListener("pointerup",stop); cv.addEventListener("pointercancel",stop);
+cv.addEventListener("wheel",(ev)=>{ ev.preventDefault();
+  const dv = ev.deltaY !== 0 ? ev.deltaY : ev.deltaX;
+  if (dv === 0) return;
+  distIdx = Math.max(0, Math.min(DIST.length-1, distIdx + (dv>0?1:-1)));   // 휠은 거리만
+  draw();
+},{passive:false});
+addEventListener("keydown",(ev)=>{
+  if (ev.target && /INPUT|TEXTAREA/.test(ev.target.tagName)) return;
+  const k = ev.key;
+  if (k==="ArrowLeft") azIdx = (azIdx+15)%16;
+  else if (k==="ArrowRight") azIdx = (azIdx+1)%16;
+  else if (k==="ArrowUp") elIdx = Math.max(0, elIdx-1);
+  else if (k==="ArrowDown") elIdx = Math.min(EL.length-1, elIdx+1);
+  else if (k==="Home") { azIdx = AZ_PINS.indexOf(0); elIdx = 6; distIdx = 6; }
+  else return;
+  ev.preventDefault(); draw();
+});
+const mulN = document.getElementById("mulN");
+mulN.oninput = () => {
+  const v = Number(mulN.value);
+  if (Number.isFinite(v) && v > 0) { mul = v; sync(); }
+};
+
+// ── 앱에 넣기 · 복사 ────────────────────────────────────────────────────────
+const LABEL = "카메라";
+const note = (s) => { document.getElementById("note").textContent = s; };
+const btnPut = document.getElementById("btnPut");
+btnPut.disabled = !inApp;
+btnPut.onclick = async () => {
+  const tags = promptTags().join(", ");
+  btnPut.disabled = true; note("넣는 중…");
+  try {
+    // 같은 이름의 블록이 하나 있으면 갈아 끼우고, 없으면 새로 붙인다 (여럿이면 앱이 되묻는 대신 새로 붙인다)
+    let r = await host({ call: "action", name: "edit_style_card", args: { label: LABEL, tags, mode: "replace", block: "" } });
+    const failed = !r.ok || (r.result && r.result.error);
+    if (failed) r = await host({ call: "action", name: "edit_style_card", args: { label: LABEL, tags, mode: "add" } });
+    if (!r.ok) note("앱이 거절했습니다: " + r.error);
+    else if (r.result && r.result.error) note("앱이 거절했습니다: " + (r.result.error.message || JSON.stringify(r.result.error)));
+    else { note((r.result && r.result.did) || "넣었습니다."); host({ call: "toast", text: "카메라 구도를 스타일 카드에 넣었습니다" }); }
+  } finally { btnPut.disabled = false; }
+};
+document.getElementById("btnCopy").onclick = async () => {
+  const s = promptTags().join(", ") + ",";
+  try { await navigator.clipboard.writeText(s); note("복사했습니다."); }
+  catch { const ta = document.createElement("textarea"); ta.value = s; document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); note("복사했습니다."); }
+};
+draw();
+</script>
+</body>
+</html>
