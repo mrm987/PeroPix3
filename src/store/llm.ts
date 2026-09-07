@@ -860,6 +860,8 @@ function cliPost(text: string, s: S, addr = "") {
       resume: s.cliSession ?? "",
       model: useCli.getState().model,
       effort: useCli.getState().effort,
+      // ★앱 밖 도구 허용 — 설정 「앱 밖 도구 허용」 (기본 켬). 백엔드가 실행 깃발로 옮긴다
+      open: useCli.getState().open,
     }),
   });
 }

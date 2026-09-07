@@ -86,7 +86,8 @@ type Persisted = {
   perSlot: number;
   /** ★★**조수의 작업을 자동 승인한다** (사용자 결정 2026-08-24).
    *
-   *  켜면 승인 카드를 안 띄우고 바로 실행한다. 끄면(기본) 되돌릴 수 있는 일까지 전부 묻는다.
+   *  켜면(기본, 2026-09-07 부터) 승인 카드를 안 띄우고 바로 실행한다. 끄면 되돌릴 수 있는
+   *  일까지 전부 묻는다.
    *  ★칸이 **둘인** 까닭: 이 앱에는 되돌릴 수 있는 것과 없는 것이 섞여 있다. 일상 작업은
    *    안 끊기게 하되 정말 위험한 것만 남기려면 아래 `agentAskHard` 가 함께 있어야 한다. */
   agentAuto: boolean;
@@ -204,7 +205,8 @@ const DEFAULTS: Persisted = {
   laneHeight: 302,
   curated: false,
   perSlot: 1,
-  agentAuto: false,
+  // ★★기본 켬 (사용자 결정 2026-09-07: 자유도 우선, `CLAUDE.md`). 되돌릴 수 없는 것만 묻는다.
+  agentAuto: true,
   agentAskHard: true,
   notifyDone: true,
   notifySound: false,

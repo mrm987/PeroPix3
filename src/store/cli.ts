@@ -69,6 +69,10 @@ type S = {
   model: string;
   /** 추론 강도 (언제나 넘긴다) */
   effort: string;
+  /** ★★**앱 밖 도구(파일·셸·웹) 허용** — 기본 켬 (사용자 결정 2026-09-07, 자유도 우선).
+   *  끄면 예전 잠금이다: 우리 MCP 도구만 열고 나머지는 이름으로 닫는다 (`backend/cliagent.py`). */
+  open: boolean;
+  setOpen: (v: boolean) => void;
   setModel: (v: string) => void;
   setEffort: (v: string) => void;
   items: CliItem[];
@@ -119,11 +123,19 @@ function seat(it: CliItem) {
   return { agent: it.id, exe: it.path, model };
 }
 
+/** 앱 밖 도구 허용 — ★**끈 것만** 적는다 ("0"). 값이 없으면 켜진 것이다 (기본 켬). */
+const OPEN_KEY = "peropix.cliOpen";
+
 export const useCli = create<S>((set, get) => ({
   engine: load(),
   agent: loadAgent(),
   model: readStr(MODEL_KEY(loadAgent())),
   effort: readStr(EFFORT_KEY) || CLI_EFFORT_DEFAULT,
+  open: readStr(OPEN_KEY) !== "0",
+  setOpen(v) {
+    writeStr(OPEN_KEY, v ? "" : "0");
+    set({ open: v });
+  },
   setModel(v) {
     writeStr(MODEL_KEY(get().agent), v);
     set({ model: v });

@@ -161,11 +161,11 @@ TOOL_RISK = {
     "write_guide": "ask",   # 지침 **전문**을 갈아 끼운다. 되살아난다
     "move_files": "ask",    # ★자동 되돌리기가 없다 (파일은 그대로지만 복구 경로가 없다)
     "delete_card": "ask",   # 되돌아오지만 **사용자가 넣어 둔 재료**가 사라진다
-    # ★★`create_card` 도 묻는다 (사용자 지시 2026-08-25): 조수가 요청도 없이 덱에 카드를
-    #   쌓아 두는 일이 잦았다 — 저장은 **사용자가 하는 것**이 기본이다 (지침에도 적었다).
-    "create_card": "ask",
     # ★만들거나 되살리는 쪽은 **잃는 것이 없다** → none
     #   create_card · create_folder · restore_files · 읽기 전부
+    # ★`create_card` 는 한때 물었다 (2026-08-25, 조수가 요청도 없이 덱에 카드를 쌓아서).
+    #   2026-09-07 에 도로 none 으로 — 자유도를 앞세우기로 했고(`CLAUDE.md`), 안 시킨 저장은
+    #   승인 카드가 아니라 지침(「덱은 사용자가 맡기는 것」)으로 막는다.
 }
 
 #: 앱 액션 목록 — **빌드할 때** 프론트에서 뽑아 둔 것 (`scripts/gen-actions.mjs`)
@@ -496,15 +496,11 @@ class Tools:
             return fail("blocked", "앞선 승인 요청이 아직 화면에 떠 있습니다. 그것을 먼저 처리해 주세요.")
         return fail("refused", "사용자가 승인하지 않았습니다.", retry="never")
 
-    #: **우리 대화를 건드리는** 도구 — 바깥 에이전트에게는 열지 않는다 (사용자 결정 2026-08-31).
-    #  ★묻는 것도 이름 붙이는 것도 **제 대화에서** 할 일이다. 여기서 열어 두면 사용자가 쓰던
-    #    대화에 남의 물음이 끼어들고, 대화 이름이 바깥에서 바뀐다.
-    CHAT_TOOLS = {"ask_user", "name_chat"}
+    #  ★`ask_user`·`name_chat` 을 바깥 에이전트에 막던 갈래(2026-08-31)는 걷었다 (사용자 결정
+    #    2026-09-07, 자유도 우선). 바깥이 물으면 앱 대화에 카드가 뜨고 그쪽 도구는 답을
+    #    기다린다 — 그것을 감수하는 것은 쓰는 쪽의 선택이다.
 
     async def call(self, name: str, args: dict, outside: bool = False) -> dict:
-        if outside and name in self.CHAT_TOOLS:
-            return fail("not_here", "이 도구는 PeroPix 앱 안의 조수만 씁니다. "
-                        "묻거나 이름 붙이는 것은 당신 쪽 대화에서 하세요.", retry="never")
         # ★★표에 없는 이름이라도 **액션 목록에 있으면 앱에 시킨다** (2026-08-24).
         #   ★기다리는 시간이 넉넉해야 한다: 되돌릴 수 없는 일 앞에서는 앱이 **승인 카드**를
         #     띄우고 사람이 누를 때까지 멈춘다 (`docs/agent-actions-design.md` 2-5).
@@ -1324,9 +1320,9 @@ The user makes art with NovelAI (NAI); a prompt is **Danbooru tags** joined by c
   2. **Add an empty card on screen** - `add_style_card` / `add_character` / `create_scene`.
   3. **Put a saved deck card on screen** - `apply_card`, `stack_character`.
   4. **Remove from screen** - `remove_style_card` / `remove_character` / `delete_scene`.
-  5. **Save to the deck** - `save_card` (what is on screen) - only when they say "save" or "deck".
-  6. **Make or overwrite a deck card from scratch** - `create_card` / `update_card` - last resort,
-     only when they ask for a deck card in words.
+  5. **Save to the deck** - `save_card` (what is on screen) when they want to keep it.
+  6. **Make or overwrite a deck card directly** - `create_card` / `update_card` - when they
+     want a deck card that is not on screen.
   `get_workspace` shows `prompt.styleCard` - `null` means there is no style card on that tab
   yet, and then `base` is empty because there is nowhere for it to live.
 
@@ -1456,11 +1452,11 @@ Principles:
   request, it must be one of the options - not only the items one by one. And when more
   than one answer can be true at once, pass `multi=true`; a single-pick list forces them
   to answer a question you did not ask.
-- ★★**Work on the screen first. Saving to the deck is the user's call.**
+- ★★**Work on the screen first; the deck is for what they want to keep.**
   A request about prompts means **what they are looking at** - use edit_style_card /
-  edit_character / edit_scene (or apply_card to put a saved card onto the screen). Do **not**
-  save or create a deck card unless they said so in words ("save it as a card", "put it in
-  the deck"). Cards are storage, and filling their deck uninvited is not helpful.
+  edit_character / edit_scene (or apply_card to put a saved card onto the screen). Save or
+  create a deck card when they ask for it or clearly want something kept for later; do not
+  fill their deck with cards nobody asked for.
 - ★When a request could land in more than one place **and the wording really is split**
   (screen / new card / an existing card), ask which. Not when (1) is the obvious reading -
   see the default above.

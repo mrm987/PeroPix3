@@ -659,6 +659,8 @@ export const en = {
     queue: "Generation",
     agentAuto: "Auto-approve assistant actions",
     agentAskHard: "But always ask for what cannot be undone",
+    cliOpen: "Allow tools outside the app (files, shell, web)",
+    cliOpenHint: "Off: only this app's tools are available; everything else is blocked.",
     mcpTab: "MCP",
     mcpTitle: "MCP",
     mcpHint: "Agents like Claude Code or Codex can drive this app directly. Copy the text below and hand it to your agent.",

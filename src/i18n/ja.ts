@@ -657,6 +657,8 @@ export const ja: Dict = {
     queue: "生成",
     agentAuto: "アシスタントの作業を自動承認",
     agentAskHard: "ただし取り消せないものは必ず確認",
+    cliOpen: "アプリ外のツールを許可（ファイル・シェル・Web）",
+    cliOpenHint: "オフにするとこのアプリのツールだけを使い、それ以外は遮断します。",
     mcpTab: "MCP 連携",
     mcpTitle: "MCP 連携",
     mcpHint: "Claude Code や Codex のようなエージェントがこのアプリを直接操作します。下をコピーしてエージェントに渡してください。",

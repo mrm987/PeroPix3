@@ -951,6 +951,8 @@ class CliRun(BaseModel):
     model: str = ""
     #: 추론 강도 — 비우면 CLI 기본값
     effort: str = ""
+    #: ★앱 밖 도구(파일·셸·웹) 허용 — 설정 「앱 밖 도구 허용」 (사용자 결정 2026-09-07, 기본 켬)
+    open: bool = True
 
 
 @app.get("/api/cli/detect")
@@ -1022,7 +1024,7 @@ async def cli_run(body: CliRun, port: int = 0):
     backend = f"http://127.0.0.1:{port or CURRENT_PORT}{KEY_PREFIX}"
     system = body.system or agent_mod.system_prompt(CONFIG.get("support_url", ""), GUIDE.block())
     s = await _session_for(agent, exe, backend, body.chat, body.resume)
-    s.model, s.effort = body.model, body.effort
+    s.model, s.effort, s.open = body.model, body.effort, body.open
 
     # 도는 중이면 끼워 넣어 본다 — 되면 새 턴을 열지 않는다
     if s.busy:

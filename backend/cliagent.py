@@ -11,9 +11,11 @@
     --mcp-config <설정> --strict-mcp-config --allowedTools "mcp__peropix__*"
 
   - `--strict-mcp-config` 를 빼면 **사용자의 다른 MCP 서버까지 딸려 온다.**
-  - `--allowedTools` 는 **자동 승인일 뿐 막지 않는다.** 그래서 `--disallowedTools` 로
-    Read/Bash 등을 실제로 닫는다 — 안 닫으면 에이전트가 우리 소스를 뒤지다 권한 벽에 막힌다
-    (실사용 로그에서 확인).
+  - `--allowedTools` 는 **자동 승인일 뿐 막지 않는다.** 잠금 모드(`open=False`)에서는
+    `--disallowedTools` 로 Read/Bash 등을 실제로 닫는다 — 안 닫으면 에이전트가 우리 소스를
+    뒤지다 권한 벽에 막힌다 (실사용 로그에서 확인).
+  - ★★기본은 **연 모드**다 (사용자 결정 2026-09-07): 저쪽 도구를 전부 쓰고 묻지 않는다.
+    잠금은 설정 「앱 밖 도구 허용」을 끄면 된다 (`Runner.argv` 의 `open`).
   - ★`--bare` 는 쓰지 않는다 — OAuth 를 안 읽어 **구독 대신 API 키**를 요구한다.
   - ★**앱 안의 빈 폴더에서 돌린다**(`work_dir`). 예전엔 앱 밖이었다 — 왜 되돌렸는지는
     그 함수의 주석에 있다 (근거가 실측으로 무너졌다).
@@ -261,28 +263,44 @@ class Runner:
     EFFORTS = ["max", "xhigh", "high", "medium", "low"]
 
     def argv(self, cfg: Path, system: str = "", resume: str = "",
-             model: str = "", effort: str = "") -> list[str]:
-        """실행 깃발 — **여기 하나뿐이다.** 회귀(`test_lockdown_live.py`)도 이것을 그대로 쓴다."""
+             model: str = "", effort: str = "", open: bool = True) -> list[str]:
+        """실행 깃발 — **여기 하나뿐이다.** 회귀(`test_lockdown_live.py`)도 이것을 그대로 쓴다.
+
+        ★★`open` — **앱 밖 도구(파일·셸·웹)를 허용한다** (사용자 결정 2026-09-07, 기본 켬).
+          이 앱은 자유도를 안전보다 앞에 둔다 (`CLAUDE.md` 「자유도의 기준은 ComfyUI」).
+          켜면 저쪽 CLI 가 제 도구를 전부 쓰고, 허용 목록 밖도 묻지 않고 지나간다
+          (`bypassPermissions`). 헤드리스라 **답할 사람이 없는** `AskUserQuestion` 만 닫는다.
+        ★끄면 예전의 잠금이다 — 설정에서 끌 수 있게 둔다 (아래 갈래)."""
         args = [
             "-p",
             "--mcp-config", str(cfg),
             "--strict-mcp-config",
             "--allowedTools", "mcp__peropix__*",
-            # ★`--allowedTools` 는 **자동 승인일 뿐 막지 않는다.** 실사용에서 에이전트가
-            #   Read/Grep/Bash 로 우리 소스를 뒤지고 고치려 들었다. 이름으로 닫는다.
-            "--disallowedTools",
-            "Bash", "PowerShell", "BashOutput", "KillShell",
-            "Read", "Write", "Edit", "NotebookEdit", "Glob", "Grep",
-            "WebFetch", "WebSearch", "Task", "SlashCommand",
-            # ★`Skill` 도 닫는다 — 바깥 지침을 문맥에 끌어들이는 통로다
-            "Skill",
-            # ★헤드리스에는 **답할 사람이 없다** — 물어 놓고 턴만 버린다 (실측 2026-08-08)
-            "AskUserQuestion",
-            # ★★**실제로 막는 것은 이것이다.** 위 목록은 이름을 하나씩 적는 것이라 새 도구가
-            #   생기면 샌다 — 실측(2026-08-08)에서 에이전트가 `PowerShell` 을 시도했는데
-            #   그 이름이 목록에 없었다. `dontAsk` 가 **허용 목록 밖을 묻지 않고 거절**해서
-            #   막혔다. 목록은 보조일 뿐이니 이 깃발을 빼지 말 것.
-            "--permission-mode", "dontAsk",
+        ]
+        if open:
+            args += [
+                # ★헤드리스에는 **답할 사람이 없다** — 물어 놓고 턴만 버린다 (실측 2026-08-08)
+                "--disallowedTools", "AskUserQuestion",
+                "--permission-mode", "bypassPermissions",
+            ]
+        else:
+            args += [
+                # ★`--allowedTools` 는 **자동 승인일 뿐 막지 않는다.** 실사용에서 에이전트가
+                #   Read/Grep/Bash 로 우리 소스를 뒤지고 고치려 들었다. 이름으로 닫는다.
+                "--disallowedTools",
+                "Bash", "PowerShell", "BashOutput", "KillShell",
+                "Read", "Write", "Edit", "NotebookEdit", "Glob", "Grep",
+                "WebFetch", "WebSearch", "Task", "SlashCommand",
+                # ★`Skill` 도 닫는다 — 바깥 지침을 문맥에 끌어들이는 통로다
+                "Skill",
+                "AskUserQuestion",
+                # ★★**실제로 막는 것은 이것이다.** 위 목록은 이름을 하나씩 적는 것이라 새 도구가
+                #   생기면 샌다 — 실측(2026-08-08)에서 에이전트가 `PowerShell` 을 시도했는데
+                #   그 이름이 목록에 없었다. `dontAsk` 가 **허용 목록 밖을 묻지 않고 거절**해서
+                #   막혔다. 목록은 보조일 뿐이니 이 깃발을 빼지 말 것.
+                "--permission-mode", "dontAsk",
+            ]
+        args += [
             "--output-format", "stream-json",
             "--verbose",
         ]

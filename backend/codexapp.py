@@ -41,19 +41,20 @@ from typing import Any, Callable
 import cliagent
 
 
-def thread_config(backend: str) -> dict:
+def thread_config(backend: str, open: bool = True) -> dict:
     """`thread/start` 에 실어 보내는 설정 — **여기 하나뿐이다.**
 
     ★`default_tools_approval_mode="approve"` 가 없으면 **도구가 조용히 안 돈다.**
       물어볼 사람이 없어 코덱스가 스스로 취소한다 (`exec` 쪽에서 밟은 것과 같다).
-    ★셸은 끈다 (사용자 결정 2026-08-15). `features.shell_tool=false` 가 먹는 것을 실측했다 —
-      끄기 전에는 시키지도 않은 PowerShell 을 돌렸다.
-    ★모래상자는 읽기 전용. 셸이 없어도 다른 경로가 생길 수 있으니 울타리는 남긴다."""
+    ★★`open` — **앱 밖 도구를 허용한다** (사용자 결정 2026-09-07, 기본 켬). 켜면 셸을 열고
+      모래상자를 푼다 (`danger-full-access`). 클로드 코드의 `bypassPermissions` 와 같은 급이다.
+    ★끄면 예전 잠금이다 (사용자 결정 2026-08-15): 셸을 끄고(`features.shell_tool=false` 가
+      먹는 것을 실측했다 — 끄기 전에는 시키지도 않은 PowerShell 을 돌렸다) 모래상자는 읽기 전용."""
     spec = cliagent.mcp_spec(backend)
     return {
-        "sandbox_mode": "read-only",
+        "sandbox_mode": "danger-full-access" if open else "read-only",
         "approval_policy": "never",
-        "features": {"shell_tool": False},
+        "features": {"shell_tool": bool(open)},
         "mcp_servers": {
             "peropix": {
                 "command": spec["command"],

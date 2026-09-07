@@ -678,6 +678,8 @@ export const ko: Dict = {
     queue: "생성",
     agentAuto: "조수의 작업을 자동 승인",
     agentAskHard: "단, 되돌릴 수 없는 것은 언제나 묻기",
+    cliOpen: "앱 밖 도구 허용 (파일·셸·웹)",
+    cliOpenHint: "끄면 이 앱의 도구만 쓰고 나머지는 막습니다.",
     mcpTab: "MCP 연동",
     mcpTitle: "MCP 연동",
     mcpHint: "클로드 코드·코덱스 같은 에이전트가 이 앱을 직접 다룹니다. 아래를 복사해 그 에이전트에게 건네세요.",
