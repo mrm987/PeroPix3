@@ -33,7 +33,16 @@ export type PluginInfo = {
   /** 못 읽었으면 까닭. 비면 정상 */
   error: string;
   dir: string;
+  /** 꺼진 플러그인 — 백엔드가 붙이지 않았다. 화면도 캔버스·단추·메뉴를 감춘다 (`isOn`) */
+  enabled: boolean;
 };
+
+/** 화면에 내놓아도 되는 플러그인인가 — 켜져 있고 읽혔다. ★끄면 다시 켜기 전에도 단추·메뉴·캔버스는 바로 감춘다
+ *  (백엔드 라우터는 다음에 켤 때 떨어지지만, 사용자 눈에는 끈 즉시 사라져야 한다). */
+export function isOn(id: string): boolean {
+  const p = usePlugins.getState().items.find((x) => x.id === id);
+  return !!p && !p.error && p.enabled !== false;
+}
 
 /** `plugin.json` 의 `contributes.buttons[]` — JS 없이 단추 하나를 두는 길 */
 export type DeclaredButton = {
@@ -83,7 +92,7 @@ export const usePlugins = create<S>((set) => ({
     extDone = true;
     installBridge();
     for (const p of r.items) {
-      if (p.error) continue;
+      if (p.error || p.enabled === false) continue;
       // 선언된 단추 — JS 없이도 된다
       for (const b of p.contributes?.buttons ?? []) {
         try {

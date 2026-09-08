@@ -3316,13 +3316,34 @@ plugins_mod.host.tools = tools
 plugins_mod.host.app_dir = APP_DIR
 # ★★라우트를 다 만든 **뒤에** 붙인다 — 플러그인이 `/plug/<id>/…` 를 얻고, 앱 창구는 그대로다.
 #   같은 프로세스라 KeyGate 도 그대로 지난다 (화면은 `/k/<열쇠>/plug/…` 로 부른다).
-PLUGINS = plugins_mod.load_all(app, PLUGINS_DIR)
+#: 꺼 둔 플러그인 id — 폴더는 그대로, 켤 때 붙이지 않는다 (관리 탭의 켜기/끄기, 사용자 지시 2026-09-08)
+PLUGINS = plugins_mod.load_all(app, PLUGINS_DIR, set(CONFIG.get("plugins_disabled") or []))
 
 
 @app.get("/api/plugins")
 async def plugins_list():
-    """설치된 플러그인 — 캔버스 주소·확장 JS·기여 지점·못 읽은 까닭. 화면의 플러그인 모드가 읽는다."""
+    """설치된 플러그인 — 캔버스 주소·확장 JS·기여 지점·못 읽은 까닭·켜짐. 화면의 플러그인 모드가 읽는다."""
     return {"dir": str(PLUGINS_DIR), "items": [p.info() for p in PLUGINS]}
+
+
+class PluginEnabled(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/plugins/{pid}/enabled")
+async def plugins_set_enabled(pid: str, body: PluginEnabled):
+    """켜기/끄기 — 설정에 적고 목록의 표시만 바꾼다. 실제로 붙이고 떼는 것은 다음에 켤 때다 (설치·삭제와 같다)."""
+    if not plugins_mod.ID_RE.match(pid):
+        raise HTTPException(400, "잘못된 id")
+    off = [x for x in (CONFIG.get("plugins_disabled") or []) if x != pid]
+    if not body.enabled:
+        off.append(pid)
+    CONFIG["plugins_disabled"] = off
+    save_config(CONFIG)
+    for p in PLUGINS:
+        if p.id == pid:
+            p.enabled = body.enabled
+    return {"ok": True, "id": pid, "enabled": body.enabled}
 
 
 @app.get("/api/plugins/registry")

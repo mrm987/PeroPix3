@@ -48,12 +48,14 @@ class Plugin:
     contributes: dict = field(default_factory=dict)
     #: 못 읽었으면 까닭. 비면 정상
     error: str = ""
+    #: 꺼진 플러그인 — 폴더는 그대로 두고 **붙이지 않는다** (설정 `plugins_disabled`). 켜고 끄는 것은 다음에 켤 때 적용
+    enabled: bool = True
 
     def info(self) -> dict:
         return {
             "id": self.id, "name": self.name or self.id, "version": self.version,
             "web": self.web, "ext": self.ext, "contributes": self.contributes,
-            "error": self.error, "dir": str(self.dir),
+            "error": self.error, "dir": str(self.dir), "enabled": self.enabled,
         }
 
 
@@ -140,8 +142,18 @@ def _load_one(app: FastAPI, d: Path) -> Plugin:
     return p
 
 
-def load_all(app: FastAPI, root: Path) -> list[Plugin]:
-    """`root` 아래 폴더를 이름 차례로 읽어 붙인다. 폴더가 없으면 만든다 (사용자가 열어 넣는 자리다)."""
+def _skipped(d: Path) -> Plugin:
+    """꺼진 플러그인 — 이름·판만 읽고 아무것도 붙이지 않는다. 목록에는 남아야 다시 켤 수 있다."""
+    p = Plugin(id=d.name, dir=d, enabled=False)
+    m = _manifest_of(d)
+    if m:
+        p.name, p.version = str(m.get("name") or d.name), str(m.get("version") or "")
+    return p
+
+
+def load_all(app: FastAPI, root: Path, disabled: set[str] | None = None) -> list[Plugin]:
+    """`root` 아래 폴더를 이름 차례로 읽어 붙인다. 폴더가 없으면 만든다 (사용자가 열어 넣는 자리다).
+    `disabled` 에 든 id 는 붙이지 않고 꺼진 것으로만 목록에 둔다."""
     try:
         root.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -152,7 +164,7 @@ def load_all(app: FastAPI, root: Path) -> list[Plugin]:
             continue
         if not (d / "plugin.json").is_file():
             continue
-        out.append(_load_one(app, d))
+        out.append(_skipped(d) if disabled and d.name in disabled else _load_one(app, d))
     if out:
         ok = [p.id for p in out if not p.error]
         bad = [p.id for p in out if p.error]
@@ -247,8 +259,12 @@ async def remote_list(url: str) -> list[dict]:
         return []
     import httpx
 
+    import time
+
+    # ★캐시를 비껴간다 — raw.githubusercontent.com 은 몇 분 동안 옛 파일을 주는데(실측 2026-09-08, 게스트가 push 직후의
+    #   목록을 못 봤다), 쿼리가 다르면 새로 받는다. 다른 서버는 모르는 쿼리를 무시한다.
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as c:
-        r = await c.get(url)
+        r = await c.get(url, params={"_": int(time.time())})
         r.raise_for_status()
         data = r.json()
     return remote_items(data)
@@ -269,22 +285,64 @@ def _vt(v: str) -> tuple[int, ...]:
     return tuple(int(x) for x in re.findall(r"\d+", v or "")) or (0,)
 
 
-async def registry(root: Path, official: Path, url: str) -> dict:
-    """받을 수 있는 것 전부 — 번들(공식) + 원격. 같은 id 면 판이 높은 쪽. `installed` 는 지금 깔린 판."""
-    by_id: dict[str, dict] = {}
+# ── 출처 — 「같은 플러그인」의 기준은 id 가 아니라 id + 출처다 (사용자 지적 2026-09-08) ──
+#  id 만 같으면 새 판으로 보던 규칙은, 목록의 남이 공식 id 를 쓰거나 폴더에 직접 넣은 것과 같은 id 를 쓰면
+#  그것을 「업데이트」로 덮어쓰게 했다. 그래서 (1) 공식(번들) id 는 예약 — 목록 항목이 있어도 무시하고,
+#  (2) 설치할 때 출처를 `_origin.json` 에 남겨, 업데이트는 **출처가 같을 때만** 제안한다. 폴더에 직접 넣은 것은
+#  출처가 없으니 업데이트 제안이 없다. 목록 저장소의 CI 도 같은 규칙으로 등록 자체를 거른다 (두 겹).
+ORIGIN_FILE = "_origin.json"
+
+
+def _origin_of(entry: dict) -> dict:
+    """목록 항목의 출처 — 이것이 같아야 같은 플러그인이다"""
+    if entry["source"] == "bundled":
+        return {"source": "bundled"}
+    if entry["source"] == "repo":
+        return {"source": "repo", "repo": entry["repo"]}
+    return {"source": "zip", "zip": entry["zip"]}
+
+
+def _installed_origin(d: Path) -> dict | None:
+    try:
+        o = json.loads((d / ORIGIN_FILE).read_text(encoding="utf-8"))
+        return o if isinstance(o, dict) and o.get("source") else None
+    except Exception:
+        return None
+
+
+async def _catalog(official: Path, url: str) -> tuple[list[dict], str]:
+    """번들 + 원격을 한 목록으로. ★공식 id 는 예약 — 원격에 같은 id 가 있으면 버리고 콘솔에만 남긴다."""
+    bundled = official_list(official)
+    reserved = {b["id"] for b in bundled}
     remote_error = ""
     try:
         remote = await remote_list(url)
     except Exception as e:  # noqa: BLE001 — 인터넷이 없어도 번들 목록은 보인다
         remote, remote_error = [], f"{type(e).__name__}: {e}"
-    for it in official_list(official) + remote:
-        cur = by_id.get(it["id"])
-        if cur is None or _vt(it["version"]) > _vt(cur["version"]):
-            by_id[it["id"]] = it
+    kept: list[dict] = []
+    seen: set[str] = set()
+    for it in remote:
+        if it["id"] in reserved:
+            print(f"[plugins] 목록의 「{it['id']}」 는 공식 플러그인 id 라 무시합니다 ({it.get('repo') or it.get('zip')})", flush=True)
+        elif it["id"] in seen:
+            print(f"[plugins] 목록에 「{it['id']}」 가 두 번 있어 뒤의 것은 무시합니다", flush=True)
+        else:
+            seen.add(it["id"])
+            kept.append(it)
+    return bundled + kept, remote_error
+
+
+async def registry(root: Path, official: Path, url: str) -> dict:
+    """받을 수 있는 것 전부 — 번들(공식) + 원격. `installed` 는 지금 깔린 판, `update` 는 같은 출처의 더 높은 판이 있는가."""
+    items, remote_error = await _catalog(official, url)
     have = installed_versions(root)
-    for it in by_id.values():
+    for it in items:
         it["installed"] = have.get(it["id"])
-    return {"items": sorted(by_id.values(), key=lambda x: x["id"]), "remoteError": remote_error}
+        it["official"] = it["source"] == "bundled"
+        origin = _installed_origin(root / it["id"]) if it["installed"] else None
+        #: 깔린 것보다 높은 판이 **같은 출처**에 있다 — 화면은 「설치된 플러그인」 줄의 업데이트 단추로 보여 준다
+        it["update"] = bool(it["installed"]) and origin == _origin_of(it) and _vt(it["version"]) > _vt(it["installed"] or "")
+    return {"items": sorted(items, key=lambda x: x["id"]), "remoteError": remote_error}
 
 
 async def install(root: Path, official: Path, python: str, *, id: str = "", zip: str = "",
@@ -301,22 +359,22 @@ async def install(root: Path, official: Path, python: str, *, id: str = "", zip:
     root.mkdir(parents=True, exist_ok=True)
     src_dir: Path | None = None
     zip_url, want = zip, sha256
+    origin: dict = {"source": "zip", "zip": zip_url}
     if id and not zip_url:
-        # ★`registry` 와 같은 규칙으로 고른다 — 번들과 목록에 같은 id 가 있으면 판이 높은 쪽, 같으면 번들.
-        #   (전에는 번들이 있으면 무조건 번들을 복사해서, 목록의 새 판을 눌러도 옛 번들이 깔렸다. 2026-09-08)
-        bm = _manifest_of(official / id) if (official / id).is_dir() else None
-        hit = None
-        try:
-            hit = next((r for r in await remote_list(url) if r["id"] == id), None)
-        except Exception as e:  # noqa: BLE001 — 인터넷이 없어도 번들은 깔린다
-            if bm is None:
-                return {"ok": False, "error": f"원격 목록을 못 받았습니다: {e}"}
-        if bm is not None and (hit is None or _vt(str(bm.get("version") or "")) >= _vt(hit["version"])):
+        # ★`registry` 와 같은 목록(`_catalog`)에서 고른다 — 공식 id 는 번들, 나머지는 목록 항목 (공식 id 는 예약이라 겹치지 않는다)
+        items, remote_error = await _catalog(official, url)
+        hit = next((r for r in items if r["id"] == id), None)
+        if hit is None:
+            return {"ok": False, "error": f"원격 목록을 못 받았습니다: {remote_error}" if remote_error else f"「{id}」 를 목록에서 못 찾았습니다"}
+        origin = _origin_of(hit)
+        if hit["source"] == "bundled":
             src_dir = official / id
-        elif hit is not None:
-            zip_url, want = hit["zip"], hit.get("sha256", "")
         else:
-            return {"ok": False, "error": f"「{id}」 를 목록에서 못 찾았습니다"}
+            zip_url, want = hit["zip"], hit.get("sha256", "")
+        # ★출처가 다른 같은 id 가 이미 깔려 있으면 덮지 않는다 — 폴더에 직접 넣은 것·다른 저장소의 것은 별개 플러그인이다
+        have = _installed_origin(root / id) if (root / id).is_dir() and _manifest_of(root / id) else None
+        if (root / id).is_dir() and _manifest_of(root / id) and have != origin:
+            return {"ok": False, "error": f"「{id}」 는 다른 출처로 이미 설치되어 있습니다 ({(have or {}).get('source') or '폴더에 직접 넣음'}). 지우고 다시 설치하십시오"}
     if src_dir is None and not zip_url:
         return {"ok": False, "error": "무엇을 설치할지 없습니다 (id 또는 zip 주소)"}
 
@@ -361,6 +419,8 @@ async def install(root: Path, official: Path, python: str, *, id: str = "", zip:
             # ★지우지 않는다 — 옛 것은 `_old-…` 로 물러나고, 사람이 되돌릴 수 있다
             target.rename(root / f"_old-{pid}-{time.strftime('%Y%m%d-%H%M%S')}")
         shutil.move(str(new), str(target))
+        # ★출처를 남긴다 — 업데이트는 같은 출처에서만 온다 (`registry` 의 `update`)
+        (target / ORIGIN_FILE).write_text(json.dumps(origin, ensure_ascii=False, indent=2), encoding="utf-8")
 
         pip_log = ""
         req = target / "requirements.txt"

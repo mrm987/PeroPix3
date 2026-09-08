@@ -1,4 +1,4 @@
-import { usePlugins } from "../lib/pluginHost";
+import { usePlugins, isOn } from "../lib/pluginHost";
 import { toast } from "../store/toast";
 
 /** 플러그인이 등록한 단추를 그리는 자리 (`docs/plugin-design.md` 5절).
@@ -7,7 +7,9 @@ import { toast } from "../store/toast";
  *  ★아이콘은 플러그인이 준 SVG 마크업을 그대로 그린다 (개별 책임). 없으면 글자다.
  *  ★`compact` 는 접힌 레일 — 아이콘이 있으면 아이콘만, 없으면 글자를 작게. */
 export function PluginSlot({ slot, compact }: { slot: string; compact?: boolean }) {
-  const items = usePlugins((s) => s.buttons[slot]);
+  const all = usePlugins((s) => s.buttons[slot]);
+  usePlugins((s) => s.items); // 켜기/끄기가 바뀌면 다시 그린다
+  const items = all?.filter((b) => isOn(b.plugin));
   if (!items?.length) return null;
   return (
     <div data-plugin-slot={slot} style={{ display: "flex", flexWrap: "wrap", gap: 4, width: "100%" }}>
