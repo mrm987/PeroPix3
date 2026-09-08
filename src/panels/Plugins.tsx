@@ -133,8 +133,8 @@ export function Plugins() {
   /** 어느 탭을 보고 있나 — ★**저장되는 작업 상태**다 (`useUi.view.tab`, 보조 도구와 같다) */
   const tab = useUi((u) => (u.view.tab["plugins"] as string | undefined) ?? "");
   const setTab = (k: string) => useUi.getState().setView("tab", "plugins", k as never);
-  /** 관리 안의 어느 화면인가 — 이것도 저장되는 작업 상태 */
-  const sub = useUi((u) => (u.view.tab["plugins-manage"] as string | undefined) ?? INSTALLED);
+  /** 관리 안의 어느 화면인가 — 이것도 저장되는 작업 상태. ★처음은 「플러그인 목록」, 그 뒤로는 마지막에 보던 곳 (사용자 지시 2026-09-08) */
+  const sub = useUi((u) => (u.view.tab["plugins-manage"] as string | undefined) ?? LIST);
   const setSub = (k: string) => useUi.getState().setView("tab", "plugins-manage", k as never);
   const [seen, setSeen] = useState<string[]>([]);
   const hide = useUi((u) => u.view.hide);
@@ -290,27 +290,26 @@ export function Plugins() {
           style={{ display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0, padding: "0 var(--sp-2) var(--sp-2)", color: "var(--ink-faint)" }}
         >
           {Icon.plus}
-          {/* ★열 수 있는(닫아 둔) 탭 수 — + 옆에 무채색 작은 숫자로, 아이콘과 겹치지 않게 (사용자 지시 2026-09-08). 없으면 안 보인다 */}
-          {closed.length > 0 && (
-            <span
-              style={{
-                minWidth: 14,
-                height: 14,
-                padding: "0 4px",
-                display: "grid",
-                placeItems: "center",
-                fontSize: 9,
-                lineHeight: 1,
-                fontVariantNumeric: "tabular-nums",
-                borderRadius: 7,
-                border: "1px solid var(--line)",
-                background: "var(--panel)",
-                color: "var(--ink-faint)",
-              }}
-            >
-              {closed.length}
-            </span>
-          )}
+          {/* ★열 수 있는(닫아 둔) 탭 수 — + 옆에, 아이콘과 겹치지 않게. 글자는 본문 글자색(어두운 화면에서 흰색)이고
+              **모두 열려 있어도 0 을 보여 준다** (사용자 지시 2026-09-08: 더 크게·흰색으로·0 도 표시) */}
+          <span
+            style={{
+              minWidth: 18,
+              height: 18,
+              padding: "0 5px",
+              display: "grid",
+              placeItems: "center",
+              fontSize: "var(--text-2xs)",
+              lineHeight: 1,
+              fontVariantNumeric: "tabular-nums",
+              borderRadius: 9,
+              border: "1px solid var(--line)",
+              background: "var(--panel)",
+              color: "var(--ink)",
+            }}
+          >
+            {closed.length}
+          </span>
         </button>
         </div>
         {picking && (
@@ -380,7 +379,8 @@ export function Plugins() {
         <div data-plugins-manage style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
           {/* 관리 안의 두 화면 — 밑줄 탭 */}
           <div style={{ display: "flex", gap: "var(--sp-5)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
-            {([INSTALLED, LIST] as const).map((k) => {
+            {/* 순서도 「플러그인 목록」 이 먼저 (사용자 지시 2026-09-08) */}
+            {([LIST, INSTALLED] as const).map((k) => {
               const on = sub === k;
               return (
                 <button
