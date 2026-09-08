@@ -232,7 +232,8 @@ export function Plugins({ hidden = false }: { hidden?: boolean }) {
 
   return (
     // ★캔버스는 상자에 가두지 않는다 — 탭 줄 아래를 브라우저처럼 가장자리까지 채운다 (사용자 지시 2026-09-08). 여백은 탭 줄·관리 화면만
-    <div hidden={hidden} data-plugins-root style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+    // ★숨김은 인라인 display 로 — `hidden` 속성만 주면 인라인 `display: flex` 가 이겨 다른 모드 위에 그대로 그려진다 (사용자 보고 2026-09-08)
+    <div data-plugins-root data-hidden={hidden ? "" : undefined} style={{ flex: 1, minHeight: 0, display: hidden ? "none" : "flex", flexDirection: "column" }}>
       {/* 탭 줄 — 맨 왼쪽 「관리」 테두리 단추(세로 선으로 가름) + 밑줄 탭(× 로 닫음) + 닫은 것을 여는 + (가로 스크롤 띠) */}
       <div style={{ position: "relative", display: "flex", alignItems: "stretch", flexShrink: 0, padding: "var(--sp-4) var(--sp-4) 0" }}>
         <div data-plugin-manage-slot style={{ display: "flex", alignItems: "flex-end", flexShrink: 0, marginRight: "var(--sp-3)", paddingRight: "var(--sp-3)", borderRight: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
