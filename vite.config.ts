@@ -68,6 +68,10 @@ export default defineConfig({
       ignored: [
         "**/webview/**", "**/src-tauri/**", "**/workspaces/**", "**/models/**", "**/gallery/**",
         "**/_tmp/**", "**/_archive/**", "**/_dist/**", "**/dist/**", "**/logs/**", "**/backend/**",
+        // ★플러그인 폴더 — 감시하면 chokidar 가 폴더마다 핸들을 쥐어 **삭제·이름 바꾸기가 거부된다**
+        //   (실측 2026-09-08: 관리 탭의 삭제가 휴지통 코드 120(DE_ACCESSDENIEDSRC)·rename 액세스 거부. Vite 를
+        //   내리면 바로 풀렸다). 백엔드가 서빙하는 자리라 Vite 가 볼 일도 없다.
+        "**/plugins/**", "**/plugins-official/**",
       ],
     },
   },

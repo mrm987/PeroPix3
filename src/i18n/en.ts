@@ -88,6 +88,7 @@ export const en = {
     installing: "Installing",
     installedMark: "Installed",
     addTab: "Open a closed plugin tab",
+    allTabsOpen: "Every plugin tab is already open",
     closeTab: "Close tab (the plugin keeps running)",
     remove: "Remove",
     installed: "Installed \"{n}\". Restart the app to activate it.",

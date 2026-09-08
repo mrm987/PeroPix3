@@ -88,6 +88,7 @@ export const ko: Dict = {
     installing: "설치 중",
     installedMark: "설치됨",
     addTab: "닫아 둔 플러그인 탭 열기",
+    allTabsOpen: "모든 플러그인 탭이 열려 있습니다",
     closeTab: "탭 닫기 (플러그인은 계속 돕니다)",
     remove: "삭제",
     installed: "「{n}」 을(를) 설치했습니다. 앱을 다시 켜면 적용됩니다.",

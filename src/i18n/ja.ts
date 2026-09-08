@@ -88,6 +88,7 @@ export const ja: Dict = {
     installing: "インストール中",
     installedMark: "インストール済み",
     addTab: "閉じたプラグインタブを開く",
+    allTabsOpen: "すべてのプラグインタブが開いています",
     closeTab: "タブを閉じる (プラグインは動き続けます)",
     remove: "削除",
     installed: "「{n}」をインストールしました。アプリを再起動すると反映されます。",
