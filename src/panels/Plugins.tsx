@@ -73,8 +73,9 @@ type Mgr = {
   remoteError: string;
   /** 지금 받는/지우는/켜고 끄는 대상 (id 또는 zip 주소). 비면 한가하다 */
   busy: string;
-  /** 설치·삭제·업데이트·켜기/끄기 뒤 — 파일·설정은 바뀌었지만 붙는 것은 다음에 켤 때다. 무엇이 바뀌었는지 띠에 적는다 */
-  changes: string[];
+  /** 설치·삭제·업데이트·켜기/끄기 뒤 — 파일·설정은 바뀌었지만 붙는 것은 다음에 켤 때다. 무엇이 바뀌었는지 띠에 적는다.
+   *  ★플러그인마다 **마지막 것 하나만** 남긴다 (사용자 지시 2026-09-08: 켜고 끄기를 반복하면 줄줄이 쌓였다) */
+  changes: { id: string; text: string }[];
   loadReg: () => Promise<void>;
   install: (body: { id?: string; zip?: string }, name?: string) => Promise<void>;
   remove: (p: { id: string; name: string }) => Promise<void>;
@@ -83,6 +84,9 @@ type Mgr = {
 
 const post = (path: string, body: unknown) =>
   api<{ ok: boolean; id: string; pip?: string }>(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+/** 바뀐 것 기록 — 같은 플러그인의 이전 기록은 지우고 뒤에 붙인다 */
+const noted = (list: { id: string; text: string }[], id: string, text: string) => [...list.filter((c) => c.id !== id), { id, text }];
 
 const useMgr = create<Mgr>((set, get) => ({
   reg: null,
@@ -106,7 +110,7 @@ const useMgr = create<Mgr>((set, get) => ({
       // ★설치하면 탭은 열린 상태로 시작한다 — 전에 닫아 두고 지웠던 플러그인을 다시 깔면 옛 「닫음」 이 남아
       //   다시 켠 뒤에도 탭이 안 보였다 (사용자 보고 2026-09-08)
       useUi.getState().setView("hide", r.id, false);
-      set({ changes: [...get().changes, tr("plugins.chgInstalled", { n: name ?? r.id })] });
+      set({ changes: noted(get().changes, r.id, tr("plugins.chgInstalled", { n: name ?? r.id })) });
       await Promise.all([get().loadReg(), usePlugins.getState().load()]);
     } catch (e) {
       toast(String(e), "warn");
@@ -121,7 +125,7 @@ const useMgr = create<Mgr>((set, get) => ({
       await api(`/api/plugins/${encodeURIComponent(p.id)}`, { method: "DELETE" });
       toast(tr("plugins.removed", { n: p.id }));
       useUi.getState().setView("hide", p.id, false); // 지운 플러그인의 「닫음」 을 남기지 않는다
-      set({ changes: [...get().changes, tr("plugins.chgRemoved", { n: p.name })] });
+      set({ changes: noted(get().changes, p.id, tr("plugins.chgRemoved", { n: p.name })) });
       await Promise.all([get().loadReg(), usePlugins.getState().load()]);
     } catch (e) {
       toast(String(e), "warn");
@@ -135,7 +139,7 @@ const useMgr = create<Mgr>((set, get) => ({
     try {
       await post(`/api/plugins/${encodeURIComponent(p.id)}/enabled`, { enabled: on });
       toast(tr("plugins.toggled", { n: p.name, s: tr(on ? "plugins.on" : "plugins.off") }));
-      set({ changes: [...get().changes, tr(on ? "plugins.chgOn" : "plugins.chgOff", { n: p.name })] });
+      set({ changes: noted(get().changes, p.id, tr(on ? "plugins.chgOn" : "plugins.chgOff", { n: p.name })) });
       await usePlugins.getState().load();
     } catch (e) {
       toast(String(e), "warn");
@@ -556,7 +560,7 @@ function RestartBand() {
     <div data-plugins-restart style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--sp-5)", padding: "var(--sp-3) var(--sp-5)", border: "1px solid var(--accent-line)", borderRadius: "var(--r-3)", background: "var(--accent-bg)" }}>
       <span style={{ width: 8, height: 8, borderRadius: 4, background: "var(--accent-ink)", flexShrink: 0 }} />
       <span style={{ fontSize: "var(--text-xs)", color: "var(--ink)", whiteSpace: "nowrap" }}>{t("plugins.changed")}</span>
-      <span data-plugins-changes style={{ fontSize: "var(--text-2xs)", color: "var(--ink-dim)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{changes.join(" · ")}</span>
+      <span data-plugins-changes style={{ fontSize: "var(--text-2xs)", color: "var(--ink-dim)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{changes.map((c) => c.text).join(" · ")}</span>
       {/* ★설치·삭제·업데이트·켜기/끄기는 다음에 켤 때 붙는다 — 여기서 바로 붙인다 (사용자 지시 2026-09-08):
           껍데기가 **백엔드만** 다시 띄우고(`restart_backend`) 화면은 새로 읽는다. 앱 프로세스를 통째로 다시 띄우면
           개발 중에는 Vite 가 함께 내려가 연결 거부 화면이 떴다 (사용자 보고 2026-09-08, `lib.rs` 의 주). */}
