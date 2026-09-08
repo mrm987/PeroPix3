@@ -10,7 +10,8 @@ import { Icon } from "../components/Icon";
 import { usePlugins, fresh, type PluginInfo } from "../lib/pluginHost";
 import { openExternal } from "../lib/openExternal";
 
-/** 플러그인 모드 — **설치된 플러그인마다 캔버스 탭 하나** + 「설치된 플러그인」·「플러그인 목록」 두 화면 (설계: `docs/plugin-design.md`).
+/** 플러그인 모드 — **설치된 플러그인마다 캔버스 탭 하나** + 「플러그인 목록」·「설치된 플러그인」 두 화면 (설계: `docs/plugin-design.md`,
+ *  시안: `docs/design/plugins/` — 2026-09-08 재디자인, 사용자 선택).
  *
  *  ★캔버스는 백엔드가 서빙하는 플러그인 페이지를 iframe 으로 띄운 것이다 (`/plug/<id>/web/`).
  *    같은 오리진(백엔드)이라 페이지가 백엔드 API 를 **직접** 부른다 — 열쇠는 주소에 이미 들어 있다.
@@ -19,8 +20,8 @@ import { openExternal } from "../lib/openExternal";
  *    (PeroPixfy 런처가 iframe 을 한 번만 만드는 것과 같은 까닭). 안 연 것은 만들지 않는다.
  *  ★캔버스 탭은 워크스페이스 탭처럼 × 로 닫고 + 로 다시 연다 (사용자 지시 2026-09-08). + 는 언제나 있고, 닫은 것이
  *    없으면 「모든 플러그인 탭이 열려 있습니다」, 플러그인이 하나도 없으면 「설치된 플러그인이 없습니다」 를 보여 준다. 닫는 것은 화면 상태(`useUi.view.hide`)일 뿐이다.
- *  ★「관리」 는 오른쪽 끝의 테두리 단추 **하나**고, 그 안이 「설치된 플러그인」 / 「플러그인 목록」 두 화면으로 나뉜다
- *    (사용자 지시 2026-09-08 — 단추를 둘로 가르지 말고 안에서 나눌 것). 업데이트는 **양쪽 어디서나** 받는다.
+ *  ★「관리」 는 탭 줄 **맨 왼쪽**의 테두리 단추 **하나**다 (사용자 지시 2026-09-08 밤: 오른쪽에 있으니 잘 안 보인다). 그 안이
+ *    「플러그인 목록」(카드 격자) / 「설치된 플러그인」(줄 목록) 두 화면으로 나뉜다. 업데이트는 **양쪽 어디서나** 받는다.
  *    받는 중·다시 켜기 안내는 두 화면이 한 상태(`useMgr`)를 본다.
  *    ★★설치·삭제·업데이트·켜기/끄기는 파일과 설정만 바꾼다 — **다시 켜야 적용**된다 (라우터·확장 JS 는 켤 때 붙는다). */
 
@@ -34,7 +35,10 @@ type RegItem = {
   name: string;
   version: string;
   description: string;
+  homepage: string;
   source: "bundled" | "repo" | "zip";
+  repo?: string;
+  zip?: string;
   installed: string | null;
   /** 앱과 함께 오는 번들(공식)인가 — 아니면 목록에 오른 유저 플러그인 */
   official: boolean;
@@ -46,6 +50,22 @@ type RegItem = {
  *  (같은 안내를 앱에도 적으면 두 곳이 되고, 절차가 바뀔 때마다 앱을 다시 배포해야 한다. 사용자 결정 2026-09-08).
  *  백엔드의 기본 목록 주소(`server.py` `PLUGIN_REGISTRY`)와 같은 저장소다. */
 const PLUGIN_LIST_REPO = "https://github.com/mrm987/peropix-plugins";
+/** 공식 플러그인이 사는 자리 — 앱 저장소의 `plugins-official/<id>` (README 를 보러 가는 링크) */
+const OFFICIAL_TREE = "https://github.com/mrm987/PeroPix3/tree/master/plugins-official/";
+
+/** 플러그인의 GitHub(또는 홈) 주소 — README 를 보러 가는 링크 (사용자 지시 2026-09-08).
+ *  매니페스트의 `homepage` 가 있으면 그것, 없으면 출처에서 만든다: 번들 → 앱 저장소의 폴더, 목록(repo) → 그 저장소, zip → 그 주소.
+ *  폴더에 직접 넣은 것(출처 없음)은 링크가 없다. */
+function linkOf(x: { homepage?: string; source?: string; repo?: string; zip?: string; id: string; origin?: PluginInfo["origin"] }): string {
+  if (x.homepage) return x.homepage;
+  const src = x.source ?? x.origin?.source;
+  const repo = x.repo ?? x.origin?.repo;
+  const zip = x.zip ?? x.origin?.zip;
+  if (src === "bundled") return OFFICIAL_TREE + x.id;
+  if (src === "repo" && repo) return `https://github.com/${repo}`;
+  if (src === "zip" && zip) return zip;
+  return "";
+}
 
 /** 두 화면이 함께 보는 관리 상태 — 목록·받는 중·다시 켜기 안내. ★화면을 오가도 「받는 중」이 끊기지 않는다 */
 type Mgr = {
@@ -53,11 +73,11 @@ type Mgr = {
   remoteError: string;
   /** 지금 받는/지우는/켜고 끄는 대상 (id 또는 zip 주소). 비면 한가하다 */
   busy: string;
-  /** 설치·삭제·업데이트·켜기/끄기 뒤 — 파일·설정은 바뀌었지만 붙는 것은 다음에 켤 때다 */
-  restart: boolean;
+  /** 설치·삭제·업데이트·켜기/끄기 뒤 — 파일·설정은 바뀌었지만 붙는 것은 다음에 켤 때다. 무엇이 바뀌었는지 띠에 적는다 */
+  changes: string[];
   loadReg: () => Promise<void>;
-  install: (body: { id?: string; zip?: string }) => Promise<void>;
-  remove: (id: string) => Promise<void>;
+  install: (body: { id?: string; zip?: string }, name?: string) => Promise<void>;
+  remove: (p: { id: string; name: string }) => Promise<void>;
   setEnabled: (p: PluginInfo, on: boolean) => Promise<void>;
 };
 
@@ -68,7 +88,7 @@ const useMgr = create<Mgr>((set, get) => ({
   reg: null,
   remoteError: "",
   busy: "",
-  restart: false,
+  changes: [],
   async loadReg() {
     try {
       const r = await api<{ items: RegItem[]; remoteError: string }>("/api/plugins/registry");
@@ -77,7 +97,7 @@ const useMgr = create<Mgr>((set, get) => ({
       set({ reg: [], remoteError: String(e) });
     }
   },
-  async install(body) {
+  async install(body, name) {
     if (get().busy) return;
     set({ busy: body.id ?? body.zip ?? "" });
     try {
@@ -86,7 +106,7 @@ const useMgr = create<Mgr>((set, get) => ({
       // ★설치하면 탭은 열린 상태로 시작한다 — 전에 닫아 두고 지웠던 플러그인을 다시 깔면 옛 「닫음」 이 남아
       //   다시 켠 뒤에도 탭이 안 보였다 (사용자 보고 2026-09-08)
       useUi.getState().setView("hide", r.id, false);
-      set({ restart: true });
+      set({ changes: [...get().changes, tr("plugins.chgInstalled", { n: name ?? r.id })] });
       await Promise.all([get().loadReg(), usePlugins.getState().load()]);
     } catch (e) {
       toast(String(e), "warn");
@@ -94,14 +114,14 @@ const useMgr = create<Mgr>((set, get) => ({
       set({ busy: "" });
     }
   },
-  async remove(id) {
+  async remove(p) {
     if (get().busy) return;
-    set({ busy: id });
+    set({ busy: p.id });
     try {
-      await api(`/api/plugins/${encodeURIComponent(id)}`, { method: "DELETE" });
-      toast(tr("plugins.removed", { n: id }));
-      useUi.getState().setView("hide", id, false); // 지운 플러그인의 「닫음」 을 남기지 않는다
-      set({ restart: true });
+      await api(`/api/plugins/${encodeURIComponent(p.id)}`, { method: "DELETE" });
+      toast(tr("plugins.removed", { n: p.id }));
+      useUi.getState().setView("hide", p.id, false); // 지운 플러그인의 「닫음」 을 남기지 않는다
+      set({ changes: [...get().changes, tr("plugins.chgRemoved", { n: p.name })] });
       await Promise.all([get().loadReg(), usePlugins.getState().load()]);
     } catch (e) {
       toast(String(e), "warn");
@@ -115,7 +135,7 @@ const useMgr = create<Mgr>((set, get) => ({
     try {
       await post(`/api/plugins/${encodeURIComponent(p.id)}/enabled`, { enabled: on });
       toast(tr("plugins.toggled", { n: p.name, s: tr(on ? "plugins.on" : "plugins.off") }));
-      set({ restart: true });
+      set({ changes: [...get().changes, tr(on ? "plugins.chgOn" : "plugins.chgOff", { n: p.name })] });
       await usePlugins.getState().load();
     } catch (e) {
       toast(String(e), "warn");
@@ -147,6 +167,8 @@ export function Plugins() {
   const stripRef = useRef<HTMLDivElement>(null);
   /** 선택 상자의 왼쪽 자리 (탭 줄 기준). + 를 누른 순간 재서 그 아래에 띄운다 */
   const [pickX, setPickX] = useState(0);
+  /** 관리 화면의 찾기 — 두 화면이 같은 글을 쓴다 */
+  const [q, setQ] = useState("");
 
   useEffect(() => {
     void usePlugins.getState().load().catch((e) => toast(String(e), "warn"));
@@ -200,39 +222,36 @@ export function Plugins() {
     if (cur !== MANAGE && !seen.includes(cur)) setSeen((s) => [...s, cur]);
   }, [cur, seen]);
 
-  const screenBtn = (id: string, label: string, icon: React.ReactNode) => {
-    const on = cur === id;
-    return (
-      <button
-        data-plugin-tab={id}
-        onClick={() => setTab(id)}
-        style={{
-          marginBottom: "var(--sp-2)",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "var(--sp-1)",
-          minHeight: 24,
-          padding: "0 var(--sp-3)",
-          fontSize: "var(--text-xs)",
-          border: "1px solid",
-          borderColor: on ? "var(--accent)" : "var(--line)",
-          borderRadius: "var(--r-2)",
-          background: on ? "var(--accent-bg)" : "var(--panel)",
-          color: on ? "var(--accent-ink)" : "var(--ink-soft)",
-        }}
-      >
-        <span style={{ display: "grid", placeItems: "center", width: 14, height: 14 }}>{icon}</span>
-        {label}
-      </button>
-    );
-  };
+  const manageOn = cur === MANAGE;
 
   return (
     // ★캔버스는 상자에 가두지 않는다 — 탭 줄 아래를 브라우저처럼 가장자리까지 채운다 (사용자 지시 2026-09-08). 여백은 탭 줄·관리 화면만
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-      {/* 밑줄 탭(플러그인, × 로 닫음) + 닫은 것을 여는 + — 워크스페이스 탭과 같은 어법. 탭들은 가로 스크롤 띠에 들고,
-          오른쪽 끝의 「관리」 테두리 단추는 띠 **밖**에 세로 선으로 갈라 둔다 (사용자 지시 2026-09-08 — 겹치지 않게). */}
+      {/* 탭 줄 — 맨 왼쪽 「관리」 테두리 단추(세로 선으로 가름) + 밑줄 탭(× 로 닫음) + 닫은 것을 여는 + (가로 스크롤 띠) */}
       <div style={{ position: "relative", display: "flex", alignItems: "stretch", flexShrink: 0, padding: "var(--sp-4) var(--sp-4) 0" }}>
+        <div data-plugin-manage-slot style={{ display: "flex", alignItems: "flex-end", flexShrink: 0, marginRight: "var(--sp-3)", paddingRight: "var(--sp-3)", borderRight: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
+          <button
+            data-plugin-tab={MANAGE}
+            onClick={() => setTab(MANAGE)}
+            style={{
+              marginBottom: "var(--sp-2)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "var(--sp-1)",
+              minHeight: 24,
+              padding: "0 var(--sp-3)",
+              fontSize: "var(--text-xs)",
+              border: "1px solid",
+              borderColor: manageOn ? "var(--accent)" : "var(--line)",
+              borderRadius: "var(--r-2)",
+              background: manageOn ? "var(--accent-bg)" : "var(--panel)",
+              color: manageOn ? "var(--accent-ink)" : "var(--ink-soft)",
+            }}
+          >
+            <span style={{ display: "grid", placeItems: "center", width: 14, height: 14 }}>{Icon.settings}</span>
+            {t("plugins.manage")}
+          </button>
+        </div>
         <div
           ref={stripRef}
           data-plugin-tab-strip
@@ -248,70 +267,70 @@ export function Plugins() {
             borderBottom: "1px solid var(--line)",
           }}
         >
-        {canvases.map((p) => {
-          const on = cur === p.id;
-          return (
-            <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: "var(--sp-1)", flexShrink: 0, borderBottom: `2px solid ${on ? "var(--accent)" : "transparent"}` }}>
-              <button
-                data-plugin-tab={p.id}
-                onClick={() => setTab(p.id)}
-                style={{
-                  padding: "0 2px var(--sp-2)",
-                  fontSize: "var(--text-sm)",
-                  fontWeight: on ? "var(--w-semi)" : "var(--w-norm)",
-                  color: on ? "var(--ink)" : "var(--ink-faint)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {p.name}
-              </button>
-              <button
-                data-plugin-tab-close={p.id}
-                data-tip={t("plugins.closeTab")}
-                onClick={() => setHide(p.id, true)}
-                style={{ display: "grid", placeItems: "center", padding: "0 0 var(--sp-2)", color: "var(--ink-ghost)" }}
-              >
-                {Icon.close12}
-              </button>
-            </span>
-          );
-        })}
-        <button
-          ref={pickRef}
-          data-plugin-tab-add
-          data-plugin-tab-add-count={closed.length}
-          data-tip={t("plugins.addTab")}
-          onClick={(e) => {
-            const row = e.currentTarget.closest("[data-plugin-tab-strip]")?.parentElement;
-            const b = e.currentTarget.getBoundingClientRect();
-            const r = row?.getBoundingClientRect();
-            if (r) setPickX(Math.max(0, Math.min(b.left - r.left, r.width - 200)));
-            setPicking((v) => !v);
-          }}
-          style={{ display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0, padding: "0 var(--sp-2) var(--sp-2)", color: "var(--ink-faint)" }}
-        >
-          {Icon.plus}
-          {/* ★열 수 있는(닫아 둔) 탭 수 — + 옆에, 아이콘과 겹치지 않게. 글자는 본문 글자색(어두운 화면에서 흰색)이고
-              **모두 열려 있어도 0 을 보여 준다** (사용자 지시 2026-09-08: 더 크게·흰색으로·0 도 표시) */}
-          <span
-            style={{
-              minWidth: 18,
-              height: 18,
-              padding: "0 5px",
-              display: "grid",
-              placeItems: "center",
-              fontSize: "var(--text-2xs)",
-              lineHeight: 1,
-              fontVariantNumeric: "tabular-nums",
-              borderRadius: 9,
-              border: "1px solid var(--line)",
-              background: "var(--panel)",
-              color: "var(--ink)",
+          {canvases.map((p) => {
+            const on = cur === p.id;
+            return (
+              <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: "var(--sp-1)", flexShrink: 0, borderBottom: `2px solid ${on ? "var(--accent)" : "transparent"}` }}>
+                <button
+                  data-plugin-tab={p.id}
+                  onClick={() => setTab(p.id)}
+                  style={{
+                    padding: "0 2px var(--sp-2)",
+                    fontSize: "var(--text-sm)",
+                    fontWeight: on ? "var(--w-semi)" : "var(--w-norm)",
+                    color: on ? "var(--ink)" : "var(--ink-faint)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {p.name}
+                </button>
+                <button
+                  data-plugin-tab-close={p.id}
+                  data-tip={t("plugins.closeTab")}
+                  onClick={() => setHide(p.id, true)}
+                  style={{ display: "grid", placeItems: "center", padding: "0 0 var(--sp-2)", color: "var(--ink-ghost)" }}
+                >
+                  {Icon.close12}
+                </button>
+              </span>
+            );
+          })}
+          <button
+            ref={pickRef}
+            data-plugin-tab-add
+            data-plugin-tab-add-count={closed.length}
+            data-tip={t("plugins.addTab")}
+            onClick={(e) => {
+              const row = e.currentTarget.closest("[data-plugin-tab-strip]")?.parentElement;
+              const b = e.currentTarget.getBoundingClientRect();
+              const r = row?.getBoundingClientRect();
+              if (r) setPickX(Math.max(0, Math.min(b.left - r.left, r.width - 200)));
+              setPicking((v) => !v);
             }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0, padding: "0 var(--sp-2) var(--sp-2)", color: "var(--ink-faint)" }}
           >
-            {closed.length}
-          </span>
-        </button>
+            {Icon.plus}
+            {/* ★열 수 있는(닫아 둔) 탭 수 — + 옆에, 아이콘과 겹치지 않게. 글자는 본문 글자색(어두운 화면에서 흰색)이고
+                **모두 열려 있어도 0 을 보여 준다** (사용자 지시 2026-09-08: 더 크게·흰색으로·0 도 표시) */}
+            <span
+              style={{
+                minWidth: 18,
+                height: 18,
+                padding: "0 5px",
+                display: "grid",
+                placeItems: "center",
+                fontSize: "var(--text-2xs)",
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+                borderRadius: 9,
+                border: "1px solid var(--line)",
+                background: "var(--panel)",
+                color: "var(--ink)",
+              }}
+            >
+              {closed.length}
+            </span>
+          </button>
         </div>
         {picking && (
           <div
@@ -356,10 +375,6 @@ export function Plugins() {
             )}
           </div>
         )}
-        {/* 「관리」 자리 — 띠 밖. 왼쪽 세로 선으로 탭 영역과 가른다 */}
-        <div data-plugin-manage-slot style={{ display: "flex", alignItems: "flex-end", flexShrink: 0, marginLeft: "var(--sp-3)", paddingLeft: "var(--sp-3)", borderLeft: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
-          {screenBtn(MANAGE, t("plugins.manage"), Icon.settings)}
-        </div>
       </div>
 
       {base &&
@@ -381,72 +396,97 @@ export function Plugins() {
             />
           ))}
 
-      {cur === MANAGE && (
-        <div data-plugins-manage style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "var(--sp-4)", padding: "var(--sp-4)" }}>
-          {/* 관리 안의 두 화면 — 밑줄 탭 */}
-          <div style={{ display: "flex", gap: "var(--sp-5)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
-            {/* 순서도 「플러그인 목록」 이 먼저 (사용자 지시 2026-09-08) */}
-            {([LIST, INSTALLED] as const).map((k) => {
-              const on = sub === k;
-              return (
-                <button
-                  key={k}
-                  data-plugin-sub={k}
-                  onClick={() => setSub(k)}
-                  style={{
-                    padding: "0 2px var(--sp-2)",
-                    marginBottom: -1,
-                    fontSize: "var(--text-sm)",
-                    fontWeight: on ? "var(--w-semi)" : "var(--w-norm)",
-                    color: on ? "var(--ink)" : "var(--ink-faint)",
-                    borderBottom: `2px solid ${on ? "var(--accent)" : "transparent"}`,
-                  }}
-                >
-                  {t(k === INSTALLED ? "plugins.installedHead" : "plugins.availableHead")}
-                </button>
-              );
-            })}
-          </div>
-          {sub === LIST ? <List dir={dir} /> : <Installed items={items} dir={dir} />}
+      {manageOn && (
+        <div data-plugins-manage style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "var(--sp-6)", padding: "var(--sp-6) var(--sp-9) var(--sp-7)" }}>
+          {sub === LIST ? (
+            <List q={q} setQ={setQ} sub={sub} setSub={setSub} installedCount={items.length} />
+          ) : (
+            <Installed q={q} setQ={setQ} sub={sub} setSub={setSub} items={items} dir={dir} />
+          )}
         </div>
       )}
     </div>
   );
 }
 
-const row: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr auto",
+/* ── 공통 모양 ───────────────────────────────────────────────────────────── */
+
+const btn: React.CSSProperties = {
+  display: "inline-flex",
   alignItems: "center",
-  gap: "var(--sp-1) var(--sp-3)",
-  padding: "var(--sp-2) var(--sp-3)",
+  gap: "var(--sp-1)",
+  boxSizing: "border-box",
+  height: 26,
+  padding: "0 var(--sp-4)",
+  fontSize: "var(--text-2xs)",
+  color: "var(--ink-dim)",
   border: "1px solid var(--line)",
   borderRadius: "var(--r-2)",
   background: "var(--panel)",
+  whiteSpace: "nowrap",
 };
-const cluster: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: "var(--sp-2)" };
-const btn: React.CSSProperties = {
-  minHeight: 24,
-  padding: "0 var(--sp-3)",
-  fontSize: "var(--text-2xs)",
-  color: "var(--ink-soft)",
-  border: "1px solid var(--line)",
-  borderRadius: "var(--r-2)",
-  background: "var(--bg)",
-};
-const accentBtn: React.CSSProperties = { ...btn, background: "var(--accent)", color: "var(--accent-on)", borderColor: "var(--accent)" };
-const subHead: React.CSSProperties = { fontSize: "var(--text-2xs)", color: "var(--ink-faint)", letterSpacing: 0.3, textTransform: "uppercase" };
-const badge: React.CSSProperties = {
-  marginLeft: "var(--sp-2)",
-  padding: "0 6px",
-  fontSize: "var(--text-2xs)",
-  lineHeight: "16px",
-  border: "1px solid var(--line)",
-  borderRadius: "var(--r-2)",
-  color: "var(--ink-faint)",
-  verticalAlign: "middle",
-};
-const version: React.CSSProperties = { fontSize: "var(--text-2xs)", color: "var(--ink-faint)", fontVariantNumeric: "tabular-nums" };
+const accentBtn: React.CSSProperties = { ...btn, background: "var(--accent)", color: "var(--accent-on)", borderColor: "var(--accent)", fontWeight: "var(--w-semi)" as never };
+const eyebrow: React.CSSProperties = { fontSize: "var(--text-3xs)", letterSpacing: 0.4, textTransform: "uppercase", color: "var(--ink-faint)" };
+const mono: React.CSSProperties = { fontSize: "var(--text-2xs)", color: "var(--ink-faint)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" };
+
+function Badge({ kind }: { kind: "official" | "user" | "folder" }) {
+  const t = useI18n((s) => s.t);
+  const official = kind === "official";
+  return (
+    <span
+      data-plugin-badge={kind}
+      style={{
+        padding: "0 6px",
+        fontSize: "var(--text-3xs)",
+        lineHeight: "16px",
+        borderRadius: "var(--r-2)",
+        border: `1px solid ${official ? "var(--mode-plugins)" : "var(--line)"}`,
+        color: official ? "var(--mode-plugins)" : "var(--ink-dim)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {t(kind === "official" ? "plugins.official" : kind === "user" ? "plugins.user" : "plugins.folderSource")}
+    </span>
+  );
+}
+
+/** 머리글자 타일 — 아이콘이 없는 플러그인의 얼굴 (시안). 공식은 강조 바탕, 유저는 회색 */
+function Monogram({ name, official, size = 36 }: { name: string; official: boolean; size?: number }) {
+  return (
+    <span
+      style={{
+        width: size,
+        height: size,
+        flexShrink: 0,
+        display: "grid",
+        placeItems: "center",
+        borderRadius: "var(--r-3)",
+        background: official ? "var(--accent-bg)" : "var(--line-soft)",
+        color: official ? "var(--accent-ink)" : "var(--ink-soft)",
+        fontSize: "var(--text-lg)",
+        fontWeight: "var(--w-semi)" as never,
+      }}
+    >
+      {(name.trim()[0] ?? "?").toUpperCase()}
+    </span>
+  );
+}
+
+/** GitHub(홈) 링크 — README 를 보러 간다 (사용자 지시 2026-09-08). 주소가 없으면 안 그린다 */
+function GitLink({ href, label }: { href: string; label: string }) {
+  if (!href) return null;
+  return (
+    <button
+      data-plugin-link={href}
+      onClick={() => openExternal(href)}
+      title={href}
+      style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "var(--text-2xs)", color: "var(--ink-faint)", background: "none", border: "none", padding: 0, cursor: "pointer", minWidth: 0 }}
+    >
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      <span style={{ display: "grid", placeItems: "center", width: 11, height: 11, flexShrink: 0 }}>{Icon.external}</span>
+    </button>
+  );
+}
 
 /** 업데이트 단추 — 두 화면이 같은 것을 쓴다 (같은 출처의 새 판이 있을 때만) */
 function UpdateButton({ r }: { r: RegItem }) {
@@ -454,200 +494,321 @@ function UpdateButton({ r }: { r: RegItem }) {
   const busy = useMgr((m) => m.busy);
   if (!r.update) return null;
   return (
-    <button data-plugin-update={r.id} disabled={!!busy} onClick={() => void useMgr.getState().install({ id: r.id })} style={accentBtn}>
+    <button data-plugin-update={r.id} disabled={!!busy} onClick={() => void useMgr.getState().install({ id: r.id }, r.name)} style={accentBtn}>
+      <span style={{ display: "grid", placeItems: "center", width: 12, height: 12 }}>{Icon.refresh}</span>
       {busy === r.id ? t("plugins.installing") : `${t("plugins.update")} ${r.version}`}
     </button>
   );
 }
 
-/** 두 화면의 머리 — 플러그인 폴더와 「다시 켜야 적용」 안내 */
-function Head({ dir }: { dir: string }) {
+/** 두 화면의 머리 — 화면 전환(세그먼트) · 찾기 · 오른쪽 자리 */
+function Head({ sub, setSub, q, setQ, installedCount, right }: { sub: string; setSub: (k: string) => void; q: string; setQ: (v: string) => void; installedCount: number; right: React.ReactNode }) {
   const t = useI18n((s) => s.t);
-  const restart = useMgr((m) => m.restart);
+  const seg = (k: string, label: string, count?: number) => {
+    const on = sub === k;
+    return (
+      <button
+        key={k}
+        data-plugin-sub={k}
+        onClick={() => setSub(k)}
+        style={{
+          padding: "4px 12px",
+          fontSize: "var(--text-xs)",
+          fontWeight: on ? "var(--w-semi)" : "var(--w-norm)",
+          borderRadius: "var(--r-2)",
+          background: on ? "var(--accent-bg)" : "transparent",
+          color: on ? "var(--accent-ink)" : "var(--ink-dim)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+        {count != null && <span data-plugin-sub-count style={{ marginLeft: 4, fontSize: "var(--text-2xs)", opacity: 0.7 }}>{count}</span>}
+      </button>
+    );
+  };
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", fontSize: "var(--text-xs)", color: "var(--ink-soft)" }}>
-      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} data-plugins-dir>
-        {dir}
-      </span>
-      <FolderOpenButton
-        data-plugins-open
-        tip={t("plugins.openDir")}
-        disabled={!dir}
-        onClick={() => void useFiles.getState().openDir(dir).catch((e) => toast(String(e), "warn"))}
-      />
-      {restart && (
-        <span data-plugins-restart style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "var(--sp-2)", fontSize: "var(--text-2xs)", color: "var(--accent-ink)" }}>
-          {t("plugins.restart")}
-          {/* ★설치·삭제·업데이트·켜기/끄기는 다음에 켤 때 붙는다 — 여기서 바로 붙인다 (사용자 지시 2026-09-08):
-              껍데기가 **백엔드만** 다시 띄우고(`restart_backend`) 화면은 새로 읽는다. 앱 프로세스를 통째로 다시 띄우면
-              개발 중에는 Vite 가 함께 내려가 연결 거부 화면이 떴다 (사용자 보고 2026-09-08, `lib.rs` 의 주). */}
-          <button
-            data-plugins-restart-btn
-            onClick={() =>
-              void import("@tauri-apps/api/core")
-                .then((m) => m.invoke("restart_backend"))
-                .then(() => location.reload())
-                .catch((e) => toast(String(e), "warn"))
-            }
-            style={accentBtn}
-          >
-            {t("plugins.restartBtn")}
-          </button>
-        </span>
-      )}
+    <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-7)", flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 2, padding: 3, border: "1px solid var(--line)", borderRadius: "var(--r-3)", background: "var(--panel)" }}>
+        {seg(LIST, t("plugins.availableHead"))}
+        {seg(INSTALLED, t("plugins.installedHead"), installedCount)}
+      </div>
+      <label style={{ flex: 1, maxWidth: 360, display: "flex", alignItems: "center", gap: "var(--sp-3)", height: 30, padding: "0 var(--sp-4)", boxSizing: "border-box", border: "1px solid var(--line)", borderRadius: "var(--r-3)", background: "var(--panel)", color: "var(--ink-faint)" }}>
+        <span style={{ display: "grid", placeItems: "center", width: 14, height: 14 }}>{Icon.search}</span>
+        <input
+          data-plugin-search
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t("plugins.search")}
+          style={{ flex: 1, minWidth: 0, border: "none", background: "none", color: "var(--ink)", fontSize: "var(--text-xs)", outline: "none" }}
+        />
+      </label>
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "var(--sp-5)" }}>{right}</div>
     </div>
   );
 }
 
-function Installed({ items, dir }: { items: PluginInfo[]; dir: string }) {
+/** 「다시 켜기」 띠 — 바뀐 것이 있을 때만. 무엇이 바뀌었는지 함께 적는다 (시안) */
+function RestartBand() {
   const t = useI18n((s) => s.t);
-  const reg = useMgr((m) => m.reg);
+  const changes = useMgr((m) => m.changes);
+  if (changes.length === 0) return null;
+  return (
+    <div data-plugins-restart style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--sp-5)", padding: "var(--sp-3) var(--sp-5)", border: "1px solid var(--accent-line)", borderRadius: "var(--r-3)", background: "var(--accent-bg)" }}>
+      <span style={{ width: 8, height: 8, borderRadius: 4, background: "var(--accent-ink)", flexShrink: 0 }} />
+      <span style={{ fontSize: "var(--text-xs)", color: "var(--ink)", whiteSpace: "nowrap" }}>{t("plugins.changed")}</span>
+      <span data-plugins-changes style={{ fontSize: "var(--text-2xs)", color: "var(--ink-dim)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{changes.join(" · ")}</span>
+      {/* ★설치·삭제·업데이트·켜기/끄기는 다음에 켤 때 붙는다 — 여기서 바로 붙인다 (사용자 지시 2026-09-08):
+          껍데기가 **백엔드만** 다시 띄우고(`restart_backend`) 화면은 새로 읽는다. 앱 프로세스를 통째로 다시 띄우면
+          개발 중에는 Vite 가 함께 내려가 연결 거부 화면이 떴다 (사용자 보고 2026-09-08, `lib.rs` 의 주). */}
+      <button
+        data-plugins-restart-btn
+        onClick={() =>
+          void import("@tauri-apps/api/core")
+            .then((m) => m.invoke("restart_backend"))
+            .then(() => location.reload())
+            .catch((e) => toast(String(e), "warn"))
+        }
+        style={{ ...accentBtn, marginLeft: "auto" }}
+      >
+        <span style={{ display: "grid", placeItems: "center", width: 12, height: 12 }}>{Icon.refresh}</span>
+        {t("plugins.restartBtn")}
+      </button>
+    </div>
+  );
+}
+
+const matches = (q: string, ...fields: string[]) => {
+  const k = q.trim().toLowerCase();
+  return !k || fields.some((f) => f.toLowerCase().includes(k));
+};
+
+/* ── 플러그인 목록 — 카드 격자 ─────────────────────────────────────────── */
+
+function Card({ r }: { r: RegItem }) {
+  const t = useI18n((s) => s.t);
   const busy = useMgr((m) => m.busy);
-  useEffect(() => {
-    void useMgr.getState().loadReg();
-  }, []);
-  const regOf = (id: string) => (reg ?? []).find((r) => r.id === id);
-
+  const link = linkOf(r);
+  const owner = r.repo ? r.repo.split("/")[0] : r.official ? "PeroPix" : "";
   return (
-    <div data-plugins-installed style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
-      <Head dir={dir} />
-      {items.length === 0 ? (
-        <div style={{ fontSize: "var(--text-sm)", color: "var(--ink-dim)" }}>{t("plugins.none")}</div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
-          {items.map((p) => {
-            const on = p.enabled !== false;
-            const r = regOf(p.id);
-            return (
-              <div key={p.id} data-plugin-row={p.id} data-on={on ? "" : undefined} style={{ ...row, opacity: on ? 1 : 0.6 }}>
-                <span style={{ fontSize: "var(--text-sm)", color: "var(--ink)", minWidth: 0 }}>
-                  {p.name}
-                  <span style={{ marginLeft: "var(--sp-2)", fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{p.id}</span>
-                  {r && <span style={badge}>{t(r.official ? "plugins.official" : "plugins.user")}</span>}
-                </span>
-                <span style={cluster}>
-                  <span style={{ ...version, color: p.error ? "var(--minus-ink)" : "var(--ink-faint)" }}>{p.error ? t("plugins.broken") : p.version}</span>
-                  {r && <UpdateButton r={r} />}
-                  <button
-                    data-plugin-toggle={p.id}
-                    data-on={on ? "" : undefined}
-                    disabled={!!busy}
-                    onClick={() => void useMgr.getState().setEnabled(p, !on)}
-                    style={{
-                      ...btn,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "var(--sp-1)",
-                      borderColor: on ? "var(--accent)" : "var(--line)",
-                      background: on ? "var(--accent-bg)" : "var(--panel)",
-                      color: on ? "var(--accent-ink)" : "var(--ink-faint)",
-                    }}
-                  >
-                    <span style={{ display: "grid", placeItems: "center", width: 12, height: 12 }}>{on ? Icon.check : Icon.close12}</span>
-                    {t(on ? "plugins.on" : "plugins.off")}
-                  </button>
-                  <button data-plugin-remove={p.id} disabled={!!busy} onClick={() => void useMgr.getState().remove(p.id)} style={btn}>
-                    {t("plugins.remove")}
-                  </button>
-                </span>
-                {p.error && (
-                  <span style={{ gridColumn: "1 / -1", fontSize: "var(--text-2xs)", color: "var(--ink-dim)", whiteSpace: "pre-wrap" }}>{p.error}</span>
-                )}
-              </div>
-            );
-          })}
+    <div data-plugin-avail={r.id} style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)", padding: "var(--sp-6) var(--sp-6) var(--sp-5)", border: "1px solid var(--line)", borderRadius: "var(--r-4)", background: "var(--panel)", minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)", minWidth: 0 }}>
+        <Monogram name={r.name} official={r.official} />
+        <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+          <span style={{ fontSize: "var(--text-md)", fontWeight: "var(--w-semi)", color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
+          <span style={mono}>{r.id} · {r.installed ?? r.version}</span>
         </div>
-      )}
-      <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", lineHeight: 1.6 }}>{t("plugins.hint")}</div>
+        <span style={{ marginLeft: "auto", flexShrink: 0 }}><Badge kind={r.official ? "official" : "user"} /></span>
+      </div>
+      <div style={{ fontSize: "var(--text-2xs)", lineHeight: 1.5, color: "var(--ink-soft)", minHeight: 36, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.description}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", paddingTop: 2, minWidth: 0 }}>
+        {link ? <GitLink href={link} label={owner || t("plugins.github")} /> : <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{owner}</span>}
+        <span style={{ marginLeft: "auto", display: "inline-flex", gap: "var(--sp-2)", flexShrink: 0 }}>
+          {r.installed ? (
+            <>
+              <span data-plugin-installed-mark={r.id} style={btn}>
+                <span style={{ display: "grid", placeItems: "center", width: 12, height: 12 }}>{Icon.check}</span>
+                {t("plugins.installedMark")}
+              </span>
+              <UpdateButton r={r} />
+            </>
+          ) : (
+            <button data-plugin-install={r.id} disabled={!!busy} onClick={() => void useMgr.getState().install({ id: r.id }, r.name)} style={accentBtn}>
+              {busy === r.id ? t("plugins.installing") : t("plugins.install")}
+            </button>
+          )}
+        </span>
+      </div>
     </div>
   );
 }
 
-function List({ dir }: { dir: string }) {
+type Filter = "all" | "official" | "user";
+
+function List({ q, setQ, sub, setSub, installedCount }: { q: string; setQ: (v: string) => void; sub: string; setSub: (k: string) => void; installedCount: number }) {
   const t = useI18n((s) => s.t);
   const reg = useMgr((m) => m.reg);
   const remoteError = useMgr((m) => m.remoteError);
   const busy = useMgr((m) => m.busy);
+  const dir = usePlugins((s) => s.dir);
   const [zip, setZip] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
   useEffect(() => {
     void useMgr.getState().loadReg();
   }, []);
 
   /** 목록 — 전부. 깔린 것은 「설치됨」 표식 (+ 새 판이 있으면 업데이트 단추) */
-  const listed = reg ?? [];
+  const listed = (reg ?? []).filter((r) => matches(q, r.name, r.id, r.description));
   const groups = ([
-    { key: "official", items: listed.filter((r) => r.official) },
-    { key: "user", items: listed.filter((r) => !r.official) },
-  ] as { key: "official" | "user"; items: RegItem[] }[]).filter((g) => g.items.length > 0);
+    { key: "official", items: listed.filter((r) => r.official), note: t("plugins.officialNote") },
+    { key: "user", items: listed.filter((r) => !r.official), note: t("plugins.userNote") },
+  ] as { key: Filter; items: RegItem[]; note: string }[]).filter((g) => g.items.length > 0 && (filter === "all" || filter === g.key));
 
   const installZip = async () => {
     await useMgr.getState().install({ zip: zip.trim() });
     setZip("");
   };
+  const chip = (k: Filter, label: string) => {
+    const on = filter === k;
+    return (
+      <button key={k} data-plugin-filter={k} onClick={() => setFilter(k)} style={{ ...btn, height: 24, padding: "0 var(--sp-4)", borderColor: on ? "var(--accent)" : "var(--line)", background: on ? "var(--accent-bg)" : "transparent", color: on ? "var(--accent-ink)" : "var(--ink-dim)" }}>
+        {label}
+      </button>
+    );
+  };
 
   return (
-    <div data-plugins-list style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
-      <Head dir={dir} />
-      {reg === null ? (
-        <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>…</div>
-      ) : groups.length === 0 ? (
-        <div style={{ fontSize: "var(--text-sm)", color: "var(--ink-dim)" }}>{t("plugins.noAvailable")}</div>
-      ) : (
-        groups.map((g) => (
-          <div key={g.key} data-plugin-group={g.key} style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
-            <div style={subHead}>{t(g.key === "official" ? "plugins.official" : "plugins.user")}</div>
-            {g.items.map((r) => (
-              <div key={r.id} data-plugin-avail={r.id} style={row}>
-                <span style={{ fontSize: "var(--text-sm)", color: "var(--ink)", minWidth: 0 }}>
-                  {r.name}
-                  <span style={{ marginLeft: "var(--sp-2)", fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{r.id}</span>
-                  {r.description && (
-                    <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--ink-dim)" }}>{r.description}</span>
-                  )}
-                </span>
-                <span style={cluster}>
-                  <span style={version}>{r.installed ?? r.version}</span>
-                  {r.installed ? (
-                    <>
-                      <span data-plugin-installed-mark={r.id} style={{ ...badge, marginLeft: 0, color: "var(--accent-ink)", borderColor: "var(--accent)" }}>
-                        {t("plugins.installedMark")}
-                      </span>
-                      <UpdateButton r={r} />
-                    </>
-                  ) : (
-                    <button data-plugin-install={r.id} disabled={!!busy} onClick={() => void useMgr.getState().install({ id: r.id })} style={btn}>
-                      {busy === r.id ? t("plugins.installing") : t("plugins.install")}
-                    </button>
-                  )}
-                </span>
+    <div data-plugins-list style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "var(--sp-6)" }}>
+      <Head
+        sub={sub}
+        setSub={setSub}
+        q={q}
+        setQ={setQ}
+        installedCount={installedCount}
+        right={
+          <>
+            <span style={{ display: "inline-flex", gap: "var(--sp-1)" }}>
+              {chip("all", t("plugins.filterAll"))}
+              {chip("official", t("plugins.official"))}
+              {chip("user", t("plugins.user"))}
+            </span>
+            <button data-plugins-author onClick={() => openExternal(PLUGIN_LIST_REPO)} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "var(--text-2xs)", color: "var(--accent-ink)", whiteSpace: "nowrap" }}>
+              {t("plugins.author")}
+              <span style={{ display: "grid", placeItems: "center", width: 13, height: 13 }}>{Icon.external}</span>
+            </button>
+            <FolderOpenButton data-plugins-open tip={t("plugins.openDir")} disabled={!dir} onClick={() => void useFiles.getState().openDir(dir).catch((e) => toast(String(e), "warn"))} />
+          </>
+        }
+      />
+      <RestartBand />
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--sp-8)" }}>
+        {reg === null ? (
+          <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>…</div>
+        ) : groups.length === 0 ? (
+          <div style={{ fontSize: "var(--text-sm)", color: "var(--ink-dim)" }}>{t(listed.length === 0 && (reg ?? []).length > 0 ? "plugins.noMatch" : "plugins.noAvailable")}</div>
+        ) : (
+          groups.map((g) => (
+            <div key={g.key} data-plugin-group={g.key} style={{ display: "flex", flexDirection: "column", gap: "var(--sp-3)" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: "var(--sp-3)" }}>
+                <span style={eyebrow}>{t(g.key === "official" ? "plugins.official" : "plugins.user")}</span>
+                <span style={{ fontSize: "var(--text-3xs)", color: "var(--ink-ghost)" }}>{g.note}</span>
               </div>
-            ))}
-          </div>
-        ))
-      )}
-      {remoteError && (
-        <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{t("plugins.registryFail")}</div>
-      )}
-      <div style={{ display: "flex", gap: "var(--sp-2)", alignItems: "center" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "var(--sp-5)" }}>
+                {g.items.map((r) => <Card key={r.id} r={r} />)}
+              </div>
+            </div>
+          ))
+        )}
+        {remoteError && <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{t("plugins.registryFail")}</div>}
+      </div>
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--sp-5)", paddingTop: "var(--sp-5)", borderTop: "1px solid var(--line-soft)" }}>
+        <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", whiteSpace: "nowrap" }}>{t("plugins.notListed")}</span>
         <input
           data-plugin-zip
           value={zip}
           onChange={(e) => setZip(e.target.value)}
           placeholder={t("plugins.zipUrl")}
-          style={{ flex: 1, minWidth: 0, height: 26, padding: "0 var(--sp-2)", fontSize: "var(--text-xs)", border: "1px solid var(--line)", borderRadius: "var(--r-2)", background: "var(--bg)", color: "var(--ink)" }}
+          style={{ flex: 1, maxWidth: 520, minWidth: 0, height: 28, padding: "0 var(--sp-4)", boxSizing: "border-box", fontSize: "var(--text-2xs)", border: "1px solid var(--line)", borderRadius: "var(--r-2)", background: "var(--panel)", color: "var(--ink)" }}
         />
         <button data-plugin-install-zip disabled={!!busy || !/^https?:\/\//.test(zip.trim())} onClick={() => void installZip()} style={btn}>
           {busy && busy === zip.trim() ? t("plugins.installing") : t("plugins.installZip")}
         </button>
+        <span style={{ marginLeft: "auto", fontSize: "var(--text-3xs)", color: "var(--ink-ghost)", whiteSpace: "nowrap" }}>{t("plugins.applyNote")}</span>
       </div>
-      <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", lineHeight: 1.6 }}>{t("plugins.hint")}</div>
+    </div>
+  );
+}
+
+/* ── 설치된 플러그인 — 줄 목록 ─────────────────────────────────────────── */
+
+const COLS = "36px minmax(0, 1fr) 90px 80px 96px 140px";
+
+function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
+  const t = useI18n((s) => s.t);
+  const busy = useMgr((m) => m.busy);
+  const on = p.enabled !== false;
+  const kind: "official" | "user" | "folder" = p.origin?.source === "bundled" || r?.official ? "official" : p.origin ? "user" : "folder";
+  const link = linkOf({ id: p.id, homepage: p.homepage, origin: p.origin });
+  const sub = p.error ? `${t("plugins.broken")} — ${p.error}` : p.description || (p.origin?.repo ?? "");
+  return (
+    <div data-plugin-row={p.id} data-on={on ? "" : undefined} style={{ display: "grid", gridTemplateColumns: COLS, alignItems: "center", gap: "var(--sp-5)", padding: "var(--sp-5) var(--sp-6)", borderBottom: "1px solid var(--line-soft)", opacity: on ? 1 : 0.6 }}>
+      <Monogram name={p.name} official={kind === "official"} />
+      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", minWidth: 0 }}>
+          <span style={{ fontSize: "var(--text-md)", fontWeight: "var(--w-semi)", color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+          <span style={mono}>{p.id}</span>
+          {link && <GitLink href={link} label={t("plugins.github")} />}
+        </span>
+        <span style={{ fontSize: "var(--text-2xs)", color: p.error ? "var(--err-ink)" : "var(--ink-dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>
+      </div>
+      <span style={{ width: "max-content" }}><Badge kind={kind} /></span>
+      <span style={{ display: "inline-flex", flexDirection: "column", gap: 1, ...mono, color: "var(--ink-soft)" }}>
+        {p.version}
+        {r?.update && <span data-plugin-next={r.version} style={{ fontSize: "var(--text-3xs)", color: "var(--accent-ink)" }}>→ {r.version}</span>}
+      </span>
       <button
-        data-plugins-author
-        onClick={() => openExternal(PLUGIN_LIST_REPO)}
-        style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "var(--text-2xs)", color: "var(--accent-ink)", textDecoration: "underline" }}
+        data-plugin-toggle={p.id}
+        data-on={on ? "" : undefined}
+        disabled={!!busy}
+        onClick={() => void useMgr.getState().setEnabled(p, !on)}
+        style={{ display: "inline-flex", alignItems: "center", gap: "var(--sp-3)", fontSize: "var(--text-2xs)", color: on ? "var(--ink-soft)" : "var(--ink-faint)", background: "none", border: "none", padding: 0, cursor: "pointer" }}
       >
-        {t("plugins.author")}
+        <span style={{ width: 30, height: 18, borderRadius: 9, background: on ? "var(--accent)" : "var(--line)", position: "relative", flexShrink: 0, transition: "background 0.12s" }}>
+          <span style={{ position: "absolute", top: 2, left: on ? 14 : 2, width: 14, height: 14, borderRadius: 7, background: on ? "var(--accent-on)" : "var(--ink-dim)", transition: "left 0.12s" }} />
+        </span>
+        {t(on ? "plugins.on" : "plugins.off")}
       </button>
+      <span style={{ display: "inline-flex", justifyContent: "flex-end", gap: "var(--sp-2)" }}>
+        {r && <UpdateButton r={r} />}
+        <button data-plugin-remove={p.id} data-tip={t("plugins.remove")} disabled={!!busy} onClick={() => void useMgr.getState().remove(p)} style={{ ...btn, width: 26, padding: 0, justifyContent: "center", color: "var(--ink-faint)" }}>
+          <span style={{ display: "grid", placeItems: "center", width: 14, height: 14 }}>{Icon.trash}</span>
+        </button>
+      </span>
+    </div>
+  );
+}
+
+function Installed({ q, setQ, sub, setSub, items, dir }: { q: string; setQ: (v: string) => void; sub: string; setSub: (k: string) => void; items: PluginInfo[]; dir: string }) {
+  const t = useI18n((s) => s.t);
+  const reg = useMgr((m) => m.reg);
+  useEffect(() => {
+    void useMgr.getState().loadReg();
+  }, []);
+  const regOf = (id: string) => (reg ?? []).find((r) => r.id === id);
+  const shown = items.filter((p) => matches(q, p.name, p.id, p.description ?? ""));
+  const col = (k: string) => <span style={eyebrow}>{k}</span>;
+
+  return (
+    <div data-plugins-installed style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "var(--sp-6)" }}>
+      <Head
+        sub={sub}
+        setSub={setSub}
+        q={q}
+        setQ={setQ}
+        installedCount={items.length}
+        right={
+          <>
+            <span data-plugins-dir style={{ ...mono, maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dir}</span>
+            <button data-plugins-open onClick={() => void useFiles.getState().openDir(dir).catch((e) => toast(String(e), "warn"))} disabled={!dir} style={{ ...btn, height: 28 }}>
+              <span style={{ display: "grid", placeItems: "center", width: 14, height: 14 }}>{Icon.folderOpen}</span>
+              {t("plugins.openDirBtn")}
+            </button>
+          </>
+        }
+      />
+      <RestartBand />
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", border: "1px solid var(--line)", borderRadius: "var(--r-4)", background: "var(--panel)", overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: COLS, alignItems: "center", gap: "var(--sp-5)", padding: "var(--sp-3) var(--sp-6)", borderBottom: "1px solid var(--line-soft)" }}>
+          <span />{col(t("plugins.colPlugin"))}{col(t("plugins.colSource"))}{col(t("plugins.colVersion"))}{col(t("plugins.colState"))}<span />
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+          {shown.length === 0 ? (
+            <div style={{ padding: "var(--sp-6)", fontSize: "var(--text-sm)", color: "var(--ink-dim)" }}>{t(items.length === 0 ? "plugins.none" : "plugins.noMatch")}</div>
+          ) : (
+            shown.map((p) => <Row key={p.id} p={p} r={regOf(p.id)} />)
+          )}
+          <div style={{ marginTop: "auto", padding: "var(--sp-5) var(--sp-6)", fontSize: "var(--text-3xs)", color: "var(--ink-ghost)" }}>{t("plugins.footnote")}</div>
+        </div>
+      </div>
     </div>
   );
 }

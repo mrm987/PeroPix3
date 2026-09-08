@@ -61,14 +61,20 @@ class Plugin:
     contributes: dict = field(default_factory=dict)
     #: 못 읽었으면 까닭. 비면 정상
     error: str = ""
+    description: str = ""
     #: 꺼진 플러그인 — 폴더는 그대로 두고 **붙이지 않는다** (설정 `plugins_disabled`). 켜고 끄는 것은 다음에 켤 때 적용
     enabled: bool = True
+    #: 어디서 왔나 (`_origin.json`: bundled / repo+repo / zip+zip). 폴더에 직접 넣은 것은 None — 화면이 GitHub 링크·출처 표시에 쓴다
+    origin: dict | None = None
+    #: 매니페스트의 `homepage` (선택) — 있으면 링크는 이것이 우선
+    homepage: str = ""
 
     def info(self) -> dict:
         return {
             "id": self.id, "name": self.name or self.id, "version": self.version,
             "web": self.web, "ext": self.ext, "contributes": self.contributes,
             "error": self.error, "dir": str(self.dir), "enabled": self.enabled,
+            "origin": self.origin, "homepage": self.homepage, "description": self.description,
         }
 
 
@@ -93,11 +99,13 @@ def _inside(d: Path, rel: str) -> Path:
 
 
 def _load_one(app: FastAPI, d: Path) -> Plugin:
-    p = Plugin(id=d.name, dir=d)
+    p = Plugin(id=d.name, dir=d, origin=_installed_origin(d))
     try:
         m = _read_manifest(d)
         p.name = str(m.get("name") or d.name)
         p.version = str(m.get("version") or "")
+        p.description = str(m.get("description") or "")
+        p.homepage = str(m.get("homepage") or "")
         p.contributes = m.get("contributes") if isinstance(m.get("contributes"), dict) else {}
 
         # ★★플러그인 폴더 자체는 `sys.path` 에 넣지 않는다 (실측 2026-09-07, 게스트 QA): 앞에 넣었더니 플러그인의
@@ -157,10 +165,11 @@ def _load_one(app: FastAPI, d: Path) -> Plugin:
 
 def _skipped(d: Path) -> Plugin:
     """꺼진 플러그인 — 이름·판만 읽고 아무것도 붙이지 않는다. 목록에는 남아야 다시 켤 수 있다."""
-    p = Plugin(id=d.name, dir=d, enabled=False)
+    p = Plugin(id=d.name, dir=d, enabled=False, origin=_installed_origin(d))
     m = _manifest_of(d)
     if m:
         p.name, p.version = str(m.get("name") or d.name), str(m.get("version") or "")
+        p.description, p.homepage = str(m.get("description") or ""), str(m.get("homepage") or "")
     return p
 
 
@@ -225,7 +234,7 @@ def _manifest_of(d: Path) -> dict | None:
 def _entry(m: dict, pid: str, source: str, **extra) -> dict:
     return {
         "id": pid, "name": str(m.get("name") or pid), "version": str(m.get("version") or ""),
-        "description": str(m.get("description") or ""), "source": source, **extra,
+        "description": str(m.get("description") or ""), "homepage": str(m.get("homepage") or ""), "source": source, **extra,
     }
 
 

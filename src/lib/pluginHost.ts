@@ -44,6 +44,11 @@ export type PluginInfo = {
   dir: string;
   /** 꺼진 플러그인 — 백엔드가 붙이지 않았다. 화면도 캔버스·단추·메뉴를 감춘다 (`isOn`) */
   enabled: boolean;
+  /** 어디서 왔나 (`_origin.json`). 폴더에 직접 넣은 것은 null — 업데이트를 받지 않고 GitHub 링크도 없다 */
+  origin: { source: "bundled" | "repo" | "zip"; repo?: string; zip?: string } | null;
+  /** 매니페스트의 `homepage` (선택) */
+  homepage: string;
+  description: string;
 };
 
 /** 화면에 내놓아도 되는 플러그인인가 — 켜져 있고 읽혔다. ★끄면 다시 켜기 전에도 단추·메뉴·캔버스는 바로 감춘다
