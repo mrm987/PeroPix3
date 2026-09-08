@@ -155,6 +155,7 @@ impl Backend {
     pub fn kill(&self) {
         if let Ok(mut guard) = self.0.lock() {
             if let Some(child) = guard.as_mut() {
+                kill_tree(child);
                 let _ = child.kill();
                 let _ = child.wait();
             }
@@ -162,6 +163,27 @@ impl Backend {
         }
     }
 }
+
+/// 자식의 **자손까지** 끝낸다 (Windows: `taskkill /T` — pid 로만, 이름으로 죽이지 않는다).
+///
+/// ★개발 중(`PEROPIX_DEV_RELOAD`)의 uvicorn 은 감시자 + 워커 두 프로세스다. 감시자만 죽이면 워커가 남아
+///   포트를 쥐고, 다시 띄운 백엔드가 바인딩에 실패한다 (같은 증상의 실측: 상단 `adopt_into_job` 주).
+///   앱이 나갈 때는 잡(Job)이 자손을 거두지만, **앱은 살아 있고 백엔드만 다시 띄울 때**(`restart_backend`)는
+///   잡이 닫히지 않으므로 여기서 직접 거둔다.
+#[cfg(windows)]
+fn kill_tree(child: &Child) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let _ = Command::new("taskkill")
+        .args(["/PID", &child.id().to_string(), "/T", "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+#[cfg(not(windows))]
+fn kill_tree(_child: &Child) {}
 
 impl Drop for Backend {
     fn drop(&mut self) {

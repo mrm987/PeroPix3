@@ -93,7 +93,24 @@ fn apply_update(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// **그냥 다시 켠다** — 플러그인을 설치·삭제한 뒤 붙이려고 (사용자 지시 2026-09-08). `apply_update` 의
+/// **백엔드만 다시 띄운다** — 플러그인을 설치·삭제·업데이트·켜고 끈 뒤 붙이려고 (사용자 지시 2026-09-08).
+/// 화면은 이어서 `location.reload()` 로 새로 읽는다 (확장 JS·캔버스는 페이지가 뜰 때 붙는다).
+/// ★앱 프로세스를 통째로 다시 띄우지 않는다 — 개발 중(`tauri dev`)에는 exe 가 나가는 순간 `tauri dev` 가 Vite 를
+///   내려서, 새로 뜬 exe 가 `localhost:1420` 연결 거부 화면을 봤다 (사용자 보고 2026-09-08). 포트·열쇠는 `OnceLock`
+///   이라 그대로이므로 화면은 같은 주소로 다시 붙는다.
+#[tauri::command]
+fn restart_backend(app: tauri::AppHandle) -> Result<(), String> {
+    let state = app.try_state::<backend::Backend>().ok_or("백엔드 상태가 없습니다")?;
+    state.kill();
+    let child = backend::spawn().map_err(|e| format!("백엔드를 다시 띄우지 못했습니다: {e}"))?;
+    backend::log_line(&format!("[backend] respawned on port {}", backend::backend_port()));
+    if let Ok(mut g) = state.0.lock() {
+        *g = Some(child);
+    }
+    Ok(())
+}
+
+/// **그냥 다시 켠다** — 앱 전체를. `apply_update` 의
 /// 뒷부분과 같은 차례(사이드카 내림 → 자물쇠 놓음 → 새 판 띄움 → 나감)인데 갈아 끼우는 것이 없다.
 /// ★`update::relaunch` 를 쓰지 않는다 — 그쪽은 뿌리의 `PeroPix.exe` 를 띄우는데, 개발 중(`tauri dev`)에는
 ///   exe 가 `target/debug/` 에 있어 뿌리에 없다. **지금 도는 그 exe** 를 그대로 띄운다.
@@ -217,7 +234,7 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![backend_url, app_root, update_staged, apply_update, restart_app, uptime_ms, drag_restore])
+        .invoke_handler(tauri::generate_handler![backend_url, app_root, update_staged, apply_update, restart_app, restart_backend, uptime_ms, drag_restore])
         .setup(move |app| {
             // ★`apply_update` 가 새 판을 띄우기 전에 자물쇠를 놓을 수 있게 맡겨 둔다
             app.manage(InstanceLock(lock));

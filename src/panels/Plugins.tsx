@@ -478,12 +478,15 @@ function Head({ dir }: { dir: string }) {
       {restart && (
         <span data-plugins-restart style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "var(--sp-2)", fontSize: "var(--text-2xs)", color: "var(--accent-ink)" }}>
           {t("plugins.restart")}
-          {/* ★설치·삭제·업데이트·켜기/끄기는 다음에 켤 때 붙는다 — 여기서 바로 켜게 한다 (사용자 지시 2026-09-08). 껍데기의 `restart_app` */}
+          {/* ★설치·삭제·업데이트·켜기/끄기는 다음에 켤 때 붙는다 — 여기서 바로 붙인다 (사용자 지시 2026-09-08):
+              껍데기가 **백엔드만** 다시 띄우고(`restart_backend`) 화면은 새로 읽는다. 앱 프로세스를 통째로 다시 띄우면
+              개발 중에는 Vite 가 함께 내려가 연결 거부 화면이 떴다 (사용자 보고 2026-09-08, `lib.rs` 의 주). */}
           <button
             data-plugins-restart-btn
             onClick={() =>
               void import("@tauri-apps/api/core")
-                .then((m) => m.invoke("restart_app"))
+                .then((m) => m.invoke("restart_backend"))
+                .then(() => location.reload())
                 .catch((e) => toast(String(e), "warn"))
             }
             style={accentBtn}
