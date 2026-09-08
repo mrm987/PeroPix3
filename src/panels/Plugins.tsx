@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { useUi } from "../store/ui";
 import { useI18n, t as tr } from "../i18n";
@@ -83,6 +83,9 @@ const useMgr = create<Mgr>((set, get) => ({
     try {
       const r = await post("/api/plugins/install", body);
       toast(tr("plugins.installed", { n: r.id }));
+      // ★설치하면 탭은 열린 상태로 시작한다 — 전에 닫아 두고 지웠던 플러그인을 다시 깔면 옛 「닫음」 이 남아
+      //   다시 켠 뒤에도 탭이 안 보였다 (사용자 보고 2026-09-08)
+      useUi.getState().setView("hide", r.id, false);
       set({ restart: true });
       await Promise.all([get().loadReg(), usePlugins.getState().load()]);
     } catch (e) {
@@ -97,6 +100,7 @@ const useMgr = create<Mgr>((set, get) => ({
     try {
       await api(`/api/plugins/${encodeURIComponent(id)}`, { method: "DELETE" });
       toast(tr("plugins.removed", { n: id }));
+      useUi.getState().setView("hide", id, false); // 지운 플러그인의 「닫음」 을 남기지 않는다
       set({ restart: true });
       await Promise.all([get().loadReg(), usePlugins.getState().load()]);
     } catch (e) {
@@ -136,10 +140,33 @@ export function Plugins() {
   const hide = useUi((u) => u.view.hide);
   const setHide = (id: string, v: boolean) => useUi.getState().setView("hide", id, v);
   const [picking, setPicking] = useState(false);
+  /** + 단추와 선택 상자를 감싼 자리 — 이 밖을 누르면 상자를 닫는다 */
+  const pickRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     void usePlugins.getState().load().catch((e) => toast(String(e), "warn"));
   }, []);
+
+  // ★선택 상자는 다른 데를 누르면 닫힌다 (사용자 지시 2026-09-08). 캡처 단계로 듣는 까닭은 `ImageActions` 의 메뉴와 같다.
+  //   캔버스(iframe) 안을 누르면 부모에 pointerdown 이 안 오므로, 창의 초점이 iframe 으로 넘어가는 `blur` 도 듣는다.
+  useEffect(() => {
+    if (!picking) return;
+    const close = (e: Event) => {
+      const n = e.target instanceof Node ? e.target : null;
+      if (n && pickRef.current?.contains(n)) return;
+      setPicking(false);
+    };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setPicking(false);
+    const blur = () => setPicking(false);
+    document.addEventListener("pointerdown", close, true);
+    document.addEventListener("keydown", key);
+    window.addEventListener("blur", blur);
+    return () => {
+      document.removeEventListener("pointerdown", close, true);
+      document.removeEventListener("keydown", key);
+      window.removeEventListener("blur", blur);
+    };
+  }, [picking]);
 
   /** 캔버스가 있고 켜진 플러그인 — 탭이 될 수 있는 것 */
   const usable = items.filter((p) => p.web && !p.error && p.enabled !== false);
@@ -213,13 +240,38 @@ export function Plugins() {
             </span>
           );
         })}
+        <span ref={pickRef} style={{ display: "inline-flex", alignItems: "flex-end" }}>
         <button
           data-plugin-tab-add
+          data-plugin-tab-add-count={closed.length}
           data-tip={t("plugins.addTab")}
           onClick={() => setPicking((v) => !v)}
-          style={{ display: "grid", placeItems: "center", padding: "0 var(--sp-2) var(--sp-2)", color: "var(--ink-faint)" }}
+          style={{ position: "relative", display: "grid", placeItems: "center", padding: "0 var(--sp-2) var(--sp-2)", color: "var(--ink-faint)" }}
         >
           {Icon.plus}
+          {/* ★열 수 있는(닫아 둔) 탭 수를 작은 숫자로 (사용자 지시 2026-09-08). 없으면 안 보인다 */}
+          {closed.length > 0 && (
+            <span
+              style={{
+                position: "absolute",
+                top: -4,
+                right: -2,
+                minWidth: 14,
+                height: 14,
+                padding: "0 3px",
+                display: "grid",
+                placeItems: "center",
+                fontSize: 9,
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+                borderRadius: 7,
+                background: "var(--accent)",
+                color: "var(--accent-on)",
+              }}
+            >
+              {closed.length}
+            </span>
+          )}
         </button>
         {picking && (
           <div
@@ -263,6 +315,7 @@ export function Plugins() {
             )}
           </div>
         )}
+        </span>
         {screenBtn(MANAGE, t("plugins.manage"), Icon.settings)}
       </div>
 

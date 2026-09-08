@@ -73,7 +73,7 @@ export const en = {
   plugins: {
     manage: "Manage",
     none: "No plugins installed.",
-    hint: "Installing, removing, turning on/off, or dropping a folder in takes effect after you restart the app. Plugins run with the same access as the app; what they do is their author's responsibility.",
+    hint: "Installing, removing, turning on/off, or dropping a folder in takes effect after you restart the app. Each plugin is maintained by its author. If something goes wrong, please let that plugin's author know.",
     openDir: "Open plugins folder",
     broken: "Failed to load",
     installedHead: "Installed plugins",
