@@ -12,6 +12,7 @@
  *  캔버스 페이지(iframe)는 같은 것을 postMessage 로 부른다:
  *      parent.postMessage({ type: "peropix", id: 1, call: "action", name: "add_style_card", args: {...} }, "*");
  *      window.addEventListener("message", (e) => { if (e.data?.type === "peropix" && e.data.id === 1) … });
+ *  앱이 먼저 보내는 것(id 없음): `{ type: "peropix", event: "theme", theme: "dark" | "light" }` — 테마가 바뀔 때.
  */
 import { create } from "zustand";
 import { api, backendUrl } from "./backend";
@@ -159,8 +160,8 @@ export function hostApi(p: PluginInfo) {
     action: (name: string, args: Record<string, unknown> = {}) => runAction(name, args, false),
     /** 지금 보고 있는 화면 주소 (workspace · tab · sceneGroup) */
     state: () => screenAddr(),
-    /** 디자인 토큰 값 — `theme("--accent")` */
-    theme: (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim(),
+    /** 디자인 토큰 값 — `theme("--accent")`. 이름 없이 부르면 지금 테마 이름(`"dark"` | `"light"`) */
+    theme: (name: string) => (name ? getComputedStyle(document.documentElement).getPropertyValue(name).trim() : currentTheme()),
     t,
     toast,
   };
@@ -191,11 +192,36 @@ if (typeof window !== "undefined" && !window.peropix) {
   };
 }
 
+/** 지금 보이는 테마 — `data-theme` 이 있으면 그것, 없으면(시스템) OS 설정 */
+export function currentTheme(): "dark" | "light" {
+  const t = document.documentElement.getAttribute("data-theme");
+  if (t === "dark" || t === "light") return t;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+/** 앱 → 열린 캔버스 전부: 테마가 바뀌었다 (`{ type: "peropix", event: "theme", theme }`).
+ *  ★`theme()` 은 부른 시점의 값이라, 따르고 싶은 플러그인이 바뀐 순간을 알 길이 없었다 (사용자 결정 2026-09-08: 알림을 준다).
+ *    `data-theme` 의 변화(설정에서 고름)와 OS 테마의 변화(시스템을 따를 때) 둘 다 본다. 받을지는 플러그인 마음이다. */
+function watchTheme() {
+  let last = currentTheme();
+  const tell = () => {
+    const now = currentTheme();
+    if (now === last) return;
+    last = now;
+    for (const f of document.querySelectorAll<HTMLIFrameElement>("iframe[data-plugin-canvas]")) {
+      f.contentWindow?.postMessage({ type: "peropix", event: "theme", theme: now }, "*");
+    }
+  };
+  new MutationObserver(tell).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", tell);
+}
+
 /** 캔버스(iframe) → 앱: postMessage 창구. 한 번만 단다. */
 let bridged = false;
 function installBridge() {
   if (bridged) return;
   bridged = true;
+  watchTheme();
   window.addEventListener("message", (e: MessageEvent) => {
     const d = e.data as { type?: string; id?: unknown; call?: string; name?: string; args?: Record<string, unknown>; text?: string; key?: string } | null;
     if (!d || d.type !== "peropix" || !d.call) return;
