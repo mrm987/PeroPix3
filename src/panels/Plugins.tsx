@@ -140,8 +140,13 @@ export function Plugins() {
   const hide = useUi((u) => u.view.hide);
   const setHide = (id: string, v: boolean) => useUi.getState().setView("hide", id, v);
   const [picking, setPicking] = useState(false);
-  /** + 단추와 선택 상자를 감싼 자리 — 이 밖을 누르면 상자를 닫는다 */
-  const pickRef = useRef<HTMLSpanElement>(null);
+  /** + 단추와 선택 상자 — 둘 다의 밖을 누르면 상자를 닫는다 (상자는 스크롤 띠 밖에 있어 따로 잡는다) */
+  const pickRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  /** 탭들과 + 가 든 가로 스크롤 띠 — 넘치면 휠로 좌우로 민다 */
+  const stripRef = useRef<HTMLDivElement>(null);
+  /** 선택 상자의 왼쪽 자리 (탭 줄 기준). + 를 누른 순간 재서 그 아래에 띄운다 */
+  const [pickX, setPickX] = useState(0);
 
   useEffect(() => {
     void usePlugins.getState().load().catch((e) => toast(String(e), "warn"));
@@ -153,7 +158,7 @@ export function Plugins() {
     if (!picking) return;
     const close = (e: Event) => {
       const n = e.target instanceof Node ? e.target : null;
-      if (n && pickRef.current?.contains(n)) return;
+      if (n && (pickRef.current?.contains(n) || popRef.current?.contains(n))) return;
       setPicking(false);
     };
     const key = (e: KeyboardEvent) => e.key === "Escape" && setPicking(false);
@@ -167,6 +172,20 @@ export function Plugins() {
       window.removeEventListener("blur", blur);
     };
   }, [picking]);
+
+  // ★탭이 넘치면 그 자리에서 **휠로 가로 스크롤** (사용자 지시 2026-09-08). 네이티브로 매다는 까닭은 `blocks/Chip` 의 ★주와
+  //   같다 — React 의 onWheel 은 passive 라 preventDefault 가 안 먹어 세로 스크롤이 함께 일어난다. 넘치지 않으면 손대지 않는다.
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.deltaY || e.deltaX || el.scrollWidth <= el.clientWidth) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   /** 캔버스가 있고 켜진 플러그인 — 탭이 될 수 있는 것 */
   const usable = items.filter((p) => p.web && !p.error && p.enabled !== false);
@@ -188,7 +207,6 @@ export function Plugins() {
         data-plugin-tab={id}
         onClick={() => setTab(id)}
         style={{
-          marginLeft: "auto",
           marginBottom: "var(--sp-2)",
           display: "inline-flex",
           alignItems: "center",
@@ -211,12 +229,28 @@ export function Plugins() {
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--sp-4)", gap: "var(--sp-4)" }}>
-      {/* 밑줄 탭(플러그인, × 로 닫음) + 닫은 것을 여는 + — 워크스페이스 탭과 같은 어법. 오른쪽 끝은 「관리」 테두리 단추 하나 */}
-      <div style={{ position: "relative", display: "flex", alignItems: "flex-end", gap: "var(--sp-5)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
+      {/* 밑줄 탭(플러그인, × 로 닫음) + 닫은 것을 여는 + — 워크스페이스 탭과 같은 어법. 탭들은 가로 스크롤 띠에 들고,
+          오른쪽 끝의 「관리」 테두리 단추는 띠 **밖**에 세로 선으로 갈라 둔다 (사용자 지시 2026-09-08 — 겹치지 않게). */}
+      <div style={{ position: "relative", display: "flex", alignItems: "stretch", flexShrink: 0 }}>
+        <div
+          ref={stripRef}
+          data-plugin-tab-strip
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: "flex",
+            alignItems: "flex-end",
+            gap: "var(--sp-5)",
+            overflowX: "auto",
+            overflowY: "hidden",
+            scrollbarWidth: "none",
+            borderBottom: "1px solid var(--line)",
+          }}
+        >
         {canvases.map((p) => {
           const on = cur === p.id;
           return (
-            <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: "var(--sp-1)", marginBottom: -1, borderBottom: `2px solid ${on ? "var(--accent)" : "transparent"}` }}>
+            <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: "var(--sp-1)", flexShrink: 0, borderBottom: `2px solid ${on ? "var(--accent)" : "transparent"}` }}>
               <button
                 data-plugin-tab={p.id}
                 onClick={() => setTab(p.id)}
@@ -225,6 +259,7 @@ export function Plugins() {
                   fontSize: "var(--text-sm)",
                   fontWeight: on ? "var(--w-semi)" : "var(--w-norm)",
                   color: on ? "var(--ink)" : "var(--ink-faint)",
+                  whiteSpace: "nowrap",
                 }}
               >
                 {p.name}
@@ -240,46 +275,52 @@ export function Plugins() {
             </span>
           );
         })}
-        <span ref={pickRef} style={{ display: "inline-flex", alignItems: "flex-end" }}>
         <button
+          ref={pickRef}
           data-plugin-tab-add
           data-plugin-tab-add-count={closed.length}
           data-tip={t("plugins.addTab")}
-          onClick={() => setPicking((v) => !v)}
-          style={{ position: "relative", display: "grid", placeItems: "center", padding: "0 var(--sp-2) var(--sp-2)", color: "var(--ink-faint)" }}
+          onClick={(e) => {
+            const row = e.currentTarget.closest("[data-plugin-tab-strip]")?.parentElement;
+            const b = e.currentTarget.getBoundingClientRect();
+            const r = row?.getBoundingClientRect();
+            if (r) setPickX(Math.max(0, Math.min(b.left - r.left, r.width - 200)));
+            setPicking((v) => !v);
+          }}
+          style={{ display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0, padding: "0 var(--sp-2) var(--sp-2)", color: "var(--ink-faint)" }}
         >
           {Icon.plus}
-          {/* ★열 수 있는(닫아 둔) 탭 수를 작은 숫자로 (사용자 지시 2026-09-08). 없으면 안 보인다 */}
+          {/* ★열 수 있는(닫아 둔) 탭 수 — + 옆에 무채색 작은 숫자로, 아이콘과 겹치지 않게 (사용자 지시 2026-09-08). 없으면 안 보인다 */}
           {closed.length > 0 && (
             <span
               style={{
-                position: "absolute",
-                top: -4,
-                right: -2,
                 minWidth: 14,
                 height: 14,
-                padding: "0 3px",
+                padding: "0 4px",
                 display: "grid",
                 placeItems: "center",
                 fontSize: 9,
                 lineHeight: 1,
                 fontVariantNumeric: "tabular-nums",
                 borderRadius: 7,
-                background: "var(--accent)",
-                color: "var(--accent-on)",
+                border: "1px solid var(--line)",
+                background: "var(--panel)",
+                color: "var(--ink-faint)",
               }}
             >
               {closed.length}
             </span>
           )}
         </button>
+        </div>
         {picking && (
           <div
+            ref={popRef}
             data-plugin-tab-pick
             style={{
               position: "absolute",
               top: "100%",
-              left: 0,
+              left: pickX,
               zIndex: 5,
               marginTop: 4,
               minWidth: 180,
@@ -315,8 +356,10 @@ export function Plugins() {
             )}
           </div>
         )}
-        </span>
-        {screenBtn(MANAGE, t("plugins.manage"), Icon.settings)}
+        {/* 「관리」 자리 — 띠 밖. 왼쪽 세로 선으로 탭 영역과 가른다 */}
+        <div data-plugin-manage-slot style={{ display: "flex", alignItems: "flex-end", flexShrink: 0, marginLeft: "var(--sp-3)", paddingLeft: "var(--sp-3)", borderLeft: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
+          {screenBtn(MANAGE, t("plugins.manage"), Icon.settings)}
+        </div>
       </div>
 
       {base &&
