@@ -360,12 +360,14 @@ export function App() {
             <Censor />
           ) : mode === "utility" ? (
             <Tools />
-          ) : mode === "plugins" ? (
-            <Plugins />
-          ) : (
+          ) : mode === "plugins" ? null : (
             <Placeholder mode={mode} />
           )
         }
+        /* ★플러그인 모드는 **떼지 않고 숨긴다** (사용자 지시 2026-09-08: 다른 화면에 갔다 와도 마지막 상태 유지).
+           떼면 캔버스 iframe 이 다시 만들어져 플러그인 페이지의 상태(돌려 놓은 인물·입력값)가 사라지고, 찾기·거르기도
+           초기화된다. `hidden` 이면 display:none 이라 자리도 안 차지하고 iframe 은 살아 있다. */
+        centerKeep={<Plugins hidden={mode !== "plugins"} />}
       />
       {gate && <WorkspaceGate onClose={() => setGate(false)} />}
       <SaveDialog

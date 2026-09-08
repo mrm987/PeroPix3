@@ -20,6 +20,7 @@ export function Shell({
   left,
   right,
   center,
+  centerKeep,
   titleLeft,
   titleRight,
   navRight,
@@ -47,6 +48,8 @@ export function Shell({
   left: ReactNode;
   right: ReactNode;
   center: ReactNode;
+  /** 가운데 칸에 **모드와 무관하게 늘 매달아 두는 것** — 모드를 오가도 떼지 않는 화면 (플러그인 캔버스). 숨김은 그쪽이 맡는다 */
+  centerKeep?: ReactNode;
   leftLabel: string;
   rightLabel: string;
   leftHeaderRight?: ReactNode;
@@ -196,6 +199,7 @@ export function Shell({
             바로 오른쪽에 붙는다 (사용자 지시 2026-08-29) */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", position: "relative" }}>
           {center}
+          {centerKeep}
         </div>
 
         {hideRight ? null : rightCollapsed ? (

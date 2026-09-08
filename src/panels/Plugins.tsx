@@ -149,7 +149,8 @@ const useMgr = create<Mgr>((set, get) => ({
   },
 }));
 
-export function Plugins() {
+/** @param hidden 다른 모드를 보는 중 — 떼지 않고 숨긴다 (`App` 의 ★주). 숨은 동안은 새 캔버스를 만들지 않는다 */
+export function Plugins({ hidden = false }: { hidden?: boolean }) {
   const t = useI18n((s) => s.t);
   const items = usePlugins((s) => s.items);
   const dir = usePlugins((s) => s.dir);
@@ -223,14 +224,15 @@ export function Plugins() {
     : tab === MANAGE || canvases.length === 0 ? MANAGE
     : canvases[0].id;
   useEffect(() => {
-    if (cur !== MANAGE && !seen.includes(cur)) setSeen((s) => [...s, cur]);
-  }, [cur, seen]);
+    // ★숨어 있을 때는 캔버스를 안 만든다 — 플러그인 모드를 한 번도 안 열었는데 앱을 켤 때 플러그인 페이지가 돌면 안 된다
+    if (!hidden && cur !== MANAGE && !seen.includes(cur)) setSeen((s) => [...s, cur]);
+  }, [cur, seen, hidden]);
 
   const manageOn = cur === MANAGE;
 
   return (
     // ★캔버스는 상자에 가두지 않는다 — 탭 줄 아래를 브라우저처럼 가장자리까지 채운다 (사용자 지시 2026-09-08). 여백은 탭 줄·관리 화면만
-    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+    <div hidden={hidden} data-plugins-root style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {/* 탭 줄 — 맨 왼쪽 「관리」 테두리 단추(세로 선으로 가름) + 밑줄 탭(× 로 닫음) + 닫은 것을 여는 + (가로 스크롤 띠) */}
       <div style={{ position: "relative", display: "flex", alignItems: "stretch", flexShrink: 0, padding: "var(--sp-4) var(--sp-4) 0" }}>
         <div data-plugin-manage-slot style={{ display: "flex", alignItems: "flex-end", flexShrink: 0, marginRight: "var(--sp-3)", paddingRight: "var(--sp-3)", borderRight: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
