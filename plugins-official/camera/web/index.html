@@ -9,7 +9,7 @@
   (방위 16 · 높이 12 · 거리 11). 실측 표와 그리기·조작은 목업과 같고, 앱에 닿는 것만 더했다:
     · 「지금 씬에 넣기」 — 스타일 카드의 「카메라」 블록을 갈아 끼우고, 없으면 새로 붙인다 (postMessage → action edit_style_card)
     · 「복사」 — 프롬프트 문자열을 클립보드로
-    · 색은 앱의 토큰(--bg 등)을 받아 쓴다 (못 받으면 목업 색)
+    · 색은 고정(어두운 목업색). 콘텐츠 밖(body)만 투명해서 앱 바탕이 테마대로 비친다
 -->
 <style>
   :root{
@@ -18,11 +18,12 @@
     --ink-faint:rgba(232,238,245,.42); --accent:#75b9ff; --gold:#ffd76b;
   }
   *{box-sizing:border-box}
-  /* 바탕은 칠하지 않는다 — 투명해서 앱 캔버스 바탕이 테마대로 비친다 (사용자 결정 2026-09-08). 카드는 --bg 로 파인 칸.
-     혼자 열었을 때(앱 밖)만 아래 스크립트가 :root 의 목업색으로 html 을 칠한다 */
+  /* ★콘텐츠(.wrap 안)는 위 :root 의 **고정 어두운 색**으로 칠하고, 그 밖(body)만 투명하게 둔다 — 앱 캔버스 바탕이
+     테마대로 비친다 (사용자 지시 2026-09-08). 앱 토큰을 받아 쓰지 않는다: 밝은 테마의 토큰이 들어오면 실측 캔버스·
+     금색 글자가 안 보이고, 앱이 테마를 바꿔도 한 번 받은 값은 안 바뀐다. */
   body{margin:0;color:var(--ink);
        font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif}
-  .wrap{max-width:800px;margin:0 auto;padding:12px 14px 30px}
+  .wrap{max-width:800px;margin:12px auto;padding:12px 14px 20px;background:var(--bg-deep);border-radius:12px}
   .bar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
   .bar .sub{color:var(--ink-dim);font-size:12px;flex:1;min-width:0}
   .bar button{padding:5px 12px;background:var(--bg);color:var(--ink);border:1px solid var(--line);
@@ -88,16 +89,6 @@ const host = (msg) => new Promise((resolve) => {
 });
 const inApp = window.parent !== window;
 
-// 앱 밖에서 혼자 열었을 때만 바탕을 칠한다 (앱 안에서는 투명 — 앱 캔버스 바탕이 테마대로 비친다)
-if (!inApp) document.documentElement.style.background = "var(--bg-deep)";
-// 앱의 토큰 색을 받아 쓴다 — 못 받으면 위의 기본색 그대로
-if (inApp) (async () => {
-  const map = { "--bg-deep": "--bg-deep", "--bg": "--bg", "--panel": "--panel", "--line": "--line", "--ink": "--ink", "--accent": "--accent" };
-  for (const [mine, theirs] of Object.entries(map)) {
-    const r = await host({ call: "theme", name: theirs });
-    if (r.ok && r.result) document.documentElement.style.setProperty(mine, r.result);
-  }
-})();
 
 // ── 실측 표 ────────────────────────────────────────────────────────────────
 const EL = [
