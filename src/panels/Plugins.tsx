@@ -18,15 +18,16 @@ import { openExternal } from "../lib/openExternal";
  *  ★한 번 연 캔버스는 **숨기기만** 한다 (`hidden`) — 탭을 오가도 플러그인의 상태가 살아 있어야 한다
  *    (PeroPixfy 런처가 iframe 을 한 번만 만드는 것과 같은 까닭). 안 연 것은 만들지 않는다.
  *  ★캔버스 탭은 워크스페이스 탭처럼 × 로 닫고 + 로 다시 연다 (사용자 지시 2026-09-08). + 는 언제나 있고, 닫은 것이
- *    없으면 「모든 플러그인 탭이 열려 있습니다」 를 보여 준다. 닫는 것은 화면 상태(`useUi.view.hide`)일 뿐이다.
- *  ★「설치된 플러그인」 과 「플러그인 목록」 은 **다른 화면**이다 (사용자 지시 2026-09-08) — 오른쪽 끝의 테두리 단추 둘.
- *    업데이트는 **양쪽 어디서나** 받는다. 받는 중·다시 켜기 안내는 두 화면이 한 상태(`useMgr`)를 본다.
+ *    없으면 「모든 플러그인 탭이 열려 있습니다」, 플러그인이 하나도 없으면 「설치된 플러그인이 없습니다」 를 보여 준다. 닫는 것은 화면 상태(`useUi.view.hide`)일 뿐이다.
+ *  ★「관리」 는 오른쪽 끝의 테두리 단추 **하나**고, 그 안이 「설치된 플러그인」 / 「플러그인 목록」 두 화면으로 나뉜다
+ *    (사용자 지시 2026-09-08 — 단추를 둘로 가르지 말고 안에서 나눌 것). 업데이트는 **양쪽 어디서나** 받는다.
+ *    받는 중·다시 켜기 안내는 두 화면이 한 상태(`useMgr`)를 본다.
  *    ★★설치·삭제·업데이트·켜기/끄기는 파일과 설정만 바꾼다 — **다시 켜야 적용**된다 (라우터·확장 JS 는 켤 때 붙는다). */
 
+const MANAGE = "manage";
+/** 관리 안의 두 화면 (`useUi.view.tab["plugins-manage"]`) */
 const INSTALLED = "installed";
 const LIST = "list";
-/** 옛 저장본의 탭 이름 — 지금은 「설치된 플러그인」 */
-const MANAGE_LEGACY = "manage";
 
 type RegItem = {
   id: string;
@@ -126,9 +127,11 @@ export function Plugins() {
   const dir = usePlugins((s) => s.dir);
   const base = usePlugins((s) => s.base);
   /** 어느 탭을 보고 있나 — ★**저장되는 작업 상태**다 (`useUi.view.tab`, 보조 도구와 같다) */
-  const tabRaw = useUi((u) => (u.view.tab["plugins"] as string | undefined) ?? "");
-  const tab = tabRaw === MANAGE_LEGACY ? INSTALLED : tabRaw;
+  const tab = useUi((u) => (u.view.tab["plugins"] as string | undefined) ?? "");
   const setTab = (k: string) => useUi.getState().setView("tab", "plugins", k as never);
+  /** 관리 안의 어느 화면인가 — 이것도 저장되는 작업 상태 */
+  const sub = useUi((u) => (u.view.tab["plugins-manage"] as string | undefined) ?? INSTALLED);
+  const setSub = (k: string) => useUi.getState().setView("tab", "plugins-manage", k as never);
   const [seen, setSeen] = useState<string[]>([]);
   const hide = useUi((u) => u.view.hide);
   const setHide = (id: string, v: boolean) => useUi.getState().setView("hide", id, v);
@@ -143,13 +146,12 @@ export function Plugins() {
   /** 열린 탭. ★설치하면 기본은 열림 (`hide` 에 없음). 닫은 것은 + 로 다시 연다 */
   const canvases = usable.filter((p) => !hide[p.id]);
   const closed = usable.filter((p) => hide[p.id]);
-  // ★기억한 탭이 사라졌으면(플러그인을 지웠거나 껐거나 닫았거나 못 읽음) 첫 캔버스로, 그것도 없으면 설치된 플러그인으로
+  // ★기억한 탭이 사라졌으면(플러그인을 지웠거나 껐거나 닫았거나 못 읽음) 첫 캔버스로, 그것도 없으면 관리로
   const cur = canvases.some((p) => p.id === tab) ? tab
-    : tab === INSTALLED || tab === LIST ? tab
-    : canvases.length === 0 ? INSTALLED
+    : tab === MANAGE || canvases.length === 0 ? MANAGE
     : canvases[0].id;
   useEffect(() => {
-    if (cur !== INSTALLED && cur !== LIST && !seen.includes(cur)) setSeen((s) => [...s, cur]);
+    if (cur !== MANAGE && !seen.includes(cur)) setSeen((s) => [...s, cur]);
   }, [cur, seen]);
 
   const screenBtn = (id: string, label: string, icon: React.ReactNode) => {
@@ -159,6 +161,7 @@ export function Plugins() {
         data-plugin-tab={id}
         onClick={() => setTab(id)}
         style={{
+          marginLeft: "auto",
           marginBottom: "var(--sp-2)",
           display: "inline-flex",
           alignItems: "center",
@@ -181,7 +184,7 @@ export function Plugins() {
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--sp-4)", gap: "var(--sp-4)" }}>
-      {/* 밑줄 탭(플러그인, × 로 닫음) + 닫은 것을 여는 + — 워크스페이스 탭과 같은 어법. 오른쪽 끝은 두 화면의 테두리 단추 */}
+      {/* 밑줄 탭(플러그인, × 로 닫음) + 닫은 것을 여는 + — 워크스페이스 탭과 같은 어법. 오른쪽 끝은 「관리」 테두리 단추 하나 */}
       <div style={{ position: "relative", display: "flex", alignItems: "flex-end", gap: "var(--sp-5)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
         {canvases.map((p) => {
           const on = cur === p.id;
@@ -239,7 +242,8 @@ export function Plugins() {
           >
             {closed.length === 0 ? (
               <span data-plugin-tab-all-open style={{ padding: "var(--sp-1) var(--sp-3)", fontSize: "var(--text-xs)", color: "var(--ink-faint)" }}>
-                {t("plugins.allTabsOpen")}
+                {/* ★플러그인이 하나도 없으면 「모두 열려 있다」 가 아니라 「없다」 (사용자 지시 2026-09-08) */}
+                {t(usable.length === 0 ? "plugins.none" : "plugins.allTabsOpen")}
               </span>
             ) : (
               closed.map((p) => (
@@ -259,10 +263,7 @@ export function Plugins() {
             )}
           </div>
         )}
-        <span style={{ marginLeft: "auto", display: "inline-flex", gap: "var(--sp-2)" }}>
-          {screenBtn(INSTALLED, t("plugins.installedHead"), Icon.settings)}
-          {screenBtn(LIST, t("plugins.availableHead"), Icon.plus)}
-        </span>
+        {screenBtn(MANAGE, t("plugins.manage"), Icon.settings)}
       </div>
 
       {base &&
@@ -279,8 +280,34 @@ export function Plugins() {
             />
           ))}
 
-      {cur === INSTALLED && <Installed items={items} dir={dir} />}
-      {cur === LIST && <List dir={dir} />}
+      {cur === MANAGE && (
+        <div data-plugins-manage style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+          {/* 관리 안의 두 화면 — 밑줄 탭 */}
+          <div style={{ display: "flex", gap: "var(--sp-5)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
+            {([INSTALLED, LIST] as const).map((k) => {
+              const on = sub === k;
+              return (
+                <button
+                  key={k}
+                  data-plugin-sub={k}
+                  onClick={() => setSub(k)}
+                  style={{
+                    padding: "0 2px var(--sp-2)",
+                    marginBottom: -1,
+                    fontSize: "var(--text-sm)",
+                    fontWeight: on ? "var(--w-semi)" : "var(--w-norm)",
+                    color: on ? "var(--ink)" : "var(--ink-faint)",
+                    borderBottom: `2px solid ${on ? "var(--accent)" : "transparent"}`,
+                  }}
+                >
+                  {t(k === INSTALLED ? "plugins.installedHead" : "plugins.availableHead")}
+                </button>
+              );
+            })}
+          </div>
+          {sub === LIST ? <List dir={dir} /> : <Installed items={items} dir={dir} />}
+        </div>
+      )}
     </div>
   );
 }
@@ -377,7 +404,7 @@ function Installed({ items, dir }: { items: PluginInfo[]; dir: string }) {
   const regOf = (id: string) => (reg ?? []).find((r) => r.id === id);
 
   return (
-    <div data-plugins-manage data-plugins-installed style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+    <div data-plugins-installed style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
       <Head dir={dir} />
       {items.length === 0 ? (
         <div style={{ fontSize: "var(--text-sm)", color: "var(--ink-dim)" }}>{t("plugins.none")}</div>
@@ -454,7 +481,7 @@ function List({ dir }: { dir: string }) {
   };
 
   return (
-    <div data-plugins-manage data-plugins-list style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+    <div data-plugins-list style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
       <Head dir={dir} />
       {reg === null ? (
         <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>…</div>
