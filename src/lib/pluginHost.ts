@@ -21,6 +21,14 @@ import { screenAddr } from "./promptEdit";
 import { runAction } from "../store/queue";
 import { t } from "../i18n";
 
+/** 이번 기동의 표식 — 플러그인 캔버스·확장 JS 주소에 `?v=` 로 붙인다.
+ *  ★★여기는 일반 브라우저가 아니라 **우리가 플러그인을 띄워 주는 환경**이다: 플러그인을 고치거나 업데이트했으면 앱을 새로고침하든
+ *    다시 켜든 무조건 새 파일이어야 한다 (사용자 지시 2026-09-08). 백엔드가 `Cache-Control: no-store` 를 보내지만(`plugins.py`
+ *    `_FreshStatic`), 그 전에 캐시된 항목은 헤더가 못 걷어 낸다 (실측: 확장 JS 가 앱을 다시 켜도 옛 캐시에서 왔다).
+ *    주소가 매 기동 달라지면 캐시에 맞는 항목이 없다. */
+export const BOOT = Date.now();
+export const fresh = (u: string) => `${u.includes("?") ? "&" : "?"}v=${BOOT}`;
+
 export type PluginInfo = {
   id: string;
   name: string;
@@ -113,7 +121,8 @@ export const usePlugins = create<S>((set) => ({
         current = p;
         try {
           // ★모듈로 불러들인다 — 백엔드 오리진이라 CSP 의 script-src 에 127.0.0.1 이 있어야 한다 (tauri.conf.json)
-          await import(/* @vite-ignore */ `${base}${u}`);
+          // ★★주소에 이번 기동의 표식(`BOOT`)을 붙인다 — 캐시된 옛 파일을 받지 않게 (사용자 지시 2026-09-08, 아래 BOOT 주)
+          await import(/* @vite-ignore */ `${base}${u}${fresh(u)}`);
         } catch (e) {
           console.error(`[plugins] ${p.id} ext`, e);
           toast(t("plugins.extFail", { n: p.name, e: String((e as Error)?.message ?? e) }), "warn");

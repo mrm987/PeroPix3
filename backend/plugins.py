@@ -32,6 +32,19 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI
 from fastapi.staticfiles import StaticFiles
 
+
+class _FreshStatic(StaticFiles):
+    """플러그인 정적 파일(캔버스 페이지·확장 JS)은 **캐시하지 않는다** (`Cache-Control: no-store`).
+
+    ★여기는 일반 브라우저 환경이 아니라 우리가 플러그인을 띄워 주는 환경이다 — 플러그인을 고치거나 업데이트했으면
+      앱을 새로고침하든 다시 켜든 **반드시 새 파일**이어야 한다 (사용자 지시 2026-09-08). WebView2 는 검증자 없는
+      정적 응답을 어림짐작으로 캐시해, 파일을 바꿔도 옛 페이지가 며칠씩 남았다 (실측: 카메라 페이지 색을 바꿔도 안 바뀜)."""
+
+    async def get_response(self, path, scope):
+        r = await super().get_response(path, scope)
+        r.headers["Cache-Control"] = "no-store"
+        return r
+
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
@@ -118,7 +131,7 @@ def _load_one(app: FastAPI, d: Path) -> Plugin:
             web = _inside(d, str(m["web"]))
             if not web.is_dir():
                 raise ValueError(f"web 「{m['web']}」 폴더가 없습니다")
-            app.mount(f"/plug/{d.name}/web", StaticFiles(directory=str(web), html=True), name=f"plug-{d.name}-web")
+            app.mount(f"/plug/{d.name}/web", _FreshStatic(directory=str(web), html=True), name=f"plug-{d.name}-web")
             p.web = f"/plug/{d.name}/web/"
 
         ext = m.get("ext")
@@ -134,7 +147,7 @@ def _load_one(app: FastAPI, d: Path) -> Plugin:
             if len(dirs) != 1:
                 raise ValueError("ext 파일은 한 폴더에 모여 있어야 합니다")
             (ext_dir,) = dirs
-            app.mount(f"/plug/{d.name}/ext", StaticFiles(directory=str(ext_dir)), name=f"plug-{d.name}-ext")
+            app.mount(f"/plug/{d.name}/ext", _FreshStatic(directory=str(ext_dir)), name=f"plug-{d.name}-ext")
     except Exception as e:  # noqa: BLE001 — 플러그인 하나가 백엔드를 못 죽인다
         p.error = f"{type(e).__name__}: {e}"
         print(f"[plugins] {d.name}: {p.error}", flush=True)

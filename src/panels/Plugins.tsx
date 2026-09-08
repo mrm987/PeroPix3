@@ -7,7 +7,7 @@ import { useFiles } from "../store/files";
 import { toast } from "../store/toast";
 import { FolderOpenButton } from "../components/FolderOpenButton";
 import { Icon } from "../components/Icon";
-import { usePlugins, type PluginInfo } from "../lib/pluginHost";
+import { usePlugins, fresh, type PluginInfo } from "../lib/pluginHost";
 import { openExternal } from "../lib/openExternal";
 
 /** 플러그인 모드 — **설치된 플러그인마다 캔버스 탭 하나** + 「설치된 플러그인」·「플러그인 목록」 두 화면 (설계: `docs/plugin-design.md`).
@@ -371,7 +371,7 @@ export function Plugins() {
               data-plugin-canvas={p.id}
               hidden={cur !== p.id}
               title={p.name}
-              src={`${base}${p.web}`}
+              src={`${base}${p.web}${fresh(p.web)}`} // ★기동 표식 — 캐시된 옛 페이지를 안 받는다 (`pluginHost` 의 BOOT 주)
               // ★기본 바탕은 생성 모드의 큰 그림 영역과 같은 `--panel` (바탕보다 한 단계 밝은 면. 사용자 지시 2026-09-08).
               //   플러그인 페이지가 body 에 배경을 칠하면 그것이 이기고, 안 칠하면(투명) 이 색이 비친다.
               //   ★`colorScheme: "light"` — Chromium 은 iframe 요소와 그 안 문서의 color-scheme 이 다르면 문서를 **불투명(흰색)** 으로
