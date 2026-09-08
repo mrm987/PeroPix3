@@ -301,17 +301,22 @@ async def install(root: Path, official: Path, python: str, *, id: str = "", zip:
     root.mkdir(parents=True, exist_ok=True)
     src_dir: Path | None = None
     zip_url, want = zip, sha256
-    if id and (official / id).is_dir() and _manifest_of(official / id):
-        src_dir = official / id
-    elif id and not zip_url:
+    if id and not zip_url:
+        # ★`registry` 와 같은 규칙으로 고른다 — 번들과 목록에 같은 id 가 있으면 판이 높은 쪽, 같으면 번들.
+        #   (전에는 번들이 있으면 무조건 번들을 복사해서, 목록의 새 판을 눌러도 옛 번들이 깔렸다. 2026-09-08)
+        bm = _manifest_of(official / id) if (official / id).is_dir() else None
+        hit = None
         try:
-            remote = await remote_list(url)
-        except Exception as e:  # noqa: BLE001
-            return {"ok": False, "error": f"원격 목록을 못 받았습니다: {e}"}
-        hit = next((r for r in remote if r["id"] == id), None)
-        if not hit:
+            hit = next((r for r in await remote_list(url) if r["id"] == id), None)
+        except Exception as e:  # noqa: BLE001 — 인터넷이 없어도 번들은 깔린다
+            if bm is None:
+                return {"ok": False, "error": f"원격 목록을 못 받았습니다: {e}"}
+        if bm is not None and (hit is None or _vt(str(bm.get("version") or "")) >= _vt(hit["version"])):
+            src_dir = official / id
+        elif hit is not None:
+            zip_url, want = hit["zip"], hit.get("sha256", "")
+        else:
             return {"ok": False, "error": f"「{id}」 를 목록에서 못 찾았습니다"}
-        zip_url, want = hit["zip"], hit.get("sha256", "")
     if src_dir is None and not zip_url:
         return {"ok": False, "error": "무엇을 설치할지 없습니다 (id 또는 zip 주소)"}
 
