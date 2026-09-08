@@ -57,41 +57,104 @@ export function Plugins() {
     void usePlugins.getState().load().catch((e) => toast(String(e), "warn"));
   }, []);
 
-  const canvases = items.filter((p) => p.web && !p.error && p.enabled !== false);
-  // ★기억한 탭이 사라졌으면(플러그인을 지웠거나 껐거나 못 읽음) 첫 캔버스로, 그것도 없으면 관리로
+  const hide = useUi((u) => u.view.hide);
+  const setHide = (id: string, v: boolean) => useUi.getState().setView("hide", id, v);
+  const [picking, setPicking] = useState(false);
+
+  /** 캔버스가 있고 켜진 플러그인 — 탭이 될 수 있는 것 */
+  const usable = items.filter((p) => p.web && !p.error && p.enabled !== false);
+  /** 열린 탭. ★설치하면 기본은 열림 (`hide` 에 없음). 닫은 것은 + 로 다시 연다 — 빈 탭은 없다 (고를 것이 없으면 + 도 없다) */
+  const canvases = usable.filter((p) => !hide[p.id]);
+  const closed = usable.filter((p) => hide[p.id]);
+  // ★기억한 탭이 사라졌으면(플러그인을 지웠거나 껐거나 닫았거나 못 읽음) 첫 캔버스로, 그것도 없으면 관리로
   const cur = canvases.some((p) => p.id === tab) ? tab
     : tab === MANAGE || canvases.length === 0 ? MANAGE
     : canvases[0].id;
   useEffect(() => {
     if (cur !== MANAGE && !seen.includes(cur)) setSeen((s) => [...s, cur]);
   }, [cur, seen]);
+  useEffect(() => {
+    if (closed.length === 0) setPicking(false);
+  }, [closed.length]);
 
   const onManage = cur === MANAGE;
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--sp-4)", gap: "var(--sp-4)" }}>
-      {/* 밑줄 탭(플러그인) — 보조 도구와 같은 어법. 관리는 오른쪽 끝의 테두리 단추 */}
-      <div style={{ display: "flex", alignItems: "flex-end", gap: "var(--sp-5)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
+      {/* 밑줄 탭(플러그인, × 로 닫음) + 닫은 것을 여는 + — 워크스페이스 탭과 같은 어법. 관리는 오른쪽 끝의 테두리 단추 */}
+      <div style={{ position: "relative", display: "flex", alignItems: "flex-end", gap: "var(--sp-5)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
         {canvases.map((p) => {
           const on = cur === p.id;
           return (
-            <button
-              key={p.id}
-              data-plugin-tab={p.id}
-              onClick={() => setTab(p.id)}
-              style={{
-                padding: "0 2px var(--sp-2)",
-                marginBottom: -1,
-                fontSize: "var(--text-sm)",
-                fontWeight: on ? "var(--w-semi)" : "var(--w-norm)",
-                color: on ? "var(--ink)" : "var(--ink-faint)",
-                borderBottom: `2px solid ${on ? "var(--accent)" : "transparent"}`,
-              }}
-            >
-              {p.name}
-            </button>
+            <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: "var(--sp-1)", marginBottom: -1, borderBottom: `2px solid ${on ? "var(--accent)" : "transparent"}` }}>
+              <button
+                data-plugin-tab={p.id}
+                onClick={() => setTab(p.id)}
+                style={{
+                  padding: "0 2px var(--sp-2)",
+                  fontSize: "var(--text-sm)",
+                  fontWeight: on ? "var(--w-semi)" : "var(--w-norm)",
+                  color: on ? "var(--ink)" : "var(--ink-faint)",
+                }}
+              >
+                {p.name}
+              </button>
+              <button
+                data-plugin-tab-close={p.id}
+                data-tip={t("plugins.closeTab")}
+                onClick={() => setHide(p.id, true)}
+                style={{ display: "grid", placeItems: "center", padding: "0 0 var(--sp-2)", color: "var(--ink-ghost)" }}
+              >
+                {Icon.close12}
+              </button>
+            </span>
           );
         })}
+        {closed.length > 0 && (
+          <button
+            data-plugin-tab-add
+            data-tip={t("plugins.addTab")}
+            onClick={() => setPicking((v) => !v)}
+            style={{ display: "grid", placeItems: "center", padding: "0 var(--sp-2) var(--sp-2)", color: "var(--ink-faint)" }}
+          >
+            {Icon.plus}
+          </button>
+        )}
+        {picking && closed.length > 0 && (
+          <div
+            data-plugin-tab-pick
+            style={{
+              position: "absolute",
+              top: "100%",
+              left: 0,
+              zIndex: 5,
+              marginTop: 4,
+              minWidth: 160,
+              padding: "var(--sp-1)",
+              display: "flex",
+              flexDirection: "column",
+              border: "1px solid var(--line)",
+              borderRadius: "var(--r-2)",
+              background: "var(--panel)",
+              boxShadow: "var(--shadow-2)",
+            }}
+          >
+            {closed.map((p) => (
+              <button
+                key={p.id}
+                data-plugin-tab-open={p.id}
+                onClick={() => {
+                  setHide(p.id, false);
+                  setTab(p.id);
+                  setPicking(false);
+                }}
+                style={{ textAlign: "left", padding: "var(--sp-1) var(--sp-3)", fontSize: "var(--text-sm)", color: "var(--ink)", borderRadius: "var(--r-1)" }}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        )}
         <button
           data-plugin-tab={MANAGE}
           onClick={() => setTab(MANAGE)}
@@ -239,8 +302,8 @@ function Manage({ items, dir }: { items: PluginInfo[]; dir: string }) {
   };
 
   const regOf = (id: string) => (reg ?? []).find((r) => r.id === id);
-  /** 목록 — 아직 없는 것만. 깔린 것의 새 판은 위 「설치된 플러그인」 줄이 맡는다 */
-  const listed = (reg ?? []).filter((r) => !r.installed);
+  /** 목록 — 전부. 깔린 것은 「설치됨」 표식으로 (사용자 지시 2026-09-08), 그 새 판은 위 「설치된 플러그인」 줄이 맡는다 */
+  const listed = reg ?? [];
   const groups: { key: "official" | "user"; items: RegItem[] }[] = [
     { key: "official", items: listed.filter((r) => r.official) },
     { key: "user", items: listed.filter((r) => !r.official) },
@@ -351,9 +414,15 @@ function Manage({ items, dir }: { items: PluginInfo[]; dir: string }) {
                   </span>
                   <span style={cluster}>
                     <span style={version}>{r.version}</span>
-                    <button data-plugin-install={r.id} disabled={!!busy} onClick={() => void install({ id: r.id })} style={btn}>
-                      {busy === r.id ? t("plugins.installing") : t("plugins.install")}
-                    </button>
+                    {r.installed ? (
+                      <span data-plugin-installed-mark={r.id} style={{ ...badge, marginLeft: 0, color: "var(--accent-ink)", borderColor: "var(--accent)" }}>
+                        {t("plugins.installedMark")}
+                      </span>
+                    ) : (
+                      <button data-plugin-install={r.id} disabled={!!busy} onClick={() => void install({ id: r.id })} style={btn}>
+                        {busy === r.id ? t("plugins.installing") : t("plugins.install")}
+                      </button>
+                    )}
                   </span>
                 </div>
               ))}

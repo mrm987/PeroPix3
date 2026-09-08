@@ -183,6 +183,9 @@ type Persisted = {
     fold: Record<string, boolean>;
     /** 섹션마다 `Prompt` 를 보고 있나 `Undesired Content` 를 보고 있나 */
     tab: Record<string, "p" | "u">;
+    /** 플러그인 모드에서 **닫아 둔 캔버스 탭** (열쇠 = 플러그인 id). 설치하면 기본은 열림이고, 탭의 × 로 닫고
+     *  + 로 다시 연다 (사용자 지시 2026-09-08). 관리의 켜기/끄기와 다르다 — 탭만 안 보일 뿐 플러그인은 돈다. */
+    hide: Record<string, boolean>;
   };
   /** 세로 모드일 때 씬 쪽의 폭 (`bottom` 일 때의 `laneHeight` 에 해당) */
   laneWidth: number;
@@ -232,7 +235,7 @@ const DEFAULTS: Persisted = {
   laneSide: "bottom",
   laneWidth: 420,
   laneHeadH: 132,
-  view: { cat: {}, fold: {}, tab: {} },
+  view: { cat: {}, fold: {}, tab: {}, hide: {} },
 };
 
 export const COLS_MIN = 1;
@@ -256,6 +259,8 @@ function load(): Persisted {
       for (const k of ["leftWidth", "rightWidth", "leftCollapsed", "rightCollapsed"] as const) {
         if (got[k] && typeof got[k] === "object") got[k] = { ...DEFAULTS[k], ...got[k] };
       }
+      // ★작업 상태의 칸이 늘면(`hide`, 2026-09-08) 옛 저장본에 그 칸이 없다 — 빈 표로 채운다
+      if (got.view && typeof got.view === "object") got.view = { ...DEFAULTS.view, ...got.view };
       return { ...DEFAULTS, ...got };
     }
   } catch {}
