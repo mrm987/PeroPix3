@@ -228,10 +228,11 @@ export function Plugins() {
   };
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--sp-4)", gap: "var(--sp-4)" }}>
+    // ★캔버스는 상자에 가두지 않는다 — 탭 줄 아래를 브라우저처럼 가장자리까지 채운다 (사용자 지시 2026-09-08). 여백은 탭 줄·관리 화면만
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {/* 밑줄 탭(플러그인, × 로 닫음) + 닫은 것을 여는 + — 워크스페이스 탭과 같은 어법. 탭들은 가로 스크롤 띠에 들고,
           오른쪽 끝의 「관리」 테두리 단추는 띠 **밖**에 세로 선으로 갈라 둔다 (사용자 지시 2026-09-08 — 겹치지 않게). */}
-      <div style={{ position: "relative", display: "flex", alignItems: "stretch", flexShrink: 0 }}>
+      <div style={{ position: "relative", display: "flex", alignItems: "stretch", flexShrink: 0, padding: "var(--sp-4) var(--sp-4) 0" }}>
         <div
           ref={stripRef}
           data-plugin-tab-strip
@@ -376,12 +377,12 @@ export function Plugins() {
               //   ★`colorScheme: "light"` — Chromium 은 iframe 요소와 그 안 문서의 color-scheme 이 다르면 문서를 **불투명(흰색)** 으로
               //   그린다. 배경을 안 칠한 플러그인 페이지는 scheme 이 normal(밝음)이라, 앱이 어두운 테마일 때 흰 판이 됐다
               //   (실측 2026-09-08, 고정물 hello). 요소 쪽을 light 로 맞추면 투명해져 위 색이 비친다. 자기 색을 칠한 페이지는 무관하다.
-              style={{ flex: 1, minHeight: 0, width: "100%", border: "1px solid var(--line)", borderRadius: "var(--r-2)", background: "var(--panel)", colorScheme: "light" }}
+              style={{ flex: 1, minHeight: 0, width: "100%", border: "none", background: "var(--panel)", colorScheme: "light" }}
             />
           ))}
 
       {cur === MANAGE && (
-        <div data-plugins-manage style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+        <div data-plugins-manage style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "var(--sp-4)", padding: "var(--sp-4)" }}>
           {/* 관리 안의 두 화면 — 밑줄 탭 */}
           <div style={{ display: "flex", gap: "var(--sp-5)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
             {/* 순서도 「플러그인 목록」 이 먼저 (사용자 지시 2026-09-08) */}

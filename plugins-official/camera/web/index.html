@@ -18,8 +18,9 @@
     --ink-faint:rgba(232,238,245,.42); --accent:#75b9ff; --gold:#ffd76b;
   }
   *{box-sizing:border-box}
-  /* 바탕은 앱의 큰 그림 영역과 같은 --panel (사용자 지시 2026-09-08). 카드는 그보다 어두운 --bg 로 파인 칸 */
-  body{margin:0;background:var(--panel);color:var(--ink);
+  /* 바탕은 칠하지 않는다 — 투명해서 앱 캔버스 바탕이 테마대로 비친다 (사용자 결정 2026-09-08). 카드는 --bg 로 파인 칸.
+     혼자 열었을 때(앱 밖)만 아래 스크립트가 :root 의 목업색으로 html 을 칠한다 */
+  body{margin:0;color:var(--ink);
        font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif}
   .wrap{max-width:800px;margin:0 auto;padding:12px 14px 30px}
   .bar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
@@ -87,6 +88,8 @@ const host = (msg) => new Promise((resolve) => {
 });
 const inApp = window.parent !== window;
 
+// 앱 밖에서 혼자 열었을 때만 바탕을 칠한다 (앱 안에서는 투명 — 앱 캔버스 바탕이 테마대로 비친다)
+if (!inApp) document.documentElement.style.background = "var(--bg-deep)";
 // 앱의 토큰 색을 받아 쓴다 — 못 받으면 위의 기본색 그대로
 if (inApp) (async () => {
   const map = { "--bg-deep": "--bg-deep", "--bg": "--bg", "--panel": "--panel", "--line": "--line", "--ink": "--ink", "--accent": "--accent" };
