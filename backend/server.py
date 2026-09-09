@@ -3317,6 +3317,8 @@ plugins_mod.host.app_dir = APP_DIR
 # ★★라우트를 다 만든 **뒤에** 붙인다 — 플러그인이 `/plug/<id>/…` 를 얻고, 앱 창구는 그대로다.
 #   같은 프로세스라 KeyGate 도 그대로 지난다 (화면은 `/k/<열쇠>/plug/…` 로 부른다).
 #: 꺼 둔 플러그인 id — 폴더는 그대로, 켤 때 붙이지 않는다 (관리 탭의 켜기/끄기, 사용자 지시 2026-09-08)
+# ★앱과 함께 오는 플러그인의 설치 사본을 번들에 맞춘다 — 앱을 고치면 플러그인도 따라온다 (`plugins.sync_bundled` 주)
+plugins_mod.sync_bundled(PLUGINS_DIR, OFFICIAL_DIR)
 PLUGINS = plugins_mod.load_all(app, PLUGINS_DIR, set(CONFIG.get("plugins_disabled") or []))
 
 

@@ -24,6 +24,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import shutil
 import sys
 import traceback
 from dataclasses import dataclass, field
@@ -360,6 +361,59 @@ def _installed_origin(d: Path) -> dict | None:
         return o if isinstance(o, dict) and o.get("source") else None
     except Exception:
         return None
+
+
+#: 사본 대조에서 빼는 것 — 설치 때 pip 으로 받은 의존성·출처 표식·캐시
+_SYNC_SKIP = {"_lib", ORIGIN_FILE, "__pycache__"}
+
+
+def _tree_digest(d: Path) -> dict[str, tuple[int, int]]:
+    """폴더 안 파일들의 (상대경로 → (크기, mtime_ns)). 사본이 번들과 같은지 보는 데 쓴다 — 작은 폴더라 통째로 본다."""
+    out: dict[str, tuple[int, int]] = {}
+    for p in d.rglob("*"):
+        rel = p.relative_to(d)
+        if any(part in _SYNC_SKIP for part in rel.parts) or not p.is_file():
+            continue
+        st = p.stat()
+        out[rel.as_posix()] = (st.st_size, st.st_mtime_ns)
+    return out
+
+
+def sync_bundled(root: Path, official: Path) -> list[str]:
+    """★★**앱과 함께 오는 플러그인은 앱이 갱신한다** (사용자 지시 2026-09-09: *"앱이 변경된 건데 앱이 플러그인을 갱신해 줘야 하는 거
+    아니야?"*). 번들에서 깔린 사본(`_origin.json` 의 source == bundled)이 번들과 다르면 켤 때 번들 것으로 갈아 끼운다.
+    설치 사본은 번들의 거울일 뿐이라 잃을 것이 없다 — `_lib`(pip 의존성)과 출처 표식만 남긴다. 판을 올릴 필요도, 관리 화면에서
+    업데이트를 누를 필요도 없다. 폴더에 직접 넣은 것·목록에서 받은 것은 건드리지 않는다. 갈아 끼운 id 목록을 돌려준다."""
+    done: list[str] = []
+    if not root.is_dir() or not official.is_dir():
+        return done
+    for d in sorted(root.iterdir()):
+        if not d.is_dir() or d.name.startswith((".", "_")):
+            continue
+        o = _installed_origin(d)
+        src = official / d.name
+        if not o or o.get("source") != "bundled" or not src.is_dir() or not (src / "plugin.json").is_file():
+            continue
+        if _tree_digest(src) == _tree_digest(d):
+            continue
+        try:
+            for child in d.iterdir():
+                if child.name in _SYNC_SKIP:
+                    continue
+                shutil.rmtree(child) if child.is_dir() else child.unlink()
+            for child in src.iterdir():
+                if child.name == "__pycache__":
+                    continue
+                if child.is_dir():
+                    shutil.copytree(child, d / child.name, ignore=shutil.ignore_patterns("__pycache__"))
+                else:
+                    shutil.copy2(child, d / child.name)
+            done.append(d.name)
+        except OSError as e:
+            print(f"[plugins] 번들 사본 갱신 실패 「{d.name}」: {e}", flush=True)
+    if done:
+        print(f"[plugins] synced bundled {done}", flush=True)
+    return done
 
 
 async def _catalog(official: Path, url: str) -> tuple[list[dict], str]:
