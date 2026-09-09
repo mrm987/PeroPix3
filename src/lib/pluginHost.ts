@@ -17,6 +17,7 @@
 import { create } from "zustand";
 import { api, backendUrl } from "./backend";
 import { useUi } from "../store/ui";
+import { putOnCanvas } from "./pluginFrames";
 import { toast } from "../store/toast";
 import { screenAddr } from "./promptEdit";
 import { runAction } from "../store/queue";
@@ -49,6 +50,8 @@ export type PluginInfo = {
   /** 매니페스트의 `homepage` (선택) */
   homepage: string;
   description: string;
+  /** 캔버스 프레임 규격 — 백엔드가 기본값을 채워 준다 (`plugins.py canvas_spec`) */
+  canvas: { width: number; height: number; minWidth: number; minHeight: number; fit: "flow" | "scale" };
 };
 
 /** 화면에 내놓아도 되는 플러그인인가 — 켜져 있고 읽혔다. ★끄면 다시 켜기 전에도 단추·메뉴·캔버스는 바로 감춘다
@@ -158,8 +161,11 @@ export function hostApi(p: PluginInfo) {
       usePlugins.setState({ menus: push(st().menus, menu, { key: `${p.id}:${m.label}`, plugin: p.id, label: m.label, onClick: m.onClick }) });
     },
     openCanvas(id: string = p.id) {
+      // ★캔버스(2026-09-09): 플러그인 모드로 가서 그 플러그인을 캔버스에 꺼내 놓고 맨 앞으로 (관리 화면을 보고 있었으면 캔버스로)
       useUi.getState().setMode("plugins");
-      useUi.getState().setView("tab", "plugins", id as never);
+      const items = usePlugins.getState().items;
+      const q = items.find((x) => x.id === id);
+      if (q) putOnCanvas(q, 0);
     },
     /** 앱 액션 — 조수가 쓰는 것과 같은 목록. ★승인 카드를 지나지 않는다 */
     action: (name: string, args: Record<string, unknown> = {}) => runAction(name, args, false),

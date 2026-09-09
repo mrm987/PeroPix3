@@ -34,6 +34,7 @@ import { Gallery } from "./panels/Gallery";
 import { Censor } from "./panels/Censor";
 import { Tools } from "./panels/Tools";
 import { Plugins } from "./panels/Plugins";
+import { PluginPanel } from "./panels/PluginPanel";
 import { usePlugins } from "./lib/pluginHost";
 import { GalleryFolders } from "./panels/GalleryFolders";
 import { GalleryMeta } from "./panels/GalleryMeta";
@@ -292,13 +293,13 @@ export function App() {
              고치는 것이 맞다 (사용자 지시 2026-08-19). 예전에는 여기서 사본을 편집했다. */
           mode === "gallery" ? tr("gallery.folders") : tr("panel.prompt")
         }
-        rightLabel={mode === "gallery" ? tr("gallery.meta") : tr("panel.deck")}
+        rightLabel={mode === "gallery" ? tr("gallery.meta") : mode === "plugins" ? tr("plugins.panel") : tr("panel.deck")}
         /* ★프롬프트·생성 옵션은 **생성 모드에만** (사용자 지적 2026-08-05).
            이미 만든 것을 다루는 화면에 뜨면 "여기서 고치면 뭐가 되나"가 흐려진다.
            갤러리는 기둥을 쓴다(폴더·그림 정보). 검열·보조 도구는 **레일도 안 남긴다** —
            열 것이 없는 레일은 막다른 길이다. */
         hideLeft={mode !== "generate" && mode !== "gallery"}
-        hideRight={mode !== "generate" && mode !== "gallery"}
+        hideRight={mode !== "generate" && mode !== "gallery" && mode !== "plugins"}
         left={
           mode === "gallery" ? (
             <GalleryFolders />
@@ -334,6 +335,9 @@ export function App() {
         right={
           mode === "gallery" ? (
             <GalleryMeta />
+          ) : mode === "plugins" ? (
+            /* ★플러그인 모드의 오른쪽은 카드덱 자리에 「플러그인」 패널 — 꺼내기·관리 전환 (사용자 지시 2026-09-08, 간략판 2026-09-09) */
+            <PluginPanel />
           ) : (
             <DeckPanel
               onAsk={setAsk}

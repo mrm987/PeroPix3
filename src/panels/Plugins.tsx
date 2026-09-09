@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { useUi } from "../store/ui";
 import { useI18n, t as tr } from "../i18n";
@@ -7,23 +7,18 @@ import { useFiles } from "../store/files";
 import { toast } from "../store/toast";
 import { FolderOpenButton } from "../components/FolderOpenButton";
 import { Icon } from "../components/Icon";
-import { usePlugins, fresh, type PluginInfo } from "../lib/pluginHost";
+import { usePlugins, type PluginInfo } from "../lib/pluginHost";
 import { openExternal } from "../lib/openExternal";
+import { PLUGIN_LIST_REPO, linkOf } from "../lib/pluginLink";
+import { PluginCanvas } from "./PluginCanvas";
 
-/** 플러그인 모드 — **설치된 플러그인마다 캔버스 탭 하나** + 「플러그인 목록」·「설치된 플러그인」 두 화면 (설계: `docs/plugin-design.md`,
- *  시안: `docs/design/plugins/` — 2026-09-08 재디자인, 사용자 선택).
+/** 플러그인 모드 — **캔버스**(`PluginCanvas`, 자유 배치 프레임) + 「플러그인 목록」·「설치된 플러그인」 두 관리 화면
+ *  (설계: `docs/plugin-design.md`, 시안: `docs/design/plugins/`·`docs/design/plugins-canvas/`).
  *
- *  ★캔버스는 백엔드가 서빙하는 플러그인 페이지를 iframe 으로 띄운 것이다 (`/plug/<id>/web/`).
- *    같은 오리진(백엔드)이라 페이지가 백엔드 API 를 **직접** 부른다 — 열쇠는 주소에 이미 들어 있다.
- *    앱에 시킬 것은 `postMessage` 로 (`lib/pluginHost` 의 창구).
- *  ★한 번 연 캔버스는 **숨기기만** 한다 (`hidden`) — 탭을 오가도 플러그인의 상태가 살아 있어야 한다
- *    (PeroPixfy 런처가 iframe 을 한 번만 만드는 것과 같은 까닭). 안 연 것은 만들지 않는다.
- *  ★캔버스 탭은 워크스페이스 탭처럼 × 로 닫고 + 로 다시 연다 (사용자 지시 2026-09-08). + 는 언제나 있고, 닫은 것이
- *    없으면 「모든 플러그인 탭이 열려 있습니다」, 플러그인이 하나도 없으면 「설치된 플러그인이 없습니다」 를 보여 준다. 닫는 것은 화면 상태(`useUi.view.hide`)일 뿐이다.
- *  ★「관리」 는 탭 줄 **맨 왼쪽**의 테두리 단추 **하나**다 (사용자 지시 2026-09-08 밤: 오른쪽에 있으니 잘 안 보인다). 그 안이
- *    「플러그인 목록」(카드 격자) / 「설치된 플러그인」(줄 목록) 두 화면으로 나뉜다. 업데이트는 **양쪽 어디서나** 받는다.
- *    받는 중·다시 켜기 안내는 두 화면이 한 상태(`useMgr`)를 본다.
- *    ★★설치·삭제·업데이트·켜기/끄기는 파일과 설정만 바꾼다 — **다시 켜야 적용**된다 (라우터·확장 JS 는 켤 때 붙는다). */
+ *  ★2026-09-08 의 탭 줄은 2026-09-09 에 캔버스로 바꿨다 (사용자 결정). 오른쪽 패널(`PluginPanel`)이 꺼내기·관리 전환을 맡는다.
+ *  ★관리는 `view.tab["plugins"] === "manage"` 일 때 캔버스 자리에 뜬다. 캔버스는 그동안 숨기기만 한다 (iframe 을 지키려고).
+ *  ★「플러그인 목록」(카드 격자) / 「설치된 플러그인」(줄 목록). 업데이트는 **양쪽 어디서나** 받고, 받는 중·다시 켜기 안내는
+ *    두 화면이 한 상태(`useMgr`)를 본다. ★★설치·삭제·업데이트·켜기/끄기는 파일과 설정만 바꾼다 — **다시 켜야 적용**된다. */
 
 const MANAGE = "manage";
 /** 관리 안의 두 화면 (`useUi.view.tab["plugins-manage"]`) */
@@ -45,27 +40,6 @@ type RegItem = {
   /** 깔린 것보다 높은 판이 같은 출처에 있다 */
   update: boolean;
 };
-
-/** 남의 플러그인이 오르는 목록 저장소 — 만드는 법·올리는 법(PR)은 저 README 가 정본이다. 여기엔 링크만 둔다
- *  (같은 안내를 앱에도 적으면 두 곳이 되고, 절차가 바뀔 때마다 앱을 다시 배포해야 한다. 사용자 결정 2026-09-08).
- *  백엔드의 기본 목록 주소(`server.py` `PLUGIN_REGISTRY`)와 같은 저장소다. */
-const PLUGIN_LIST_REPO = "https://github.com/mrm987/peropix-plugins";
-/** 공식 플러그인이 사는 자리 — 앱 저장소의 `plugins-official/<id>` (README 를 보러 가는 링크) */
-const OFFICIAL_TREE = "https://github.com/mrm987/PeroPix3/tree/master/plugins-official/";
-
-/** 플러그인의 GitHub(또는 홈) 주소 — README 를 보러 가는 링크 (사용자 지시 2026-09-08).
- *  매니페스트의 `homepage` 가 있으면 그것, 없으면 출처에서 만든다: 번들 → 앱 저장소의 폴더, 목록(repo) → 그 저장소, zip → 그 주소.
- *  폴더에 직접 넣은 것(출처 없음)은 링크가 없다. */
-function linkOf(x: { homepage?: string; source?: string; repo?: string; zip?: string; id: string; origin?: PluginInfo["origin"] }): string {
-  if (x.homepage) return x.homepage;
-  const src = x.source ?? x.origin?.source;
-  const repo = x.repo ?? x.origin?.repo;
-  const zip = x.zip ?? x.origin?.zip;
-  if (src === "bundled") return OFFICIAL_TREE + x.id;
-  if (src === "repo" && repo) return `https://github.com/${repo}`;
-  if (src === "zip" && zip) return zip;
-  return "";
-}
 
 /** 두 화면이 함께 보는 관리 상태 — 목록·받는 중·다시 켜기 안내. ★화면을 오가도 「받는 중」이 끊기지 않는다 */
 type Mgr = {
@@ -149,29 +123,16 @@ const useMgr = create<Mgr>((set, get) => ({
   },
 }));
 
-/** @param hidden 다른 모드를 보는 중 — 떼지 않고 숨긴다 (`App` 의 ★주). 숨은 동안은 새 캔버스를 만들지 않는다 */
+/** @param hidden 다른 모드를 보는 중 — 떼지 않고 숨긴다 (`App` 의 ★주). 숨은 동안에도 캔버스의 iframe 은 살아 있다 */
 export function Plugins({ hidden = false }: { hidden?: boolean }) {
-  const t = useI18n((s) => s.t);
   const items = usePlugins((s) => s.items);
   const dir = usePlugins((s) => s.dir);
   const base = usePlugins((s) => s.base);
-  /** 어느 탭을 보고 있나 — ★**저장되는 작업 상태**다 (`useUi.view.tab`, 보조 도구와 같다) */
+  /** 캔버스를 보나 관리를 보나 — ★**저장되는 작업 상태**다 (`useUi.view.tab["plugins"]`: "manage" 면 관리, 그 밖은 캔버스) */
   const tab = useUi((u) => (u.view.tab["plugins"] as string | undefined) ?? "");
-  const setTab = (k: string) => useUi.getState().setView("tab", "plugins", k as never);
   /** 관리 안의 어느 화면인가 — 이것도 저장되는 작업 상태. ★처음은 「플러그인 목록」, 그 뒤로는 마지막에 보던 곳 (사용자 지시 2026-09-08) */
   const sub = useUi((u) => (u.view.tab["plugins-manage"] as string | undefined) ?? LIST);
   const setSub = (k: string) => useUi.getState().setView("tab", "plugins-manage", k as never);
-  const [seen, setSeen] = useState<string[]>([]);
-  const hide = useUi((u) => u.view.hide);
-  const setHide = (id: string, v: boolean) => useUi.getState().setView("hide", id, v);
-  const [picking, setPicking] = useState(false);
-  /** + 단추와 선택 상자 — 둘 다의 밖을 누르면 상자를 닫는다 (상자는 스크롤 띠 밖에 있어 따로 잡는다) */
-  const pickRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-  /** 탭들과 + 가 든 가로 스크롤 띠 — 넘치면 휠로 좌우로 민다 */
-  const stripRef = useRef<HTMLDivElement>(null);
-  /** 선택 상자의 왼쪽 자리 (탭 줄 기준). + 를 누른 순간 재서 그 아래에 띄운다 */
-  const [pickX, setPickX] = useState(0);
   /** 관리 화면의 찾기 — 두 화면이 같은 글을 쓴다 */
   const [q, setQ] = useState("");
 
@@ -179,230 +140,15 @@ export function Plugins({ hidden = false }: { hidden?: boolean }) {
     void usePlugins.getState().load().catch((e) => toast(String(e), "warn"));
   }, []);
 
-  // ★선택 상자는 다른 데를 누르면 닫힌다 (사용자 지시 2026-09-08). 캡처 단계로 듣는 까닭은 `ImageActions` 의 메뉴와 같다.
-  //   캔버스(iframe) 안을 누르면 부모에 pointerdown 이 안 오므로, 창의 초점이 iframe 으로 넘어가는 `blur` 도 듣는다.
-  useEffect(() => {
-    if (!picking) return;
-    const close = (e: Event) => {
-      const n = e.target instanceof Node ? e.target : null;
-      if (n && (pickRef.current?.contains(n) || popRef.current?.contains(n))) return;
-      setPicking(false);
-    };
-    const key = (e: KeyboardEvent) => e.key === "Escape" && setPicking(false);
-    const blur = () => setPicking(false);
-    document.addEventListener("pointerdown", close, true);
-    document.addEventListener("keydown", key);
-    window.addEventListener("blur", blur);
-    return () => {
-      document.removeEventListener("pointerdown", close, true);
-      document.removeEventListener("keydown", key);
-      window.removeEventListener("blur", blur);
-    };
-  }, [picking]);
-
-  // ★탭이 넘치면 그 자리에서 **휠로 가로 스크롤** (사용자 지시 2026-09-08). 네이티브로 매다는 까닭은 `blocks/Chip` 의 ★주와
-  //   같다 — React 의 onWheel 은 passive 라 preventDefault 가 안 먹어 세로 스크롤이 함께 일어난다. 넘치지 않으면 손대지 않는다.
-  useEffect(() => {
-    const el = stripRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (!e.deltaY || e.deltaX || el.scrollWidth <= el.clientWidth) return;
-      e.preventDefault();
-      el.scrollLeft += e.deltaY;
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, []);
-
-  /** 캔버스가 있고 켜진 플러그인 — 탭이 될 수 있는 것 */
-  const usable = items.filter((p) => p.web && !p.error && p.enabled !== false);
-  /** 열린 탭. ★설치하면 기본은 열림 (`hide` 에 없음). 닫은 것은 + 로 다시 연다 */
-  const canvases = usable.filter((p) => !hide[p.id]);
-  const closed = usable.filter((p) => hide[p.id]);
-  // ★기억한 탭이 사라졌으면(플러그인을 지웠거나 껐거나 닫았거나 못 읽음) 첫 캔버스로, 그것도 없으면 관리로
-  const cur = canvases.some((p) => p.id === tab) ? tab
-    : tab === MANAGE || canvases.length === 0 ? MANAGE
-    : canvases[0].id;
-  useEffect(() => {
-    // ★숨어 있을 때는 캔버스를 안 만든다 — 플러그인 모드를 한 번도 안 열었는데 앱을 켤 때 플러그인 페이지가 돌면 안 된다
-    if (!hidden && cur !== MANAGE && !seen.includes(cur)) setSeen((s) => [...s, cur]);
-  }, [cur, seen, hidden]);
-
-  const manageOn = cur === MANAGE;
+  const manageOn = tab === MANAGE;
 
   return (
-    // ★캔버스는 상자에 가두지 않는다 — 탭 줄 아래를 브라우저처럼 가장자리까지 채운다 (사용자 지시 2026-09-08). 여백은 탭 줄·관리 화면만
     // ★숨김은 인라인 display 로 — `hidden` 속성만 주면 인라인 `display: flex` 가 이겨 다른 모드 위에 그대로 그려진다 (사용자 보고 2026-09-08)
     <div data-plugins-root data-hidden={hidden ? "" : undefined} style={{ flex: 1, minHeight: 0, display: hidden ? "none" : "flex", flexDirection: "column" }}>
-      {/* 탭 줄 — 맨 왼쪽 「관리」 테두리 단추(세로 선으로 가름) + 밑줄 탭(× 로 닫음) + 닫은 것을 여는 + (가로 스크롤 띠) */}
-      <div style={{ position: "relative", display: "flex", alignItems: "stretch", flexShrink: 0, padding: "var(--sp-4) var(--sp-4) 0" }}>
-        <div data-plugin-manage-slot style={{ display: "flex", alignItems: "flex-end", flexShrink: 0, marginRight: "var(--sp-3)", paddingRight: "var(--sp-3)", borderRight: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
-          <button
-            data-plugin-tab={MANAGE}
-            onClick={() => setTab(MANAGE)}
-            style={{
-              marginBottom: "var(--sp-2)",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "var(--sp-1)",
-              minHeight: 24,
-              padding: "0 var(--sp-3)",
-              fontSize: "var(--text-xs)",
-              border: "1px solid",
-              borderColor: manageOn ? "var(--accent)" : "var(--line)",
-              borderRadius: "var(--r-2)",
-              background: manageOn ? "var(--accent-bg)" : "var(--panel)",
-              color: manageOn ? "var(--accent-ink)" : "var(--ink-soft)",
-            }}
-          >
-            <span style={{ display: "grid", placeItems: "center", width: 14, height: 14 }}>{Icon.settings}</span>
-            {t("plugins.manage")}
-          </button>
-        </div>
-        <div
-          ref={stripRef}
-          data-plugin-tab-strip
-          style={{
-            flex: 1,
-            minWidth: 0,
-            display: "flex",
-            alignItems: "flex-end",
-            gap: "var(--sp-5)",
-            overflowX: "auto",
-            overflowY: "hidden",
-            scrollbarWidth: "none",
-            borderBottom: "1px solid var(--line)",
-          }}
-        >
-          {canvases.map((p) => {
-            const on = cur === p.id;
-            return (
-              <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: "var(--sp-1)", flexShrink: 0, borderBottom: `2px solid ${on ? "var(--accent)" : "transparent"}` }}>
-                <button
-                  data-plugin-tab={p.id}
-                  onClick={() => setTab(p.id)}
-                  style={{
-                    padding: "0 2px var(--sp-2)",
-                    fontSize: "var(--text-sm)",
-                    fontWeight: on ? "var(--w-semi)" : "var(--w-norm)",
-                    color: on ? "var(--ink)" : "var(--ink-faint)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {p.name}
-                </button>
-                <button
-                  data-plugin-tab-close={p.id}
-                  data-tip={t("plugins.closeTab")}
-                  onClick={() => setHide(p.id, true)}
-                  style={{ display: "grid", placeItems: "center", padding: "0 0 var(--sp-2)", color: "var(--ink-ghost)" }}
-                >
-                  {Icon.close12}
-                </button>
-              </span>
-            );
-          })}
-          <button
-            ref={pickRef}
-            data-plugin-tab-add
-            data-plugin-tab-add-count={closed.length}
-            data-tip={t("plugins.addTab")}
-            onClick={(e) => {
-              const row = e.currentTarget.closest("[data-plugin-tab-strip]")?.parentElement;
-              const b = e.currentTarget.getBoundingClientRect();
-              const r = row?.getBoundingClientRect();
-              if (r) setPickX(Math.max(0, Math.min(b.left - r.left, r.width - 200)));
-              setPicking((v) => !v);
-            }}
-            style={{ display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0, padding: "0 var(--sp-2) var(--sp-2)", color: "var(--ink-faint)" }}
-          >
-            {Icon.plus}
-            {/* ★열 수 있는(닫아 둔) 탭 수 — + 옆에, 아이콘과 겹치지 않게. 글자는 본문 글자색(어두운 화면에서 흰색)이고
-                **모두 열려 있어도 0 을 보여 준다** (사용자 지시 2026-09-08: 더 크게·흰색으로·0 도 표시) */}
-            <span
-              style={{
-                minWidth: 18,
-                height: 18,
-                padding: "0 5px",
-                display: "grid",
-                placeItems: "center",
-                fontSize: "var(--text-2xs)",
-                lineHeight: 1,
-                fontVariantNumeric: "tabular-nums",
-                borderRadius: 9,
-                border: "1px solid var(--line)",
-                background: "var(--panel)",
-                color: "var(--ink)",
-              }}
-            >
-              {closed.length}
-            </span>
-          </button>
-        </div>
-        {picking && (
-          <div
-            ref={popRef}
-            data-plugin-tab-pick
-            style={{
-              position: "absolute",
-              top: "100%",
-              left: pickX,
-              zIndex: 5,
-              marginTop: 4,
-              minWidth: 180,
-              padding: "var(--sp-1)",
-              display: "flex",
-              flexDirection: "column",
-              border: "1px solid var(--line)",
-              borderRadius: "var(--r-2)",
-              background: "var(--panel)",
-              boxShadow: "var(--shadow-2)",
-            }}
-          >
-            {closed.length === 0 ? (
-              <span data-plugin-tab-all-open style={{ padding: "var(--sp-1) var(--sp-3)", fontSize: "var(--text-xs)", color: "var(--ink-faint)" }}>
-                {/* ★플러그인이 하나도 없으면 「모두 열려 있다」 가 아니라 「없다」 (사용자 지시 2026-09-08) */}
-                {t(usable.length === 0 ? "plugins.none" : "plugins.allTabsOpen")}
-              </span>
-            ) : (
-              closed.map((p) => (
-                <button
-                  key={p.id}
-                  data-plugin-tab-open={p.id}
-                  onClick={() => {
-                    setHide(p.id, false);
-                    setTab(p.id);
-                    setPicking(false);
-                  }}
-                  style={{ textAlign: "left", padding: "var(--sp-1) var(--sp-3)", fontSize: "var(--text-sm)", color: "var(--ink)", borderRadius: "var(--r-1)" }}
-                >
-                  {p.name}
-                </button>
-              ))
-            )}
-          </div>
-        )}
+      {/* ★캔버스는 떼지 않고 숨긴다 — 관리 화면을 보는 동안에도 프레임의 iframe 이 살아 있어야 한다 */}
+      <div style={{ flex: 1, minHeight: 0, display: manageOn ? "none" : "flex", flexDirection: "column" }}>
+        <PluginCanvas items={items} base={base} />
       </div>
-
-      {base &&
-        canvases
-          .filter((p) => seen.includes(p.id))
-          .map((p) => (
-            <iframe
-              key={p.id}
-              data-plugin-canvas={p.id}
-              hidden={cur !== p.id}
-              title={p.name}
-              src={`${base}${p.web}${fresh(p.web)}`} // ★기동 표식 — 캐시된 옛 페이지를 안 받는다 (`pluginHost` 의 BOOT 주)
-              // ★기본 바탕은 생성 모드의 큰 그림 영역과 같은 `--panel` (바탕보다 한 단계 밝은 면. 사용자 지시 2026-09-08).
-              //   플러그인 페이지가 body 에 배경을 칠하면 그것이 이기고, 안 칠하면(투명) 이 색이 비친다.
-              //   ★`colorScheme: "light"` — Chromium 은 iframe 요소와 그 안 문서의 color-scheme 이 다르면 문서를 **불투명(흰색)** 으로
-              //   그린다. 배경을 안 칠한 플러그인 페이지는 scheme 이 normal(밝음)이라, 앱이 어두운 테마일 때 흰 판이 됐다
-              //   (실측 2026-09-08, 고정물 hello). 요소 쪽을 light 로 맞추면 투명해져 위 색이 비친다. 자기 색을 칠한 페이지는 무관하다.
-              style={{ flex: 1, minHeight: 0, width: "100%", border: "none", background: "var(--panel)", colorScheme: "light" }}
-            />
-          ))}
-
       {manageOn && (
         <div data-plugins-manage style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "var(--sp-6)", padding: "var(--sp-6) var(--sp-9) var(--sp-7)" }}>
           {sub === LIST ? (
@@ -535,6 +281,11 @@ function Head({ sub, setSub, q, setQ, installedCount, right }: { sub: string; se
   };
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-7)", flexShrink: 0 }}>
+      {/* 캔버스로 돌아가기 — 오른쪽 패널의 「관리」 를 다시 눌러도 된다 */}
+      <button data-plugins-back onClick={() => useUi.getState().setView("tab", "plugins", "canvas" as never)} style={{ ...btn, height: 28, gap: "var(--sp-2)" }}>
+        <span style={{ display: "grid", placeItems: "center", width: 12, height: 12 }}>{Icon.chevronLeft}</span>
+        {t("plugins.backToCanvas")}
+      </button>
       <div style={{ display: "flex", gap: 2, padding: 3, border: "1px solid var(--line)", borderRadius: "var(--r-3)", background: "var(--panel)" }}>
         {seg(LIST, t("plugins.availableHead"))}
         {seg(INSTALLED, t("plugins.installedHead"), installedCount)}

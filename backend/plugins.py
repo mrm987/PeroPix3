@@ -68,6 +68,8 @@ class Plugin:
     origin: dict | None = None
     #: 매니페스트의 `homepage` (선택) — 있으면 링크는 이것이 우선
     homepage: str = ""
+    #: 캔버스 프레임 규격 (`canvas_spec`) — 처음 크기·최소 크기·맞춤 방식
+    canvas: dict = field(default_factory=lambda: canvas_spec({}))
 
     def info(self) -> dict:
         return {
@@ -75,7 +77,29 @@ class Plugin:
             "web": self.web, "ext": self.ext, "contributes": self.contributes,
             "error": self.error, "dir": str(self.dir), "enabled": self.enabled,
             "origin": self.origin, "homepage": self.homepage, "description": self.description,
+            "canvas": self.canvas,
         }
+
+
+#: 캔버스 프레임 규격의 기본값 — 아무것도 안 적은 플러그인도 흐름 방식 720×480 으로 뜬다 (사용자 결정 2026-09-09)
+CANVAS_DEFAULT = {"width": 720, "height": 480, "fit": "flow"}
+
+
+def canvas_spec(m: dict) -> dict:
+    """`plugin.json` 의 `canvas` 를 정리한다 — `{width, height, minWidth, minHeight, fit}`.
+    최소 크기를 안 적으면 처음 크기가 최소다 (좁아져서 깨지는 일은 앱이 막는다). `fit` 은 "flow"(기본) | "scale"."""
+    c = m.get("canvas") if isinstance(m.get("canvas"), dict) else {}
+
+    def num(k: str, default: float) -> int:
+        v = c.get(k)
+        return int(v) if isinstance(v, (int, float)) and v > 0 else int(default)
+
+    w, h = num("width", CANVAS_DEFAULT["width"]), num("height", CANVAS_DEFAULT["height"])
+    return {
+        "width": w, "height": h,
+        "minWidth": min(num("minWidth", w), w), "minHeight": min(num("minHeight", h), h),
+        "fit": "scale" if c.get("fit") == "scale" else "flow",
+    }
 
 
 def _read_manifest(d: Path) -> dict:
@@ -106,6 +130,7 @@ def _load_one(app: FastAPI, d: Path) -> Plugin:
         p.version = str(m.get("version") or "")
         p.description = str(m.get("description") or "")
         p.homepage = str(m.get("homepage") or "")
+        p.canvas = canvas_spec(m)
         p.contributes = m.get("contributes") if isinstance(m.get("contributes"), dict) else {}
 
         # ★★플러그인 폴더 자체는 `sys.path` 에 넣지 않는다 (실측 2026-09-07, 게스트 QA): 앞에 넣었더니 플러그인의
@@ -170,6 +195,7 @@ def _skipped(d: Path) -> Plugin:
     if m:
         p.name, p.version = str(m.get("name") or d.name), str(m.get("version") or "")
         p.description, p.homepage = str(m.get("description") or ""), str(m.get("homepage") or "")
+        p.canvas = canvas_spec(m)
     return p
 
 

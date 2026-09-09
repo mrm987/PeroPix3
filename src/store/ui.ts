@@ -1,4 +1,7 @@
 import { create } from "zustand";
+
+/** 플러그인 캔버스의 프레임 하나 — 자리·크기(캔버스 좌표), 접힘, 앞뒤 차례(`z` 가 클수록 앞) */
+export type PluginFrame = { x: number; y: number; w: number; h: number; fold?: boolean; z: number };
 import { PICK_DROP, type MetaPick } from "../lib/metaApply";
 import { useEffect, useRef } from "react";
 
@@ -183,9 +186,13 @@ type Persisted = {
     fold: Record<string, boolean>;
     /** 섹션마다 `Prompt` 를 보고 있나 `Undesired Content` 를 보고 있나 */
     tab: Record<string, "p" | "u">;
-    /** 플러그인 모드에서 **닫아 둔 캔버스 탭** (열쇠 = 플러그인 id). 설치하면 기본은 열림이고, 탭의 × 로 닫고
-     *  + 로 다시 연다 (사용자 지시 2026-09-08). 관리의 켜기/끄기와 다르다 — 탭만 안 보일 뿐 플러그인은 돈다. */
+    /** 플러그인 캔버스에서 **꺼내 두지 않은** 플러그인 (열쇠 = 플러그인 id). 설치하면 기본은 캔버스에 있고, 프레임의 × 로
+     *  닫고 패널의 + 로 다시 꺼낸다 (2026-09-08 탭 → 2026-09-09 캔버스). 관리의 켜기/끄기와 다르다 — 프레임만 없을 뿐 플러그인은 돈다. */
     hide: Record<string, boolean>;
+    /** 플러그인 캔버스의 **프레임** — 자리·크기·접힘·앞뒤 (열쇠 = 플러그인 id). 캔버스 좌표(배율 1 기준) */
+    frame: Record<string, PluginFrame>;
+    /** 플러그인 캔버스의 화면 이동·배율 (열쇠 = "plugins") */
+    pan: Record<string, { x: number; y: number; z: number }>;
   };
   /** 세로 모드일 때 씬 쪽의 폭 (`bottom` 일 때의 `laneHeight` 에 해당) */
   laneWidth: number;
@@ -235,7 +242,7 @@ const DEFAULTS: Persisted = {
   laneSide: "bottom",
   laneWidth: 420,
   laneHeadH: 132,
-  view: { cat: {}, fold: {}, tab: {}, hide: {} },
+  view: { cat: {}, fold: {}, tab: {}, hide: {}, frame: {}, pan: {} },
 };
 
 export const COLS_MIN = 1;
