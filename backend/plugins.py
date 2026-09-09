@@ -81,13 +81,16 @@ class Plugin:
         }
 
 
-#: 캔버스 프레임 규격의 기본값 — 아무것도 안 적은 플러그인도 흐름 방식 720×480 으로 뜬다 (사용자 결정 2026-09-09)
-CANVAS_DEFAULT = {"width": 720, "height": 480, "fit": "flow"}
+#: 캔버스 프레임 규격의 기본값 — 아무것도 안 적은 플러그인도 배율 방식 720×480 으로 뜬다.
+#  ★기본은 "scale" (사용자 지시 2026-09-09: 프레임을 키우면 콘텐츠도 같이 커져야 한다 — 브라우저 확대처럼). "flow" 는 창을
+#    늘리듯 여백만 늘고 콘텐츠 크기는 그대로라, 반응형으로 만든 플러그인만 고르는 선택지다.
+CANVAS_DEFAULT = {"width": 720, "height": 480, "fit": "scale"}
 
 
 def canvas_spec(m: dict) -> dict:
     """`plugin.json` 의 `canvas` 를 정리한다 — `{width, height, minWidth, minHeight, fit}`.
-    최소 크기를 안 적으면 처음 크기가 최소다 (좁아져서 깨지는 일은 앱이 막는다). `fit` 은 "flow"(기본) | "scale"."""
+    최소 크기를 안 적으면 처음 크기가 최소다 (좁아져서 깨지는 일은 앱이 막는다). `fit` 은 "scale"(기본, 폭에 맞춰 통째로
+    확대·축소 — 높이는 흐름) | "flow"(창처럼 늘어나고 콘텐츠는 그대로 줄바꿈)."""
     c = m.get("canvas") if isinstance(m.get("canvas"), dict) else {}
 
     def num(k: str, default: float) -> int:
@@ -98,7 +101,7 @@ def canvas_spec(m: dict) -> dict:
     return {
         "width": w, "height": h,
         "minWidth": min(num("minWidth", w), w), "minHeight": min(num("minHeight", h), h),
-        "fit": "scale" if c.get("fit") == "scale" else "flow",
+        "fit": "flow" if c.get("fit") == "flow" else "scale",
     }
 
 
