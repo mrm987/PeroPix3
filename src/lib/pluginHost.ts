@@ -163,9 +163,8 @@ export function hostApi(p: PluginInfo) {
     openCanvas(id: string = p.id) {
       // ★캔버스(2026-09-09): 플러그인 모드로 가서 그 플러그인을 캔버스에 꺼내 놓고 맨 앞으로 (관리 화면을 보고 있었으면 캔버스로)
       useUi.getState().setMode("plugins");
-      const items = usePlugins.getState().items;
-      const q = items.find((x) => x.id === id);
-      if (q) putOnCanvas(q, 0);
+      const q = usePlugins.getState().items.find((x) => x.id === id);
+      if (q) putOnCanvas(q);
     },
     /** 앱 액션 — 조수가 쓰는 것과 같은 목록. ★승인 카드를 지나지 않는다 */
     action: (name: string, args: Record<string, unknown> = {}) => runAction(name, args, false),

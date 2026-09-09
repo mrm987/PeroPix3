@@ -46,11 +46,15 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
   /** 캔버스가 있고 켜진 플러그인 중 꺼내 둔 것 */
   const usable = items.filter((p) => p.web && !p.error && p.enabled !== false);
   const shown = usable.filter((p) => !hide[p.id]);
-  /** 자리가 없는(처음 꺼낸) 것들끼리의 차례 — 겹치지 않게 조금씩 밀 때 쓴다 */
-  const unplaced = shown.filter((p) => !frames[p.id]);
+  /** 아직 자리가 없는 것들에게 **한 번에** 빈 자리를 준다 — 서로도 안 겹치게 앞서 정한 것을 넘긴다 */
+  const spots = new Map<string, PluginFrame>();
+  for (const p of shown) {
+    if (frames[p.id]) continue;
+    spots.set(p.id, defaultFrame(p, [...spots.values()]));
+  }
   const frameOf = (p: PluginInfo): PluginFrame => {
     if (drag && liveFrame?.id === p.id) return liveFrame.f;
-    return frames[p.id] ?? defaultFrame(p, Math.max(0, unplaced.indexOf(p)));
+    return frames[p.id] ?? spots.get(p.id) ?? defaultFrame(p);
   };
   const setFrame = (id: string, f: PluginFrame) => useUi.getState().setView("frame", id, f);
   const setPan = (v: Pan) => useUi.getState().setView("pan", "plugins", v);
@@ -147,7 +151,7 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
   const fitAll = () => {
     const el = rootRef.current;
     if (!el || shown.length === 0) return;
-    const fs = shown.map((p) => frameOf(p));
+    const fs = shown.map((p) => frameOf(p)).filter(Boolean);
     const x0 = Math.min(...fs.map((f) => f.x)), y0 = Math.min(...fs.map((f) => f.y));
     const x1 = Math.max(...fs.map((f) => f.x + f.w)), y1 = Math.max(...fs.map((f) => f.y + (f.fold ? HEAD : f.h)));
     const vw = el.clientWidth - PAD * 2, vh = el.clientHeight - PAD * 2;
@@ -170,7 +174,7 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
     if (!p || !el) return;
     e.preventDefault();
     const r = el.getBoundingClientRect();
-    const f = frames[id] ?? defaultFrame(p, 0);
+    const f = frames[id] ?? defaultFrame(p);
     const x = Math.round((e.clientX - r.left - pan.x) / pan.z - f.w / 2), y = Math.round((e.clientY - r.top - pan.y) / pan.z - HEAD / 2);
     useUi.getState().setView("hide", id, false);
     raiseFrame(id, { ...f, x, y, fold: false });

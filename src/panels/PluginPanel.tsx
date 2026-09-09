@@ -30,11 +30,11 @@ export function PluginPanel() {
   const folded = onCanvas.filter((p) => frames[p.id]?.fold);
 
   /** 꺼내기 — 지금 보는 화면의 왼쪽 위에 놓고 맨 앞으로 */
-  const takeOut = (p: PluginInfo) => putOnCanvas(p, 0);
+  const takeOut = (p: PluginInfo) => putOnCanvas(p);
   /** 캔버스에 있는 것을 누르면 — 그 프레임이 보이게 화면을 옮기고 맨 앞으로 */
   const focus = (p: PluginInfo) => {
     const pan = currentPan();
-    const f = frames[p.id] ?? defaultFrame(p, 0);
+    const f = frames[p.id] ?? defaultFrame(p);
     useUi.getState().setView("tab", "plugins", "canvas" as never);
     useUi.getState().setView("pan", "plugins", { ...pan, x: 40 - f.x * pan.z, y: 40 - f.y * pan.z });
     raiseFrame(p.id, f);
