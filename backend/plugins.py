@@ -81,16 +81,17 @@ class Plugin:
         }
 
 
-#: 캔버스 프레임 규격의 기본값 — 아무것도 안 적은 플러그인도 배율 방식 720×480 으로 뜬다.
-#  ★기본은 "scale" (사용자 지시 2026-09-09: 프레임을 키우면 콘텐츠도 같이 커져야 한다 — 브라우저 확대처럼). "flow" 는 창을
-#    늘리듯 여백만 늘고 콘텐츠 크기는 그대로라, 반응형으로 만든 플러그인만 고르는 선택지다.
-CANVAS_DEFAULT = {"width": 720, "height": 480, "fit": "scale"}
+#: 캔버스 프레임 규격의 기본값 — 아무것도 안 적은 플러그인도 흐름 방식 720×480 으로 뜬다.
+#  ★기본은 "flow" = **진짜 브라우저 창** (사용자 지시 2026-09-09: 콘텐츠가 창에 맞춰 유동적으로, 글자는 원래 크기로). iframe 이
+#    프레임을 꽉 채우고 페이지는 창을 늘리듯 다시 흐른다. "scale"(CSS 변환 확대)은 글자 렌더가 깨져 기본에서 뺐다 — 고정
+#    그림판처럼 확대가 곧 뜻인 플러그인만 고른다.
+CANVAS_DEFAULT = {"width": 720, "height": 480, "fit": "flow"}
 
 
 def canvas_spec(m: dict) -> dict:
     """`plugin.json` 의 `canvas` 를 정리한다 — `{width, height, minWidth, minHeight, fit}`.
-    최소 크기를 안 적으면 처음 크기가 최소다 (좁아져서 깨지는 일은 앱이 막는다). `fit` 은 "scale"(기본, 폭에 맞춰 통째로
-    확대·축소 — 높이는 흐름) | "flow"(창처럼 늘어나고 콘텐츠는 그대로 줄바꿈)."""
+    최소 크기를 안 적으면 처음 크기가 최소다 (좁아져서 깨지는 일은 앱이 막는다). `fit` 은 "flow"(기본, 브라우저 창처럼 — 페이지가
+    프레임 크기에 맞춰 다시 흐른다) | "scale"(설계 폭의 페이지를 프레임 폭에 맞춰 CSS 로 확대·축소, 글자가 흐려진다)."""
     c = m.get("canvas") if isinstance(m.get("canvas"), dict) else {}
 
     def num(k: str, default: float) -> int:
@@ -101,7 +102,7 @@ def canvas_spec(m: dict) -> dict:
     return {
         "width": w, "height": h,
         "minWidth": min(num("minWidth", w), w), "minHeight": min(num("minHeight", h), h),
-        "fit": "flow" if c.get("fit") == "flow" else "scale",
+        "fit": "scale" if c.get("fit") == "scale" else "flow",
     }
 
 

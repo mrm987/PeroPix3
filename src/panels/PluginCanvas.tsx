@@ -12,7 +12,8 @@ import { openExternal } from "../lib/openExternal";
  *  ★탭(2026-09-08)을 걷고 캔버스로 바꿨다. 프레임은 캔버스 좌표(배율 1 기준)로 `useUi.view.frame` 에, 화면 이동·배율은
  *    `useUi.view.pan["plugins"]` 에 저장된다. 꺼내 두지 않은 플러그인은 `view.hide` 가 true 다 (탭 때와 같은 열쇠).
  *  ★프레임 안은 플러그인 페이지(iframe, 백엔드 오리진)다. 머리(이름·판·딱지·GitHub·접기·닫기)와 크기 손잡이는 앱이 그린다.
- *    `fit: "scale"`(기본) 은 설계 폭의 페이지를 프레임 폭에 맞춰 통째로 확대·축소(높이는 흐름), `fit: "flow"` 는 프레임 = 페이지 창 크기.
+ *    `fit: "flow"`(기본) 은 **진짜 브라우저 창** — iframe 이 프레임을 채우고 페이지는 창을 늘리듯 다시 흐른다 (글자는 원래 크기).
+ *    `fit: "scale"` 은 설계 폭의 페이지를 프레임 폭에 맞춰 CSS 로 확대·축소 — 글자가 흐려져 고정 그림판만 고른다 (사용자 판정 2026-09-09).
  *  ★입력 규칙 (시안 Spec): 바탕 끌기 = 이동, 바탕 휠 = 확대, 프레임 머리 끌기 = 옮기기, 스페이스 + 끌기 = 프레임 위에서도 이동.
  *    iframe 위의 마우스·휠은 플러그인에 그대로 간다. 끄는 동안만 iframe 의 pointer-events 를 끊는다 — 안 그러면 iframe 이
  *    움직임을 삼켜 끌기가 끊긴다.
@@ -215,9 +216,8 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
           const official = p.origin?.source === "bundled";
           const link = linkOf({ id: p.id, homepage: p.homepage, origin: p.origin });
           const cw = f.w - 2, ch = f.h - HEAD - 2; // 테두리 1px 씩
-          // ★"scale": 페이지를 설계 폭으로 두고 프레임 폭에 맞춰 통째로 확대·축소한다 — 브라우저 확대처럼 콘텐츠가 같이 커진다
-          //   (사용자 지시 2026-09-09). 높이는 흐름이라 프레임을 키우면 페이지에 더 많은 세로 자리가 생긴다. 가로세로 맞춤(letterbox)이
-          //   아니다 — 그건 위아래 여백만 남겼다.
+          // "scale"(선택): 페이지를 설계 폭으로 두고 프레임 폭에 맞춰 CSS 변환으로 확대·축소. 높이는 흐름. ★기본이 아니다 —
+          //   변환 확대는 글자 렌더가 깨진다 (사용자 판정 2026-09-09). 기본 "flow" 는 iframe 이 프레임을 채우는 진짜 창이다.
           const scale = p.canvas.fit === "scale" ? cw / p.canvas.width : 1;
           return (
             <div
