@@ -1,0 +1,178 @@
+/* PeroPix 플러그인 공통 스타일 — 한 줄 넣으면 앱과 같은 모양이 된다.
+ *
+ *     <link rel="stylesheet" href="/plug/_app/base.css">
+ *
+ * ★**클래스 없이도 어울린다** (사용자 지시 2026-09-10: *"comfy ui 커스텀 노드처럼 시각적 일관성"*).
+ *   `<button>`·`<input>`·`<table>` 을 그냥 쓰면 앱 모양으로 그려진다. 클래스는 몇 개만 두었다 (`.card`·`.row`·`.muted`…).
+ * ★**테마를 따라간다.** `color-scheme: dark light` 를 선언하므로 앱이 다크면 이 페이지도 다크로 그려지고, 앱에서 테마를
+ *   바꾸면 새로고침 없이 따라온다 (앱이 프레임의 color-scheme 을 바꾸면 `prefers-color-scheme` 이 그대로 바뀐다. 실측 2026-09-10).
+ * ★**바탕은 안 칠한다.** 프레임 뒤로 앱 캔버스 바탕이 비친다 — 콘텐츠만 `.card` 등으로 칠한다.
+ * ★색·크기 값은 앱의 `src/styles/tokens.css` 에서 옮겨 온 것이다. 그쪽을 고치면 여기도 맞춰야 한다
+ *   (플러그인 페이지는 다른 문서라 앱의 CSS 를 못 읽는다).
+ * ★글꼴은 **시스템 글꼴**이다. 앱이 번들한 Pretendard 는 다른 오리진에 있어 이 페이지가 못 받는다.
+ */
+
+:root {
+  color-scheme: dark light;
+
+  /* 면 */
+  --bg: #eef1f4;
+  --panel: #ffffff;
+  --code-bg: #f4f6f8;
+  /* 선 */
+  --line: #dde2e8;
+  --line-soft: #e8ecf1;
+  /* 글자 */
+  --ink: #1e2630;
+  --ink-soft: #55616e;
+  --ink-dim: #78838f;
+  --ink-faint: #98a2ad;
+  /* 강조 */
+  --accent: #2f6fa8;
+  --accent-ink: #2f6fa8;
+  --accent-bg: #e3eef8;
+  --accent-on: #ffffff;
+  /* 뜻이 있는 색 */
+  --ok: #2d8a52;
+  --warn: #c07f18;
+  --err: #a8433b;
+
+  /* 글꼴 — 앱 번들 글꼴은 못 쓰므로 시스템 글꼴 (위 ★주) */
+  --font-sans: system-ui, "Pretendard Variable", Pretendard, "Segoe UI", "Malgun Gothic", sans-serif;
+  --font-mono: ui-monospace, Consolas, "D2Coding", monospace;
+
+  /* 글자 크기 — 앱과 같은 계단 */
+  --text-3xs: 11px;
+  --text-2xs: 12px;
+  --text-xs: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  /* 굵기 — 한글은 굵으면 획이 뭉쳐 한 단씩 낮게 잡는다 */
+  --w-norm: 370;
+  --w-semi: 500;
+  --w-bold: 560;
+
+  /* 간격·모서리 */
+  --sp-1: 4px;
+  --sp-2: 6px;
+  --sp-3: 8px;
+  --sp-4: 10px;
+  --sp-5: 12px;
+  --sp-6: 14px;
+  --sp-7: 16px;
+  --sp-8: 20px;
+  --r-1: 5px;
+  --r-2: 7px;
+  --r-3: 9px;
+  --r-4: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16161a;
+    --panel: #1e1e24;
+    --code-bg: #16161a;
+    --line: #2e2e36;
+    --line-soft: #26262e;
+    --ink: #ececf1;
+    --ink-soft: rgba(236, 236, 241, 0.72);
+    --ink-dim: rgba(236, 236, 241, 0.55);
+    --ink-faint: rgba(236, 236, 241, 0.42);
+    --accent: #7c6cf0;
+    --accent-ink: #b3a8ff;
+    --accent-bg: #2a2640;
+    --accent-on: #ffffff;
+    --ok: #22c55e;
+    --warn: #fbbf24;
+    --err: #e05555;
+  }
+}
+
+/* ── 바탕 ── */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: var(--sp-6);
+  background: transparent;   /* 앱 캔버스 바탕이 비친다 */
+  color: var(--ink);
+  font: var(--w-norm) var(--text-md) / 1.5 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── 글 ── */
+h1, h2, h3 { margin: 0 0 var(--sp-4); font-weight: var(--w-bold); line-height: 1.25; }
+h1 { font-size: var(--text-xl); }
+h2 { font-size: var(--text-lg); }
+h3 { font-size: var(--text-md); }
+p { margin: 0 0 var(--sp-4); }
+a { color: var(--accent-ink); text-decoration: none; }
+a:hover { text-decoration: underline; }
+small, .muted { color: var(--ink-dim); font-size: var(--text-2xs); }
+hr { border: none; border-top: 1px solid var(--line); margin: var(--sp-6) 0; }
+code, kbd, pre { font-family: var(--font-mono); font-size: var(--text-2xs); }
+pre, code { background: var(--code-bg); border: 1px solid var(--line); border-radius: var(--r-2); }
+code { padding: 1px 5px; }
+pre { margin: 0 0 var(--sp-4); padding: var(--sp-4) var(--sp-5); overflow: auto; white-space: pre-wrap; word-break: break-all; }
+pre code { background: none; border: none; padding: 0; }
+
+/* ── 단추 ── */
+button, .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 28px;
+  padding: 0 var(--sp-5);
+  font: var(--w-norm) var(--text-xs) / 1 var(--font-sans);
+  color: var(--ink-soft);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  cursor: pointer;
+}
+button:hover:not(:disabled), .btn:hover { border-color: var(--accent); color: var(--ink); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary {
+  font-weight: var(--w-semi);
+  color: var(--accent-on);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+button.primary:hover:not(:disabled) { color: var(--accent-on); filter: brightness(1.08); }
+button.ghost { background: none; border-color: transparent; }
+
+/* ── 입력 ── */
+input, select, textarea {
+  min-height: 28px;
+  padding: var(--sp-1) var(--sp-4);
+  font: var(--w-norm) var(--text-xs) / 1.4 var(--font-sans);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+input[type="checkbox"], input[type="range"] { min-height: 0; accent-color: var(--accent); }
+label { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--text-xs); color: var(--ink-soft); }
+fieldset { margin: 0 0 var(--sp-5); padding: var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-3); }
+legend { padding: 0 var(--sp-2); font-size: var(--text-2xs); color: var(--ink-dim); }
+
+/* ── 표·목록 ── */
+table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+th, td { padding: var(--sp-3) var(--sp-4); text-align: left; border-bottom: 1px solid var(--line-soft); }
+th { font-weight: var(--w-semi); color: var(--ink-dim); font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: 0.4px; }
+ul, ol { margin: 0 0 var(--sp-4); padding-left: var(--sp-8); }
+li { margin-bottom: var(--sp-2); }
+
+/* ── 자주 쓰는 몇 가지 ── */
+.card { padding: var(--sp-5); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-4); }
+.row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.col { display: flex; flex-direction: column; gap: var(--sp-3); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--sp-3); }
+.spacer { flex: 1; }
+.pill { padding: 0 var(--sp-2); font-size: var(--text-3xs); line-height: 18px; border: 1px solid var(--line); border-radius: var(--r-2); color: var(--ink-dim); }
+.pill.on { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-ink); }
+.ok { color: var(--ok); }
+.warn { color: var(--warn); }
+.err { color: var(--err); }

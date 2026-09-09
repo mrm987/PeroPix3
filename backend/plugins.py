@@ -82,17 +82,18 @@ class Plugin:
         }
 
 
-#: 캔버스 프레임 규격의 기본값 — 아무것도 안 적은 플러그인도 흐름 방식 720×480 으로 뜬다.
-#  ★기본은 "flow" = **진짜 브라우저 창** (사용자 지시 2026-09-09: 콘텐츠가 창에 맞춰 유동적으로, 글자는 원래 크기로). iframe 이
-#    프레임을 꽉 채우고 페이지는 창을 늘리듯 다시 흐른다. "scale"(CSS 변환 확대)은 글자 렌더가 깨져 기본에서 뺐다 — 고정
-#    그림판처럼 확대가 곧 뜻인 플러그인만 고른다.
-CANVAS_DEFAULT = {"width": 720, "height": 480, "fit": "flow"}
+#: 캔버스 프레임 규격의 기본값 — 처음 창 크기와, 그 아래로는 못 줄이는 바닥.
+#  ★★프레임은 **진짜 브라우저 창**이다 (사용자 지시 2026-09-09·10). 페이지는 창 크기에 맞춰 다시 흐르고, 앱은 확대·축소 같은
+#    브라우저에 없는 손질을 하지 않는다. 한때 있던 `fit: "scale"`(CSS 변환 확대)은 글자 렌더가 깨져 걷었다.
+#  ★바닥은 **작게** 둔다 — 실제 브라우저 창도 아주 작게 줄여지고, 그때 어떻게 보일지는 페이지가 정한다. 제작자가
+#    `minWidth`·`minHeight` 를 적으면 그것을 따른다 (처음 크기가 곧 최소가 되지는 않는다).
+CANVAS_DEFAULT = {"width": 720, "height": 480}
+CANVAS_FLOOR = {"width": 320, "height": 200}
 
 
 def canvas_spec(m: dict) -> dict:
-    """`plugin.json` 의 `canvas` 를 정리한다 — `{width, height, minWidth, minHeight, fit}`.
-    최소 크기를 안 적으면 처음 크기가 최소다 (좁아져서 깨지는 일은 앱이 막는다). `fit` 은 "flow"(기본, 브라우저 창처럼 — 페이지가
-    프레임 크기에 맞춰 다시 흐른다) | "scale"(설계 폭의 페이지를 프레임 폭에 맞춰 CSS 로 확대·축소, 글자가 흐려진다)."""
+    """`plugin.json` 의 `canvas` 를 정리한다 — `{width, height, minWidth, minHeight}` (전부 선택).
+    `width`·`height` 는 **처음 꺼낼 때의 창 크기**, `minWidth`·`minHeight` 는 그 아래로 못 줄이는 크기다."""
     c = m.get("canvas") if isinstance(m.get("canvas"), dict) else {}
 
     def num(k: str, default: float) -> int:
@@ -102,8 +103,8 @@ def canvas_spec(m: dict) -> dict:
     w, h = num("width", CANVAS_DEFAULT["width"]), num("height", CANVAS_DEFAULT["height"])
     return {
         "width": w, "height": h,
-        "minWidth": min(num("minWidth", w), w), "minHeight": min(num("minHeight", h), h),
-        "fit": "scale" if c.get("fit") == "scale" else "flow",
+        "minWidth": min(num("minWidth", CANVAS_FLOOR["width"]), w),
+        "minHeight": min(num("minHeight", CANVAS_FLOOR["height"]), h),
     }
 
 
@@ -202,6 +203,15 @@ def _skipped(d: Path) -> Plugin:
         p.description, p.homepage = str(m.get("description") or ""), str(m.get("homepage") or "")
         p.canvas = canvas_spec(m)
     return p
+
+
+def mount_shared(app: FastAPI, shared: Path) -> None:
+    """플러그인이 함께 쓰는 자산을 `/plug/_app/` 에 붙인다 (`base.css`·`peropix.js`).
+    ★플러그인 페이지와 같은 오리진이라 `<link href="/plug/_app/base.css">` 한 줄로 쓴다."""
+    if not shared.is_dir():
+        print(f"[plugins] 공통 자산 폴더가 없습니다: {shared}", flush=True)
+        return
+    app.mount("/plug/_app", _FreshStatic(directory=str(shared)), name="plug-shared")
 
 
 def load_all(app: FastAPI, root: Path, disabled: set[str] | None = None) -> list[Plugin]:

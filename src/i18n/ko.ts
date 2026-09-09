@@ -85,6 +85,8 @@ export const ko: Dict = {
     unfold: "펴기",
     closeFrame: "프레임 닫기 (플러그인은 계속 돕니다)",
     fitAll: "맞춤",
+    reload: "새로고침",
+    openInBrowser: "브라우저에서 열기",
     zoomIn: "확대",
     zoomOut: "축소",
     canvasHint: "바탕 끌기 = 이동 · 바탕 휠 = 확대 · 프레임 머리 끌기 = 옮기기 · 스페이스 + 끌기 = 프레임 위에서도 이동",

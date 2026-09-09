@@ -85,6 +85,8 @@ export const ja: Dict = {
     unfold: "広げる",
     closeFrame: "フレームを閉じる (プラグインは動き続けます)",
     fitAll: "全体表示",
+    reload: "再読み込み",
+    openInBrowser: "ブラウザで開く",
     zoomIn: "拡大",
     zoomOut: "縮小",
     canvasHint: "背景ドラッグ = 移動 · 背景ホイール = 拡大 · フレーム見出しドラッグ = 移動 · Space + ドラッグ = フレーム上でも移動",

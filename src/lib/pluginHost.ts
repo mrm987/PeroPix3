@@ -14,6 +14,7 @@
  *      window.addEventListener("message", (e) => { if (e.data?.type === "peropix" && e.data.id === 1) … });
  *  앱이 먼저 보내는 것(id 없음): `{ type: "peropix", event: "theme", theme: "dark" | "light" }` — 테마가 바뀔 때.
  */
+import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { api, backendUrl } from "./backend";
 import { useUi } from "../store/ui";
@@ -51,7 +52,7 @@ export type PluginInfo = {
   homepage: string;
   description: string;
   /** 캔버스 프레임 규격 — 백엔드가 기본값을 채워 준다 (`plugins.py canvas_spec`) */
-  canvas: { width: number; height: number; minWidth: number; minHeight: number; fit: "flow" | "scale" };
+  canvas: { width: number; height: number; minWidth: number; minHeight: number };
 };
 
 /** 화면에 내놓아도 되는 플러그인인가 — 켜져 있고 읽혔다. ★끄면 다시 켜기 전에도 단추·메뉴·캔버스는 바로 감춘다
@@ -207,6 +208,23 @@ export function currentTheme(): "dark" | "light" {
   const t = document.documentElement.getAttribute("data-theme");
   if (t === "dark" || t === "light") return t;
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+/** 테마 이름을 구독한다 — 캔버스가 프레임(iframe)의 `color-scheme` 을 앱 테마에 맞추는 데 쓴다 (`PluginCanvas` 의 ★주) */
+export function useThemeName(): "dark" | "light" {
+  const [name, setName] = useState(currentTheme);
+  useEffect(() => {
+    const tell = () => setName(currentTheme());
+    const mo = new MutationObserver(tell);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener("change", tell);
+    return () => {
+      mo.disconnect();
+      mq.removeEventListener("change", tell);
+    };
+  }, []);
+  return name;
 }
 
 /** 앱 → 열린 캔버스 전부: 테마가 바뀌었다 (`{ type: "peropix", event: "theme", theme }`).

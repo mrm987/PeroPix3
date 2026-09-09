@@ -85,6 +85,8 @@ export const en = {
     unfold: "Unfold",
     closeFrame: "Close frame (the plugin keeps running)",
     fitAll: "Fit",
+    reload: "Reload",
+    openInBrowser: "Open in browser",
     zoomIn: "Zoom in",
     zoomOut: "Zoom out",
     canvasHint: "Drag the background to pan · wheel to zoom · drag a frame header to move · Space + drag pans over frames",

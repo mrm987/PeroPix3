@@ -3,7 +3,7 @@ import { useUi, type PluginFrame } from "../store/ui";
 import { HEAD, PAN0, defaultFrame, raiseFrame, type Pan } from "../lib/pluginFrames";
 import { useI18n } from "../i18n";
 import { Icon } from "../components/Icon";
-import { fresh, type PluginInfo } from "../lib/pluginHost";
+import { fresh, useThemeName, type PluginInfo } from "../lib/pluginHost";
 import { linkOf } from "../lib/pluginLink";
 import { openExternal } from "../lib/openExternal";
 
@@ -12,8 +12,13 @@ import { openExternal } from "../lib/openExternal";
  *  ★탭(2026-09-08)을 걷고 캔버스로 바꿨다. 프레임은 캔버스 좌표(배율 1 기준)로 `useUi.view.frame` 에, 화면 이동·배율은
  *    `useUi.view.pan["plugins"]` 에 저장된다. 꺼내 두지 않은 플러그인은 `view.hide` 가 true 다 (탭 때와 같은 열쇠).
  *  ★프레임 안은 플러그인 페이지(iframe, 백엔드 오리진)다. 머리(이름·판·딱지·GitHub·접기·닫기)와 크기 손잡이는 앱이 그린다.
- *    `fit: "flow"`(기본) 은 **진짜 브라우저 창** — iframe 이 프레임을 채우고 페이지는 창을 늘리듯 다시 흐른다 (글자는 원래 크기).
- *    `fit: "scale"` 은 설계 폭의 페이지를 프레임 폭에 맞춰 CSS 로 확대·축소 — 글자가 흐려져 고정 그림판만 고른다 (사용자 판정 2026-09-09).
+ *  ★★프레임은 **진짜 브라우저 창**이다 (사용자 결정 2026-09-10). iframe 이 프레임을 채우고, 크기를 바꾸면 페이지가 창을 늘리듯
+ *    다시 흐른다. 앱은 확대·축소 같은 브라우저에 없는 손질을 하지 않는다 (한때 있던 `fit: "scale"` 은 글자가 깨져 걷었다).
+ *    머리에 **새로고침**과 **브라우저에서 열기**를 둔다 — 제작자가 크롬의 개발자 도구로 작업할 수 있어야 한다.
+ *  ★★iframe 의 `color-scheme` 을 **앱 테마에 맞춘다** — 그러면 페이지가 `prefers-color-scheme` 으로 앱 테마를 받고, 테마를
+ *    바꾸면 새로고침 없이 따라온다 (실측 2026-09-10). 브라우저가 OS 테마를 알려 주는 것과 같은 자리다. 배색을 선언한 페이지
+ *    (`color-scheme: dark light`, `_app/base.css` 가 해 준다)는 투명이 유지돼 앱 바탕이 비치고, 선언 안 한 페이지는 크롬에서와
+ *    같이 흰 바탕으로 그려진다.
  *  ★입력 규칙 (시안 Spec): 바탕 끌기 = 이동, 바탕 휠 = 확대, 프레임 머리 끌기 = 옮기기, 스페이스 + 끌기 = 프레임 위에서도 이동.
  *    iframe 위의 마우스·휠은 플러그인에 그대로 간다. 끄는 동안만 iframe 의 pointer-events 를 끊는다 — 안 그러면 iframe 이
  *    움직임을 삼켜 끌기가 끊긴다.
@@ -38,6 +43,10 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
   const [livePan, setLivePan] = useState<Pan | null>(null);
   const [liveFrame, setLiveFrame] = useState<{ id: string; f: PluginFrame } | null>(null);
   const [space, setSpace] = useState(false);
+  /** 프레임마다의 새로고침 횟수 — 주소에 실어 다시 읽게 한다 (브라우저의 새로고침) */
+  const [reloads, setReloads] = useState<Record<string, number>>({});
+  /** iframe 의 color-scheme 을 여기 맞춘다 (위 ★★주) */
+  const themeName = useThemeName();
   /** 지금 끄는 것 — 상태로 둔다 (있는 동안 iframe 의 pointer-events 를 끊고 window 에서 움직임·놓기를 듣는다) */
   const [drag, setDrag] = useState<Drag | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -219,10 +228,6 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
           const f = frameOf(p);
           const official = p.origin?.source === "bundled";
           const link = linkOf({ id: p.id, homepage: p.homepage, origin: p.origin });
-          const cw = f.w - 2, ch = f.h - HEAD - 2; // 테두리 1px 씩
-          // "scale"(선택): 페이지를 설계 폭으로 두고 프레임 폭에 맞춰 CSS 변환으로 확대·축소. 높이는 흐름. ★기본이 아니다 —
-          //   변환 확대는 글자 렌더가 깨진다 (사용자 판정 2026-09-09). 기본 "flow" 는 iframe 이 프레임을 채우는 진짜 창이다.
-          const scale = p.canvas.fit === "scale" ? cw / p.canvas.width : 1;
           return (
             <div
               key={p.id}
@@ -264,8 +269,15 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
                 <span style={{ fontSize: "var(--text-3xs)", color: "var(--ink-faint)", fontFamily: "var(--font-mono)" }}>{p.version}</span>
                 {official && <span style={{ padding: "0 6px", fontSize: "var(--text-3xs)", lineHeight: "16px", borderRadius: "var(--r-2)", border: "1px solid var(--mode-plugins)", color: "var(--mode-plugins)" }}>{t("plugins.official")}</span>}
                 <span style={{ marginLeft: "auto", display: "inline-flex", gap: 2 }}>
+                  {/* 브라우저 창이니 브라우저의 두 가지를 둔다 — 새로고침, 그리고 진짜 브라우저에서 열기 (제작자는 거기서 개발자 도구를 쓴다) */}
+                  <button data-plugin-frame-reload={p.id} data-tip={t("plugins.reload")} onClick={() => setReloads((r) => ({ ...r, [p.id]: Date.now() }))} style={iconBtn}>
+                    {Icon.refresh}
+                  </button>
+                  <button data-plugin-frame-browser={p.id} data-tip={t("plugins.openInBrowser")} onClick={() => openExternal(`${base}${p.web}`)} style={iconBtn}>
+                    {Icon.globe}
+                  </button>
                   {link && (
-                    <button data-plugin-frame-link title={link} onClick={() => openExternal(link)} style={iconBtn}>{Icon.external}</button>
+                    <button data-plugin-frame-link title={link} data-tip={t("plugins.github")} onClick={() => openExternal(link)} style={iconBtn}>{Icon.external}</button>
                   )}
                   <button data-plugin-frame-fold={p.id} data-tip={t(f.fold ? "plugins.unfold" : "plugins.fold")} onClick={() => setFrame(p.id, { ...f, fold: !f.fold })} style={iconBtn}>
                     {f.fold ? Icon.chevronUp12 : Icon.chevronDown12}
@@ -281,14 +293,18 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
                   <iframe
                     data-plugin-canvas={p.id}
                     title={p.name}
-                    src={`${base}${p.web}${fresh(p.web)}`} // ★기동 표식 — 캐시된 옛 페이지를 안 받는다 (`pluginHost` 의 BOOT 주)
-                    // ★배경을 안 칠한 페이지는 투명해 앱의 `--panel` 이 테마대로 비친다. `colorScheme: "light"` 는 Chromium 이
-                    //   요소와 안 문서의 color-scheme 이 다르면 문서를 불투명 흰 판으로 그리는 것을 막는다 (실측 2026-09-08).
-                    style={
-                      p.canvas.fit === "scale"
-                        ? { position: "absolute", left: 0, top: 0, width: p.canvas.width, height: Math.round(ch / scale), transform: `scale(${scale})`, transformOrigin: "0 0", border: "none", background: "transparent", colorScheme: "light", pointerEvents: dragging || space ? "none" : "auto" }
-                        : { position: "absolute", inset: 0, width: "100%", height: "100%", border: "none", background: "transparent", colorScheme: "light", pointerEvents: dragging || space ? "none" : "auto" }
-                    }
+                    // ★기동 표식(`fresh`)은 캐시된 옛 페이지를 막고, 새로고침 횟수는 그 자리에서 다시 읽게 한다
+                    src={`${base}${p.web}${fresh(p.web)}${reloads[p.id] ? `&r=${reloads[p.id]}` : ""}`}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      border: "none",
+                      background: "transparent",
+                      colorScheme: themeName, // ★앱 테마를 페이지에 알린다 (위 ★★주)
+                      pointerEvents: dragging || space ? "none" : "auto",
+                    }}
                   />
                 )}
               </div>
