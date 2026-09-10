@@ -90,7 +90,7 @@ export const ja: Dict = {
     openInBrowser: "ブラウザで開く",
     zoomIn: "拡大",
     zoomOut: "縮小",
-    canvasHint: "背景ドラッグ = 移動 · 背景ホイール = 拡大 · フレーム見出しドラッグ = 移動 · Space + ドラッグ = フレーム上でも移動",
+    canvasHint: "右・ホイールボタンドラッグ = 移動 · ホイール = 拡大 · 見出しドラッグ = ウィンドウ移動 · Space + ドラッグ = ウィンドウ上でも移動",
     emptyCanvas: "右のパネルからプラグインをキャンバスに出してください。",
     search: "名前・id で探す",
     filterAll: "すべて",

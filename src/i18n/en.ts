@@ -90,7 +90,7 @@ export const en = {
     openInBrowser: "Open in browser",
     zoomIn: "Zoom in",
     zoomOut: "Zoom out",
-    canvasHint: "Drag the background to pan · wheel to zoom · drag a frame header to move · Space + drag pans over frames",
+    canvasHint: "Right- or middle-drag to pan · wheel to zoom · drag a window header to move it · Space + drag pans over windows",
     emptyCanvas: "Put a plugin on the canvas from the panel on the right.",
     search: "Search by name or id",
     filterAll: "All",

@@ -90,7 +90,7 @@ export const ko: Dict = {
     openInBrowser: "브라우저에서 열기",
     zoomIn: "확대",
     zoomOut: "축소",
-    canvasHint: "바탕 끌기 = 이동 · 바탕 휠 = 확대 · 프레임 머리 끌기 = 옮기기 · 스페이스 + 끌기 = 프레임 위에서도 이동",
+    canvasHint: "오른쪽·휠 단추 끌기 = 이동 · 휠 = 확대 · 창 머리 끌기 = 옮기기 · 스페이스 + 끌기 = 창 위에서도 이동",
     emptyCanvas: "오른쪽 패널에서 플러그인을 꺼내 놓으세요.",
     search: "이름·id 로 찾기",
     filterAll: "전체",

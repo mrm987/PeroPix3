@@ -17,7 +17,10 @@ import { fresh, useThemeName, type PluginInfo } from "../lib/pluginHost";
  *    바꾸면 새로고침 없이 따라온다 (실측 2026-09-10). 브라우저가 OS 테마를 알려 주는 것과 같은 자리다. 배색을 선언한 페이지
  *    (`color-scheme: dark light`, `_app/base.css` 가 해 준다)는 투명이 유지돼 앱 바탕이 비치고, 선언 안 한 페이지는 크롬에서와
  *    같이 흰 바탕으로 그려진다.
- *  ★입력 규칙 (시안 Spec): 바탕 끌기 = 이동, 바탕 휠 = 확대, 프레임 머리 끌기 = 옮기기, 스페이스 + 끌기 = 프레임 위에서도 이동.
+ *  ★입력 규칙: **오른쪽·가운데 단추 끌기 = 화면 이동**(어디서 시작하든, 사용자 지시 2026-09-10) · 바탕 왼쪽 끌기도 이동 ·
+ *    바탕 휠 = 확대 · 프레임 머리 끌기 = 창 옮기기 · 스페이스 + 끌기 = 프레임 **위에서도** 이동.
+ *    ★플러그인 페이지(iframe) 위에서 누른 것은 **앱에 오지 않는다** (다른 오리진이라 그 문서가 받는다) — 그 자리에서
+ *      화면을 옮기려면 스페이스를 눌러 덮개를 띄운다. 오른쪽·가운데 끌기는 바탕과 창 머리·테두리에서 듣는다.
  *    iframe 위의 마우스·휠은 플러그인에 그대로 간다. 끄는 동안만 iframe 의 pointer-events 를 끊는다 — 안 그러면 iframe 이
  *    움직임을 삼켜 끌기가 끊긴다.
  *  ★★창은 두 갈래다 (사용자 결정 2026-09-10). **반응형 앱 창**(기본)은 크기를 바꿀 수 있고, 공통 스타일의 골격
@@ -198,7 +201,17 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
       ref={rootRef}
       data-plugin-canvas-root
       data-plugin-zoom-level={pan.z.toFixed(2)}
-      onPointerDown={(e) => { if (e.target === e.currentTarget && e.button === 0) startPan(e); }}
+      onPointerDown={(e) => {
+        // 오른쪽(2)·가운데(1) 단추는 **어디서 눌러도** 화면 이동 — 창 머리·테두리 위에서도 된다
+        if (e.button === 1 || e.button === 2) {
+          e.preventDefault();          // 가운데 단추의 자동 스크롤을 막는다
+          startPan(e);
+          return;
+        }
+        if (e.target === e.currentTarget && e.button === 0) startPan(e);
+      }}
+      onContextMenu={(e) => e.preventDefault()}   // 오른쪽 끌기가 메뉴를 띄우지 않게
+      onAuxClick={(e) => e.preventDefault()}
       {...dragProps}
       onDragOver={(e) => { if (e.dataTransfer.types.includes("peropix/plugin")) e.preventDefault(); }}
       onDrop={onDrop}
@@ -234,7 +247,7 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
               key={p.id}
               data-plugin-frame={p.id}
               data-fold={f.fold ? "" : undefined}
-              onPointerDownCapture={() => raiseFrame(p.id, f)}
+              onPointerDownCapture={(e) => { if (e.button === 0) raiseFrame(p.id, f); }}   // 오른쪽·가운데는 화면 이동이므로 순서를 안 바꾼다
               style={{
                 position: "absolute",
                 left: f.x,
@@ -256,6 +269,7 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
               <div
                 data-plugin-frame-head={p.id}
                 onPointerDown={(e) => {
+                  // ★왼쪽 단추만 창을 옮긴다 — 오른쪽·가운데는 그대로 뿌리로 올라가 **화면 이동**이 된다
                   if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
                   e.preventDefault();
                   begin(e, { kind: "move", id: p.id, sx: e.clientX, sy: e.clientY, f });
@@ -319,7 +333,7 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
                 <span
                   data-plugin-frame-resize={p.id}
                   onPointerDown={(e) => {
-                    if (e.button !== 0) return;
+                    if (e.button !== 0) return;   // 오른쪽·가운데는 뿌리로 올려 보낸다 (화면 이동)
                     e.stopPropagation();
                     e.preventDefault();
                     begin(e, { kind: "size", id: p.id, sx: e.clientX, sy: e.clientY, f, min: { w: p.canvas.minWidth, h: p.canvas.minHeight + HEAD } });
