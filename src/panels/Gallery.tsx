@@ -88,7 +88,10 @@ export function Gallery() {
   /** ★★칸 누르기 한 자리 (머리 주석의 조작 표). 어느 갈래든 **정보 패널은 방금 누른 장**을 본다 */
   const onPick = (file: string, mod: { ctrl: boolean; shift: boolean }) => {
     const order = shown.map((i) => i.file);
-    const from = anchor.current ? order.indexOf(anchor.current) : -1;
+    /* ★앵커가 아직 없으면 **보고 있던 한 장**에서 잰다 (전체 선택 뒤 첫 Shift+클릭이 그렇다) —
+       씬 줄의 "빈 상태에서 Ctrl+클릭하면 보던 장까지 함께" 와 같은 배려다. */
+    const seed = anchor.current ?? focus;
+    const from = seed ? order.indexOf(seed) : -1;
     if (mod.shift && from >= 0) {
       // ★범위를 잡아도 **앵커는 그대로 둔다** — 탐색기처럼 Shift 로 범위를 늘였다 줄일 수 있다
       const to = order.indexOf(file);
@@ -447,7 +450,14 @@ function Cell({
         overflow: "hidden",
         cursor: "pointer",
         background: "var(--surface2)",
+        /* ★★고른 칸이 **한눈에** 보여야 한다 (사용자 지시 2026-09-10: 테두리를 더 잘 보이게).
+           씬 줄이 같은 지적으로 잡은 양식을 그대로 쓴다 (`SceneLane` 의 ★★주): 테두리 바깥에
+           **밝은 링 + 어두운 링**을 둘러 밝은 그림 위에서도 안 묻히게 한다. 자리는 안 밀린다
+           (`box-shadow` 는 레이아웃을 안 건드린다).
+           ★그림을 흐리게 하지는 않는다 — 씬 줄은 그렇게 하지만 여기서는 안 한다는 결정이다
+             (같은 날): 갤러리는 그림을 견주며 고르는 화면이라 고른 것이 흐려지면 안 된다. */
         border: `2px solid ${picked ? "var(--accent)" : "transparent"}`,
+        boxShadow: picked ? "0 0 0 2px var(--accent), 0 0 0 4px rgba(0,0,0,0.55)" : undefined,
       }}
     >
       <img
