@@ -481,15 +481,20 @@ async def install(root: Path, python: str, *, id: str = "", zip: str = "",
         pip_log = ""
         req = target / "requirements.txt"
         if req.is_file():
-            proc = await asyncio.create_subprocess_exec(
-                python, "-m", "pip", "install", "--no-warn-script-location", "--disable-pip-version-check",
-                "--target", str(target / "_lib"), "-r", str(req),
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            # ★★pip 은 **스레드에서** 띄운다 (`to_thread` + `subprocess.run`). 예전에는 `create_subprocess_exec` 였는데,
+            #   uvicorn 은 윈도우에서 **리로드가 켜지면** SelectorEventLoop 를 쓰고(`uvicorn/loops/asyncio.py` 의
+            #   `use_subprocess`) 그 루프에는 자식 프로세스 지원이 없어 `NotImplementedError` 로 떨어졌다 —
+            #   개발·QA 백엔드에서 의존성 있는 플러그인이 설치되지 않았다 (실측 2026-09-10, tag-roll 이 첫 사례).
+            #   배포판은 리로드가 없어 ProactorEventLoop 이라 옛 방식도 돌았지만, 루프 종류에 기대지 않는 것이 맞다.
+            r = await asyncio.to_thread(
+                subprocess.run,
+                [python, "-m", "pip", "install", "--no-warn-script-location", "--disable-pip-version-check",
+                 "--target", str(target / "_lib"), "-r", str(req)],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
-            out, _ = await proc.communicate()
-            pip_log = out.decode("utf-8", "replace")[-2000:]
-            if proc.returncode != 0:
+            pip_log = (r.stdout or b"").decode("utf-8", "replace")[-2000:]
+            if r.returncode != 0:
                 return {"ok": False, "error": "의존성 설치에 실패했습니다 (플러그인 파일은 놓아 두었습니다)",
                         "pip": pip_log, "id": pid}
         return {"ok": True, "id": pid, "version": str(m.get("version") or ""), "restart": True, "pip": pip_log}
