@@ -354,6 +354,14 @@ def _vt(v: str) -> tuple[int, ...]:
 #  ★`_origin.json` 에는 대조용 열쇠(`source`·`repo`·`zip`) 말고 `official` 표식도 함께 적는다 — 인터넷이 없어도
 #    「공식」 딱지가 남게. 대조는 `_origin_key()` 로 열쇠 부분만 본다.
 ORIGIN_FILE = "_origin.json"
+#: ★★**업데이트해도 남는 자리** — 플러그인이 받아 둔 것(색인·모델·캐시)을 여기 둔다 (사용자 결정 2026-09-10:
+#  *"플러그인 폴더에 업데이트를 해도 보존할것을 담는 폴더를 따로 만들고 표준 규격으로 안내"*).
+#  판을 갈아 끼울 때 `install` 이 옛 사본의 이 폴더만 새 사본으로 옮긴다 — 그래서 플러그인은 **자기 폴더를
+#  벗어나지 않으면서** 큰 자료를 다시 받지 않는다 (태그 굴리기의 색인이 960MB 다).
+#  ★`_lib`(pip 이 깐 의존성)은 옮기지 않는다 — 새 판의 `requirements.txt` 로 다시 깔아야 맞다.
+#  ★안을 들여다보지 않는다. 구조는 플러그인 몫이고, 배포 꾸러미에는 담기지 않는다 (`_` 접두).
+#  규격 안내의 기준은 목록 저장소 README 다.
+DATA_FOLDER = "_data"
 
 
 def _origin_of(entry: dict) -> dict:
@@ -471,10 +479,19 @@ async def install(root: Path, python: str, *, id: str = "", zip: str = "",
         if id and pid != id:
             return {"ok": False, "error": f"꾸러미의 id 「{pid}」 가 「{id}」 와 다릅니다"}
         target = root / pid
+        old = None
         if target.exists():
             # ★지우지 않는다 — 옛 것은 `_old-…` 로 물러나고, 사람이 되돌릴 수 있다
-            target.rename(root / f"_old-{pid}-{time.strftime('%Y%m%d-%H%M%S')}")
+            old = root / f"_old-{pid}-{time.strftime('%Y%m%d-%H%M%S')}"
+            target.rename(old)
         shutil.move(str(new), str(target))
+        # ★★받아 둔 것(`_data/`)은 새 사본으로 옮긴다 — 위 `DATA_FOLDER` 의 ★주 참조.
+        #   옛 폴더는 그대로 남으므로(`_old-…`), 옮기다 실패해도 자료는 그 안에 있다.
+        if old and (old / DATA_FOLDER).is_dir() and not (target / DATA_FOLDER).exists():
+            try:
+                shutil.move(str(old / DATA_FOLDER), str(target / DATA_FOLDER))
+            except OSError as e:  # 쓰고 있는 파일이 있으면 옮겨지지 않는다 — 설치 자체는 성공으로 둔다
+                print(f"[plugins] {pid}: {DATA_FOLDER} 를 옮기지 못했습니다 ({e}) — {old.name} 에 남아 있습니다", flush=True)
         # ★출처를 남긴다 — 업데이트는 같은 출처에서만 온다 (`registry` 의 `update`)
         (target / ORIGIN_FILE).write_text(json.dumps(origin, ensure_ascii=False, indent=2), encoding="utf-8")
 
