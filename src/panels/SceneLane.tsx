@@ -2069,13 +2069,15 @@ function SceneRow(
                 /* ★★고른 장이 **한눈에** 보여야 한다 (사용자 지적 2026-08-19: 2px 테두리로는
                    어느 것을 보고 있는지 안 보였다). 테두리를 굵히고, 바깥에 어두운 링을
                    둘러 밝은 그림에서도 테두리가 묻히지 않게 한다. 자리는 안 밀린다
-                   (`box-shadow` 는 레이아웃을 안 건드린다). */
-                border: `2px solid ${sel ? "var(--warn)" : cur ? "var(--accent)" : "transparent"}`,
-                boxShadow: cur
-                  ? "0 0 0 2px var(--accent), 0 0 0 4px rgba(0,0,0,0.55)"
-                  : sel
-                    ? "0 0 0 2px var(--warn), 0 0 0 4px rgba(0,0,0,0.55)"
-                    : undefined,
+                   (`box-shadow` 는 레이아웃을 안 건드린다).
+                   ★★**고른 장은 갤러리와 같은 차림이다** (사용자 지시 2026-09-10: *"씬쪽도 동일하게"*):
+                     강조색 테두리에 **칸 전체를 덮는 옅은 강조색**(아래 덮개). 노란 테두리와 흐린
+                     그림을 걷은 자리다 — 어떤 테두리 색을 써도 그 색이 그림 안에 있으면 묻히고,
+                     흐리게 하면 고른 것이 오히려 안 보인다.
+                   ★**「지금 보는 장」(`cur`)은 그대로 링이다** — 덮개와 링이 서로 다른 것을 말한다
+                     (무엇을 골랐나 · 어느 것이 큰 그림에 떠 있나). */
+                border: `2px solid ${sel || cur ? "var(--accent)" : "transparent"}`,
+                boxShadow: cur ? "0 0 0 2px var(--accent), 0 0 0 4px rgba(0,0,0,0.55)" : undefined,
                 overflow: "hidden",
                 background: "var(--surface2)",
                 padding: 0,
@@ -2098,8 +2100,18 @@ function SceneRow(
                    ★격자로 수백 장을 펴 놓는 화면(갤러리·파일 관리·자동검열)은 구간을 안 나누므로
                      거기서는 `lazy` 가 그대로 필요하다. */
                 decoding="async"
-                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: sel ? 0.6 : 1 }}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
               />
+              {/* ★★고른 장을 덮는 **옅은 강조색** (위 ★★주). 갤러리 칸과 같은 차림이다
+                  (`Gallery` 의 `data-cell-veil`) — `opacity` 로 태워 테마를 그대로 따르고,
+                  `pointer-events: none` 이라 커서를 가로채지 않는다. */}
+              {sel && (
+                <span
+                  data-take-veil
+                  style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: 0.28,
+                           pointerEvents: "none" }}
+                />
+              )}
               {un ? (
                 /* ★「미저장」이 칸에서 바로 보여야 한다 (v2 는 파일명 자리에 `미저장` 을 넣었다 —
                     `index.html:12156`). 우리 칸에는 파일명 줄이 없으므로 아래에 작은 표로 얹는다. */
