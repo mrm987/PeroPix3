@@ -4,6 +4,7 @@ import { artBackground } from "./CardArt";
 import { FittedImg } from "./FittedImg";
 import { useGen } from "../store/gen";
 import { normThumb, thumbUrl } from "../store/prompt";
+import { t } from "../i18n";
 
 /** 드래그 중의 화면 두 겹.
  *
@@ -77,12 +78,35 @@ export function DragLayer() {
         }}
       >
         {drag.img ? (
-          // ★커서를 따라오는 그림은 작게 — 크면 뒤의 목적지를 가려 어디에 놓는지 안 보인다
-          <img
-            src={drag.img.url}
-            alt=""
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
+          <>
+            {/* ★커서를 따라오는 그림은 작게 — 크면 뒤의 목적지를 가려 어디에 놓는지 안 보인다 */}
+            <img
+              src={drag.img.url}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+            {/* ★★**몇 장을 끌고 있는지 적는다** (사용자 지적 2026-09-10: *"드래그해서 여러장 옮기기
+                지금도 되는데, 여러장 옮긴것처럼 안보임"*). 고스트가 한 장짜리 그림이라 여러 장을
+                고르고 끌어도 한 장만 가는 것으로 읽혔다 — 실제로는 고른 것이 전부 실려 있다. */}
+            {(drag.files?.length ?? 0) > 1 && (
+              <span
+                style={{
+                  position: "absolute",
+                  right: 3,
+                  bottom: 3,
+                  padding: "0 5px",
+                  borderRadius: 999,
+                  background: "var(--accent)",
+                  color: "var(--accent-on)",
+                  fontSize: "var(--text-3xs)",
+                  fontWeight: "var(--w-bold)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {t("gallery.countImages", { n: drag.files!.length })}
+              </span>
+            )}
+          </>
         ) : (
           <>
             {/* ★덱 카드와 **같은 방식**으로 그린다 — 색 바탕 위에 카드 그림을 얹는다.

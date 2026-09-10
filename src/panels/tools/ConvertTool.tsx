@@ -200,7 +200,9 @@ export function ConvertTool() {
             },
           );
           const one = r.results[0];
-          out.push(one?.ok ? { saved: one.saved } : { error: one?.error || "" });
+          /* ★★**까닭 없는 실패를 만들지 않는다.** 빈 문자열을 실으면 아래 줄 그리기에서 성공으로
+             읽혀(빈 문자열은 거짓이다), **줄은 멀쩡한데 토스트만 실패를 세는** 어긋남이 된다. */
+          out.push(one?.ok ? { saved: one.saved } : { error: one?.error || t("tools.noResult") });
         } catch (e) {
           out.push({ error: String(e) });
         }
@@ -208,9 +210,16 @@ export function ConvertTool() {
         setRows([...out]);
       }
       const ok = out.filter((r) => !r.error).length;
+      const bad = out.length - ok;
       // ★첫 실패의 까닭을 토스트에도 싣는다 (위 ★주) — 숫자만으로는 왜 실패했는지 모른다
       const why = out.find((r) => r.error)?.error;
-      toast(t("tools.converted", { n: ok, f: out.length - ok }) + (why ? ` — ${why}` : ""), ok === out.length ? "ok" : "warn");
+      /* ★★**다 됐으면 「실패」라는 낱말을 꺼내지 않는다** (사용자 제보 2026-09-10: *"일괄변환에서
+         변환 성공했는데 실패라고 뜸"*). 옛 문구는 언제나 「(실패 0)」을 달고 나와서, 한 장도
+         안 깨진 판에서도 실패를 알리는 것으로 읽혔다. 실패가 있을 때만 그 칸을 낸다. */
+      toast(
+        bad ? t("tools.converted", { n: ok, f: bad }) + (why ? ` · ${why}` : "") : t("tools.convertedAll", { n: ok }),
+        bad ? "warn" : "ok",
+      );
       if (ok) void useFiles.getState().reload();
     } finally {
       setBusy(false);

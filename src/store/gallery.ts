@@ -70,7 +70,14 @@ type S = {
    *  섞이면 옮기기·지우기가 그쪽 규칙을 따라야 하는 것처럼 보인다. */
   vibeMode: boolean;
   setVibeMode: (on: boolean) => void;
+  /** 지금 **들여다보는 한 장** — 오른쪽 그림 정보 패널이 이것을 읽는다 */
   focus: string | null;
+  /** ★★**크게 보기가 열려 있나** (사용자 지시 2026-09-10: *"클릭하면 선택, 더블클릭하면
+   *  크게보기로 변경 … 클릭으로 선택했을 때도 우측 그림정보 패널에 생성정보 뜨게"*).
+   *  예전에는 `focus` 하나가 「정보 패널이 볼 한 장」과 「크게 띄웠나」를 겸해서, 고르기만
+   *  해도 창이 열렸다. 두 뜻을 갈라 둔다 — `focus` 는 눌러 둔 한 장, `big` 은 그것을 띄웠나. */
+  big: boolean;
+  setBig: (on: boolean) => void;
   meta: ImageMeta | null;
   metaFor: string | null;
   /** 일괄 작업 대상 (여러 장) */
@@ -91,6 +98,8 @@ type S = {
   setFolder: (ws: string, folder: string) => Promise<void>;
   setFocus: (ws: string, file: string | null) => Promise<void>;
   togglePick: (file: string) => void;
+  /** 고른 것을 통째로 갈아 끼운다 — 클릭(이 한 장만)·Shift+클릭(범위)이 쓴다 */
+  setPicked: (files: string[]) => void;
   pickAll: () => void;
   clearPick: () => void;
   isStarred: (file: string) => boolean;
@@ -113,6 +122,8 @@ type S = {
   dropFolder: (ws: string, name: string) => Promise<void>;
   /** 폴더를 다른 폴더 아래로 (`dest` 가 빈 문자열이면 뿌리). 보고 있던 폴더가 함께 옮겨지면 따라간다 */
   moveFolder: (ws: string, name: string, dest: string) => Promise<string>;
+  /** 폴더 이름만 바꾼다 (줄을 더블클릭). 자리는 그대로 — 옮기는 것은 끌어다 놓기의 일이다 */
+  renameFolder: (ws: string, name: string, next: string) => Promise<string>;
   rename: (ws: string, file: string, name: string) => Promise<string>;
   /** 탐색기에서 연다. 비우면 보관함 뿌리 */
   reveal: (path?: string) => Promise<void>;
@@ -128,8 +139,10 @@ export const useGallery = create<S>((set, get) => ({
   items: [],
   folder: ALL,
   vibeMode: false,
-  setVibeMode: (on) => set({ vibeMode: on, focus: null }),
+  setVibeMode: (on) => set({ vibeMode: on, focus: null, big: false }),
   focus: null,
+  big: false,
+  setBig: (on) => set({ big: on }),
   meta: null,
   metaFor: null,
   picked: new Set(),
@@ -159,6 +172,8 @@ export const useGallery = create<S>((set, get) => ({
       // ★별표는 **목록에 없는 것도 그대로 둔다** — 다른 폴더를 보고 있을 뿐이다
       starred: new Set(s.starred),
       focus,
+      // ★보던 그림이 사라졌으면 크게 보기도 닫는다 — 없는 그림을 띄워 둘 수 없다
+      big: focus ? get().big : false,
       loading: false,
       page: r.page,
       total: r.total,
@@ -251,6 +266,19 @@ export const useGallery = create<S>((set, get) => ({
     return r.path;
   },
 
+  async renameFolder(ws, name, next) {
+    const r = await api<{ path: string }>(`/api/keep/folder/rename`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, new: next }),
+    });
+    // ★보고 있던 폴더(또는 그 상위)의 이름이 바뀌었으면 새 이름을 따라간다 — `moveFolder` 와 같은 규칙
+    const cur = get().folder;
+    if (cur === name || cur.startsWith(name + "/")) set({ folder: r.path + cur.slice(name.length) });
+    await get().load(ws);
+    return r.path;
+  },
+
   async dropFolder(ws, name) {
     await api(`/api/keep/folder/delete`, {
       method: "POST",
@@ -292,7 +320,8 @@ export const useGallery = create<S>((set, get) => ({
 
   async setFocus(_ws, file) {
     set({ focus: file });
-    if (!file) return set({ meta: null, metaFor: null });
+    // ★볼 그림이 없어졌으면 크게 보기도 함께 닫는다
+    if (!file) return set({ meta: null, metaFor: null, big: false });
     if (get().metaFor === file) return;
     const r = await api<{ meta: ImageMeta | null }>(
       `/api/keep/meta?file=${q(file)}`,
@@ -306,6 +335,7 @@ export const useGallery = create<S>((set, get) => ({
     picked.has(file) ? picked.delete(file) : picked.add(file);
     set({ picked });
   },
+  setPicked: (files) => set({ picked: new Set(files) }),
   pickAll: () => set({ picked: new Set(get().items.map((i) => i.file)) }),
   clearPick: () => set({ picked: new Set() }),
 

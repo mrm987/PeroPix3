@@ -171,7 +171,38 @@ def move_folder(root: Path, name: str, dest: str) -> dict:
     if d == src.parent:
         return {"path": rel}
     d.mkdir(parents=True, exist_ok=True)
-    tgt = d / src.name
+    return _relocate(root, src, d / src.name)
+
+
+def rename_folder(root: Path, name: str, new: str) -> dict:
+    """폴더 **이름만** 바꾼다 (사용자 지시 2026-09-10: *"갤러리 폴더 더블클릭하면 이름 변경할 수 있게"*).
+
+    ★**부모는 그대로**다 — 자리를 옮기는 것은 끌어다 놓기(`move_folder`)의 일이고, 창구가
+      둘이 되면 어느 쪽이 옮겼는지 흐려진다. 그래서 이름에 `/` 를 넣는 것도 막는다.
+    ★안에 든 그림의 별표·출처는 `_relocate` 가 새 경로로 따라 보낸다."""
+    rel = (name or "").strip().strip("/")
+    leaf = (new or "").strip().strip("/")
+    if not rel:
+        raise ValueError("보관함 자체는 이름을 바꿀 수 없습니다")
+    if not leaf:
+        raise ValueError("폴더 이름이 필요합니다")
+    if "/" in leaf or "\\" in leaf:
+        raise ValueError("이름에 / 는 쓸 수 없습니다")
+    src = safe_folder(root, rel)
+    if not src.is_dir():
+        raise ValueError("없는 폴더입니다")
+    tgt = safe_folder(root, (src.parent / leaf).relative_to(root.resolve()).as_posix())
+    if tgt == src:
+        return {"path": rel}
+    return _relocate(root, src, tgt)
+
+
+def _relocate(root: Path, src: Path, tgt: Path) -> dict:
+    """폴더를 `tgt` 자리로 옮기고 **안에 든 그림의 별표·출처를 새 경로로 따라 보낸다.**
+
+    ★자리 옮기기(`move_folder`)와 이름 바꾸기(`rename_folder`)가 **같은 이 함수**를 쓴다 —
+      곁장부를 따라 보내는 규칙이 두 벌이 되면 한쪽만 고쳐진다. 안 따라가면 별표가 없는
+      파일을 가리키고, 「새 탭으로 복제」가 출처를 잃는다."""
     if tgt.exists():
         raise ValueError("그 자리에 같은 이름의 폴더가 있습니다")
     shutil.move(str(src), str(tgt))

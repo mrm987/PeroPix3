@@ -306,7 +306,13 @@ def convert(
             dst.write_bytes(blob)
             results.append({"name": name, "saved": dst.name, "dir": str(dst.parent), "ok": True})
         except Exception as e:  # 한 장이 깨져도 나머지는 간다
-            results.append({"name": name, "error": str(e), "ok": False})
+            # ★★**까닭이 빈 예외가 있다** (인자 없이 만든 예외 · `MemoryError`). 그대로 실으면
+            #   화면에 「실패」만 뜨고 무엇이 막혔는지 알 길이 없다 — 클래스 이름으로라도 채운다.
+            # ★로그에도 남긴다: 화면의 한 줄은 사용자가 옮겨 적어 줘야 하지만 로그는 파일에 남아
+            #   (`logs/peropix.log`) 다음 제보 때 앞뒤를 맞출 수 있다.
+            why = str(e) or e.__class__.__name__
+            print(f"[변환] 실패 {name}: {why}", flush=True)
+            results.append({"name": name, "error": why, "ok": False})
 
     # ★「완료 후 폴더 열기」 (v2 `convertOpenFolder`). 여는 것은 **방금 우리가 쓴 자리**뿐이라
     #   사용자가 준 경로를 그대로 여는 창구를 새로 열지 않는다 (files.open_dir 주석).

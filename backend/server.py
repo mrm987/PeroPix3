@@ -2475,6 +2475,13 @@ class KeepFolderMove(BaseModel):
     dest: str = ""
 
 
+class KeepFolderRename(BaseModel):
+    """폴더 이름 바꾸기 — 어느 폴더(`name`)를 무슨 이름(`new`)으로. 부모는 그대로다"""
+
+    name: str = ""
+    new: str = ""
+
+
 class KeepRename(BaseModel):
     file: str
     name: str
@@ -2538,6 +2545,15 @@ async def keep_move_folder(body: KeepFolderMove):
     """폴더를 다른 폴더 아래로 (`keep.move_folder` 주석)."""
     try:
         return keep.move_folder(KEEP_DIR, body.name, body.dest)
+    except (ValueError, OSError) as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/keep/folder/rename")
+async def keep_rename_folder(body: KeepFolderRename):
+    """폴더 이름 바꾸기 (`keep.rename_folder` 주석)."""
+    try:
+        return keep.rename_folder(KEEP_DIR, body.name, body.new)
     except (ValueError, OSError) as e:
         raise HTTPException(400, str(e))
 

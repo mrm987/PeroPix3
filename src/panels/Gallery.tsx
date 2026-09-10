@@ -29,15 +29,22 @@ const ROOT_DEST = "/";
  *  ★칸에는 **썸네일**을 쓴다 (`lib/imgUrl`). 여기는 수백 장이 한 번에 뜨는 화면이라,
  *    원본 PNG 를 걸면 그것만으로 무너진다. 크게 볼 때만 원본을 받는다.
  *
- *  조작: 클릭 = 크게 보기 · Ctrl(⌘)+클릭 = 선택. 두 가지가 한 칸에 겹치므로
- *  섞이지 않게 **선택은 수식키를 요구한다** (v2 의 일괄 삭제·이동이 이 선택을 먹는다). */
+ *  ★★조작은 **파일 탐색기와 같다** (사용자 지시 2026-09-10: *"뭔가 비 직관적이라 되는지도
+ *    몰랐음. 클릭하면 선택, 더블클릭하면 크게보기로 변경"*):
+ *
+ *      클릭         이 한 장만 고른다        Ctrl+클릭   그 장만 켜고 끈다
+ *      Shift+클릭   먼저 누른 장부터 여기까지  더블클릭    크게 보기
+ *      Esc          크게 보기를 닫고, 닫혀 있으면 선택을 푼다
+ *
+ *    예전에는 **클릭이 곧 크게 보기**여서 선택에 수식키가 필요했고, 칸 위의 별표를 누르려 해도
+ *    창이 먼저 열렸다. 고른 장의 생성 정보는 크게 보지 않아도 오른쪽 패널에 뜬다 (`focus`). */
 export function Gallery() {
   const t = useI18n((s) => s.t);
   const base = useGen((s) => s.base);
   const ws = useWs((s) => s.current);
   /** ★별표는 **보관함이 든다** — 워크스페이스가 아니다 (store/gallery.ts `starred` 주석) */
-  const { items, folders, picked, focus, meta, loading, total, hasMore, load, more, setFocus,
-          togglePick, pickAll, clearPick, remove, moveTo, isStarred, toggleStar, rename, vibeMode } =
+  const { items, folders, picked, focus, big, meta, loading, total, hasMore, load, more, setFocus, setBig,
+          togglePick, setPicked, pickAll, clearPick, remove, moveTo, isStarred, toggleStar, rename, vibeMode } =
     useGallery();
   // ★바닥에 닿기 전에 다음 쪽을 당긴다 (v2 방식, lib/nearBottom)
   const onScroll = onNearBottom(() => void more(ws));
@@ -53,14 +60,20 @@ export function Gallery() {
     void load(ws);
   }, [ws, load]);
 
-  // ★크게 보기가 열려 있을 때만 키를 먹는다 — 그리드에서 S 를 눌러도 아무 일이 없어야
-  //   "무엇에 대한 별표인지" 가 모호해지지 않는다.
+  /** ★★**Esc 는 열려 있는 것부터 닫는다** (사용자 지시 2026-09-10: *"esc 누르면 선택 해제되게"*) —
+   *  크게 보기가 떠 있으면 그것을 닫고, 닫혀 있으면 선택을 푼다. 한 키가 두 겹을 차례로 벗긴다.
+   *  ★나머지 키(←·→·S)는 **크게 보기 안에서만** 먹는다: 그리드에서 S 가 먹으면 어느 그림에 대한
+   *    별표인지가 모호해진다 (칸 위의 별표 단추가 그 일을 한다). */
   useEffect(() => {
-    if (!focus) return;
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT") return;
-      if (e.key === "Escape") return void setFocus(ws, null);
+      if (e.key === "Escape") {
+        if (big) return setBig(false);
+        if (picked.size) return clearPick();
+        return;
+      }
+      if (!big || !focus) return;
       if (e.key === "ArrowLeft" && idx > 0) return void setFocus(ws, shown[idx - 1].file);
       if (e.key === "ArrowRight" && idx >= 0 && idx < shown.length - 1)
         return void setFocus(ws, shown[idx + 1].file);
@@ -68,7 +81,33 @@ export function Gallery() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focus, idx, shown, ws, setFocus, toggleStar]);
+  }, [focus, big, picked, idx, shown, ws, setFocus, setBig, clearPick, toggleStar]);
+
+  /** 마지막에 **수식키 없이** 누른 장 — Shift+클릭이 여기서부터 범위를 잡는다 */
+  const anchor = useRef<string | null>(null);
+  /** ★★칸 누르기 한 자리 (머리 주석의 조작 표). 어느 갈래든 **정보 패널은 방금 누른 장**을 본다 */
+  const onPick = (file: string, mod: { ctrl: boolean; shift: boolean }) => {
+    const order = shown.map((i) => i.file);
+    const from = anchor.current ? order.indexOf(anchor.current) : -1;
+    if (mod.shift && from >= 0) {
+      // ★범위를 잡아도 **앵커는 그대로 둔다** — 탐색기처럼 Shift 로 범위를 늘였다 줄일 수 있다
+      const to = order.indexOf(file);
+      const [a, b] = from < to ? [from, to] : [to, from];
+      setPicked(order.slice(a, b + 1));
+    } else if (mod.ctrl) {
+      togglePick(file);
+      anchor.current = file;
+    } else {
+      setPicked([file]);
+      anchor.current = file;
+    }
+    void setFocus(ws, file);
+  };
+  /** 크게 보기를 연다 (더블클릭·툴바 단추) */
+  const openBig = (file: string) => {
+    void setFocus(ws, file);
+    setBig(true);
+  };
 
   const onRemove = async () => {
     if (
@@ -107,6 +146,11 @@ export function Gallery() {
         onAll={pickAll}
         onClear={clearPick}
         onRemove={onRemove}
+        /* ★고른 것 중 **마지막에 누른 장**을 띄운다 (없으면 고른 것의 첫 장) */
+        onBig={() => {
+          const one = focus && picked.has(focus) ? focus : [...picked][0];
+          if (one) openBig(one);
+        }}
         onMove={() => dest && void moveTo(ws, dest === ROOT_DEST ? "" : dest)}
       />
 
@@ -141,7 +185,8 @@ export function Gallery() {
               starred={isStarred(it.file)}
               picked={picked.has(it.file)}
               onStar={() => void toggleStar(it.file)}
-              onOpen={(withMod) => (withMod ? togglePick(it.file) : void setFocus(ws, it.file))}
+              onPick={(mod) => onPick(it.file, mod)}
+              onOpen={() => openBig(it.file)}
               /* 고른 것이 있으면 **고른 것 전부**, 아니면 이 한 장 */
               onDragFiles={() => (picked.has(it.file) ? [...picked] : [it.file])}
             />
@@ -161,7 +206,8 @@ export function Gallery() {
       </>
       )}
 
-      {focus && (
+      {/* ★크게 보기는 **더블클릭·툴바 단추로만** 연다 (`big`) — 고르기만 한 것으로는 안 열린다 */}
+      {focus && big && (
         <Big
           url={keepUrl(base, focus)}
           name={shown[idx]?.name ?? ""}
@@ -171,7 +217,8 @@ export function Gallery() {
           file={focus}
           seed={meta?.seed}
           onRename={(name) => rename(ws, focus, name)}
-          onClose={() => void setFocus(ws, null)}
+          /* ★닫아도 `focus` 는 그대로 둔다 — 오른쪽 그림 정보는 계속 그 장을 보여 준다 */
+          onClose={() => setBig(false)}
           onPrev={idx > 0 ? () => void setFocus(ws, shown[idx - 1].file) : undefined}
           onNext={idx >= 0 && idx < shown.length - 1 ? () => void setFocus(ws, shown[idx + 1].file) : undefined}
           /* ★★**지우면 옆 그림으로 넘어간다** (사용자 지시 2026-08-25). 지울 때마다 창이
@@ -196,6 +243,7 @@ function Toolbar({
   onAll,
   onClear,
   onRemove,
+  onBig,
   onMove,
 }: {
   picked: number;
@@ -208,6 +256,9 @@ function Toolbar({
   onAll: () => void;
   onClear: () => void;
   onRemove: () => void;
+  /** 고른 것을 크게 본다 — ★클릭이 선택이 되면서 **크게 보는 창구가 더블클릭 하나**가 되었다.
+   *  단추로도 열 수 있어야 한다 (사용자 지시 2026-09-10) */
+  onBig: () => void;
   onMove: () => void;
 }) {
   const t = useI18n((s) => s.t);
@@ -250,6 +301,9 @@ function Toolbar({
       )}
       {picked > 0 && (
         <>
+          <button data-gallery-big onClick={onBig} style={linkBtn}>
+            {t("gallery.bigView")}
+          </button>
           <button onClick={onClear} style={linkBtn}>
             {t("gallery.clear")}
           </button>
@@ -323,6 +377,7 @@ function Cell({
   starred,
   picked,
   onStar,
+  onPick,
   onOpen,
   onDragFiles,
 }: {
@@ -331,11 +386,19 @@ function Cell({
   starred: boolean;
   picked: boolean;
   onStar: () => void;
-  onOpen: (withMod: boolean) => void;
+  /** 한 번 눌렀다 — 고르기 (수식키를 함께 넘긴다) */
+  onPick: (mod: { ctrl: boolean; shift: boolean }) => void;
+  /** 두 번 눌렀다 — 크게 보기 */
+  onOpen: () => void;
   /** 끌기 시작 — 폴더 목록이 받는다 (`GalleryFolders`) */
   onDragFiles: () => string[];
 }) {
   const startDrag = useDragSource();
+  /** ★★**더블클릭을 여기서 직접 센다** (`onDoubleClick` 을 안 쓴다). 이 칸은 끌기 출발점이라
+   *  pointerdown 에서 기본 동작을 막는데(`pointerGesture`), 그러면 브라우저의 호환 click 도
+   *  더블클릭도 오지 않는다 — 블록 줄에서 같은 이유로 이름 더블클릭이 오래 죽어 있었다
+   *  (`blocks/BlockRow.tsx`). 간격은 창 제목줄과 같은 **윈도우 기본값 500ms** 다. */
+  const lastTap = useRef(0);
   return (
     // ★★**단추가 아니라 `div` 다** (사용자 지적 2026-08-19: 갤러리 그림이 안 끌렸다).
     //   크로미움은 `<button>` 에 `draggable` 을 줘도 끌기를 시작하지 않는다 — 폼 컨트롤의
@@ -345,9 +408,12 @@ function Cell({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.key === "Enter") {
           e.preventDefault();
-          onOpen(e.ctrlKey || e.metaKey);
+          onOpen();                                    // 키보드로는 Enter 가 크게 보기
+        } else if (e.key === " ") {
+          e.preventDefault();
+          onPick({ ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey });
         }
       }}
       data-tip={name}
@@ -355,14 +421,22 @@ function Cell({
          ★HTML5 `draggable` 은 이 앱에서 안 된다 — Tauri 가 `dragDropEnabled` 로 드래그를
            가로채기 때문이다 (`cards/dragStore` 머리 주석). 그래서 **앱의 포인터 끌기**를 쓴다.
          ★누르기는 `onTap` 으로 받는다 — pointerdown 의 기본 동작 막기가 호환 click 을 삼킨다. */
-      onPointerDown={(e) =>
+      onPointerDown={(e) => {
+        const mod = { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey };
         startDrag(
           e,
           { dir: "apply", kind: "keep", files: onDragFiles(), img: { ws: "", file: name, url: src } },
           undefined,
-          () => onOpen(e.ctrlKey || e.metaKey),
-        )
-      }
+          () => {
+            const now = Date.now();
+            const dbl = now - lastTap.current < 500;
+            // ★두 번째로 친 뒤에는 **셈을 지운다** — 세 번 치면 「크게 보기 → 고르기」가 되어야 한다
+            lastTap.current = dbl ? 0 : now;
+            if (dbl) onOpen();
+            else onPick(mod);
+          },
+        );
+      }}
       style={{
         // ★끌기 출발점의 공통 차림 — 네이티브 이미지 끌기·글자 선택을 원천에서 막는다.
         //   여기만 빠져 있었다 (다른 출발점은 전부 쓴다).
@@ -387,6 +461,10 @@ function Cell({
           견주며 고르는 일은 격자에서 일어난다. */}
       <span
         data-cell-star={name}
+        /* ★★**여기서 끌기를 시작하지 않는다** (사용자 지적 2026-09-10: *"지금 클릭하면 바로 커져서
+           별표 못누름"*). 칸의 pointerdown 이 기본 동작을 막아 이 단추의 click 을 삼키고 있었다 —
+           별표를 누르면 칸의 「누름」이 대신 먹었다. 여기서 전파를 끊으면 click 이 정상으로 온다. */
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           onStar();

@@ -4,6 +4,7 @@ import { useI18n } from "../i18n";
 import { useWs } from "../store/workspace";
 import { ALL, useGallery } from "../store/gallery";
 import { dragSourceStyle, useDrag, useDragSource, useDropZone } from "../cards/dragStore";
+import { useRename } from "../components/useRename";
 import { ask } from "../store/ask";
 import { toast } from "../store/toast";
 import { Icon } from "../components/Icon";
@@ -20,7 +21,7 @@ export function GalleryFolders() {
   const ws = useWs((s) => s.current);
   // ★목록을 불러오는 것은 **중앙(Gallery)** 이다 — 이 패널은 접으면 언마운트되므로
   //   (Shell 이 접힌 쪽을 렌더하지 않는다) 여기서 불러오면 접었을 때 갤러리가 빈다.
-  const { folders, folder, items, setFolder, newFolder, dropFolder, moveFolder, reveal, moveTo, vibeMode, setVibeMode } =
+  const { folders, folder, items, setFolder, newFolder, dropFolder, moveFolder, renameFolder, reveal, moveTo, vibeMode, setVibeMode } =
     useGallery();
   /** 그림을 끌어다 놓으면 그 폴더로 옮긴다 (사용자 지시 2026-08-19) */
   const moveFiles = async (files: string[], dest: string) => {
@@ -45,6 +46,16 @@ export function GalleryFolders() {
     try {
       await moveFolder(ws, src, dest === ALL ? "" : dest);
       toast(t("gallery.folderMoved"));
+    } catch (e) {
+      toast(String(e), "warn");
+    }
+  };
+
+  /** ★줄을 두 번 눌러 이름을 고친다 (사용자 지시 2026-09-10). 자리는 그대로다 */
+  const renameFolderTo = async (path: string, next: string) => {
+    try {
+      await renameFolder(ws, path, next);
+      toast(t("gallery.folderRenamed"));
     } catch (e) {
       toast(String(e), "warn");
     }
@@ -123,6 +134,7 @@ export function GalleryFolders() {
             on={folder === f.path}
             onClick={() => void setFolder(ws, f.path)}
             onDelete={() => void removeFolder(f.path, f.count)}
+            onRename={(next) => void renameFolderTo(f.path, next)}
             onDropFiles={(files) => void moveFiles(files, f.path)}
             onDropFolder={(src) => void moveFolderTo(src, f.path)}
             dragPath={f.path}
@@ -250,6 +262,7 @@ function Row({
   on,
   onClick,
   onDelete,
+  onRename,
   onDropFiles,
   onDropFolder,
   dragPath,
@@ -262,6 +275,8 @@ function Row({
   onClick: () => void;
   /** 없으면 지우는 단추가 안 뜬다 (전체 줄) */
   onDelete?: () => void;
+  /** 있으면 **줄을 두 번 눌러 이름을 고친다** (사용자 지시 2026-09-10). 뿌리 줄에는 없다 */
+  onRename?: (next: string) => void;
   /** ★그림을 끌어다 놓으면 **이 폴더로 옮긴다** (사용자 지시 2026-08-19).
    *  없으면 받지 않는다 (「전체」는 폴더가 아니라 보기라 받을 자리가 없다 — 뿌리로 옮기는
    *  것은 「전체」가 아니라 뿌리 폴더 줄이 받아야 뜻이 분명하다). */
@@ -275,7 +290,10 @@ function Row({
   const startDrag = useDragSource();
   /** ★앱의 포인터 끌기를 받는다 — HTML5 드롭은 Tauri 가 가로채 안 온다 (`cards/dragStore`) */
   const zone = useDropZone({
-    id: `keep-folder-${label}`,
+    /* ★★열쇠는 **전체 경로**여야 한다. 줄에 적는 이름(`label`)은 마지막 조각뿐이라
+       (2026-09-07 부터), 그것으로 열쇠를 만들면 상위가 다른 같은 이름의 폴더 둘이 **한 열쇠**를
+       나눠 갖는다 — 떨구면 `dragStore.end` 가 먼저 등록된 쪽을 찾아 **엉뚱한 폴더로 들어간다.** */
+    id: `keep-folder-${dragPath ?? ""}`,
     kind: "keep",
     prio: 10,
     onDrop: (d) => {
@@ -286,6 +304,19 @@ function Row({
   // 폴더는 `work/유나/포즈1` 처럼 계층이라, 마지막 조각을 굵게 두고 앞은 흐리게 둔다
   const parts = label.split("/");
   const leaf = parts.pop()!;
+  /** 이름 고치기 — ★규칙은 **앱에 하나**다 (`useRename`): Enter 저장 · Esc 취소 · 밖을 누르면 저장 */
+  const rename = useRename(leaf, (v) => onRename?.(v));
+  /** ★★**더블클릭을 직접 센다.** 이 줄은 끌기 출발점이라 pointerdown 에서 기본 동작을 막고,
+   *  그러면 브라우저의 click·dblclick 이 오지 않는다 (갤러리 칸과 같은 사정). 간격은 500ms. */
+  const lastTap = useRef(0);
+  const tap = () => {
+    if (!onRename) return onClick();
+    const now = Date.now();
+    const dbl = now - lastTap.current < 500;
+    lastTap.current = dbl ? 0 : now;
+    if (dbl) rename.toggle();
+    else onClick();
+  };
   return (
     <div
       // ★지우는 단추는 **커서를 올렸을 때만** 보인다 (globals.css `*:hover > .thumb-star` 와 같은 요령).
@@ -301,12 +332,31 @@ function Row({
         background: zone.over ? "var(--accent-bg)" : undefined,
       }}
     >
+    {rename.editing ? (
+      /* ★★**편집 중에는 줄을 통째로 입력칸으로 바꾼다.** `<button>` 안에 `<input>` 을 넣으면
+         단추가 누름을 먼저 가져가 글자를 못 친다 (HTML 이 금지하는 겹침이다). */
+      <input
+        data-keep-folder-rename={label}
+        {...rename.inputProps}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          padding: "5px var(--sp-3)",
+          paddingLeft: `calc(var(--sp-3) + ${depth * 14}px)`,
+          borderRadius: "var(--r-2)",
+          border: "1px solid var(--accent)",
+          background: "var(--panel)",
+          color: "var(--ink)",
+          fontSize: "var(--text-xs)",
+        }}
+      />
+    ) : (
     <button
       /* ★끌 수 있는 줄은 **포인터 판**으로 시작한다 (`useDragSource`). pointerdown 의 preventDefault 가
          click 을 삼키므로 누르기는 onTap 으로 받는다 — 뿌리 줄은 끌지 않으니 onClick 그대로. */
       onClick={dragPath === undefined ? onClick : undefined}
       onPointerDown={dragPath === undefined ? undefined
-        : (e) => startDrag(e, { dir: "apply", kind: "keep", folder: dragPath }, undefined, onClick)}
+        : (e) => startDrag(e, { dir: "apply", kind: "keep", folder: dragPath }, undefined, tap)}
       data-tip={label}
       style={{
         ...(dragPath === undefined ? {} : dragSourceStyle),
@@ -341,6 +391,7 @@ function Row({
         {count}
       </span>
     </button>
+    )}
     {onDelete && (
       <button
         data-keep-folder-del={label}

@@ -820,7 +820,11 @@ export const ko: Dict = {
     destHint: "결과를 어디에 쓸지 고릅니다.",
     needDest: "밖에서 가져온 그림은 저장할 폴더를 골라야 합니다",
     runConvert: "{n}장 변환",
-    converted: "{n}장 변환 (실패 {f})",
+    /** 다 됐을 때 — ★실패 칸을 달지 않는다 (성공한 판에 「실패 0」이 뜨면 실패로 읽힌다) */
+    convertedAll: "{n}장 변환했습니다",
+    converted: "{n}장 변환 · {f}장 실패",
+    /** 서버가 그 장의 결과를 안 줬을 때 — 까닭 없는 「실패」를 남기지 않는다 */
+    noResult: "서버가 결과를 주지 않았습니다",
     up: "위로",
     down: "아래로",
     all: "전체",
@@ -1120,6 +1124,7 @@ export const ko: Dict = {
     newFolder: "새 폴더",
     newFolderHint: "폴더 이름을 적고 Enter",
     folderMoved: "폴더를 옮겼습니다",
+    folderRenamed: "폴더 이름을 바꿨습니다",
     folderIntoSelf: "폴더를 자기 안으로 옮길 수 없습니다",
     folderDelete: "폴더 지우기",
     folderDelConfirm: "'{name}' 폴더를 지웁니다",
@@ -1133,9 +1138,11 @@ export const ko: Dict = {
     empty: "아직 보관한 그림이 없습니다",
     emptyHint: "크게 본 그림에서 갤러리에 보관을 누르면 여기 모입니다. 작업이 바뀌어도 남습니다.",
     meta: "그림 정보",
-    pickHint: "클릭 = 크게 보기 · Ctrl+클릭 = 선택",
+    pickHint: "클릭 = 선택 · Ctrl/Shift+클릭 = 여러 장 · 더블클릭 = 크게 보기",
     selected: "{n}장 선택",
     selectAll: "전체 선택",
+    /** 고른 것을 크게 본다 (더블클릭과 같은 일) */
+    bigView: "크게 보기",
     clear: "선택 해제",
     remove: "삭제",
     removeConfirm: "{n}장을 지울까요?",
