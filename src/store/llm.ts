@@ -454,7 +454,7 @@ export const useLlm = create<S>((set, get) => ({
     /* ★★**승인 카드가 떠 있으면 되살리지 않는다** (사용자 지적 2026-08-31, MCP 실연동에서 밟았다).
        바깥(MCP)에서 온 승인 요청은 대화가 없어도 카드를 띄우려고 **패널을 스스로 편다**
        (`lib/approve` 의 `openAi()`). 그런데 패널이 그때 처음 열리면 `AiChat` 이 마운트되며
-       지난 대화를 되살리고(`open`), 그 길이 `confirm` 을 지워 **카드가 눈앞에서 사라졌다.**
+       지난 대화를 되살리고(`open`), 그 경로가 `confirm` 을 지워 **카드가 눈앞에서 사라졌다.**
        도구는 600초를 기다리다 시간 초과로 끝나고, 사용자는 누를 것이 없다. */
     if (get().id !== mine || get().wire.length || get().sending || get().confirm || get().ask) return;
     const last = get().list[0];

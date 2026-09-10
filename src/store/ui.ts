@@ -258,7 +258,7 @@ function load(): Persisted {
       for (const k of ["leftWidth", "rightWidth"] as const) {
         if (typeof got[k] === "number") got[k] = widths(got[k]);
       }
-      // ★접힘도 같은 길을 밟는다 — 불리언 하나였던 저장본을 모드마다 그 값으로 채운다
+      // ★접힘도 같은 경로를 지난다 — 불리언 하나였던 저장본을 모드마다 그 값으로 채운다
       for (const k of ["leftCollapsed", "rightCollapsed"] as const) {
         if (typeof got[k] === "boolean") got[k] = folds(got[k]);
       }

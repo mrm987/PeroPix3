@@ -876,7 +876,7 @@ const saveActive = (v: string) => {
  *    구독은 `spec` 이 **이미 갈린 뒤**에 돌아서, 담으려는 순간에는 담을 자리(옛 spec)가 없다.
  *    그래서 워크스페이스를 옮기면 떠나는 탭의 수치가 통째로 사라졌다 (2026-08-23).
  *  ★두 파일이 서로를 부르므로(순환) `workspace.ts` 는 `gen.ts` 를 **값으로 못 부른다**.
- *    이름을 등록해 두고 부르는 이 길이 그 제약을 지나는 방법이다. */
+ *    이름을 등록해 두고 부르는 이 방식으로 그 제약을 지난다. */
 const beforeWsSwitch: (() => void)[] = [];
 export const onBeforeWsSwitch = (fn: () => void) => {
   beforeWsSwitch.push(fn);
@@ -1058,7 +1058,7 @@ export const useWs = create<S>((set, get) => ({
     /* ★★**지운 이름으로 저장이 나가면 안 된다** (사용자 실측 2026-09-02: 지운 워크스페이스가 다시 켜면
        되살아나 있었다). 옆 탭을 여는 길은 **밀린 편집을 먼저 쓰는데**(`open` 의 `flushSave`), 그 순간
        `current` 가 아직 지운 이름이라 그 PUT 이 `workspace.json` 만 든 빈 폴더를 도로 만들었다 — 서버의
-       `Store.save` 는 폴더를 만드는 것이 정상이다 (새 워크스페이스도 같은 길로 태어난다). 옆 탭을
+       `Store.save` 는 폴더를 만드는 것이 정상이다 (새 워크스페이스도 같은 경로로 태어난다). 옆 탭을
        열기 **전에** 지운 것을 놓아 버린다 — 밀린 저장은 버리고, 현재를 비운다. */
     dropPendingSave();
     get().close();
@@ -1142,7 +1142,7 @@ export const useWs = create<S>((set, get) => ({
     queueSave(get);
   },
 
-  /** 별표를 그때 상태로 되돌린다 — 로그가 담아 둔 길이다 (직접 부르지 않는다). */
+  /** 별표를 그때 상태로 되돌린다 — 로그가 담아 둔 되돌리기다 (직접 부르지 않는다). */
   restoreStars(before) {
     const spec = get().spec;
     if (!spec) return;
@@ -1489,7 +1489,7 @@ export const useWs = create<S>((set, get) => ({
     // ★지금 편집기 내용을 **떠나는 캐릭터에** 담고 옮긴다 (탭 전환과 같은 순서)
     const stashed = stash(spec, spec.activeSceneGroup);
     /* ★★**떠나는 탭에 지금 보던 씬 그룹을 적어 둔다** (사용자 지시 2026-08-30: 탭을 오가면
-       마지막으로 보던 씬 그룹이 열려 있게). 기록하는 자리는 여기 하나다 — 어떤 길로 씬 그룹을
+       마지막으로 보던 씬 그룹이 열려 있게). 기록하는 자리는 여기 하나다 — 어떤 경로로 씬 그룹을
        골랐든(선택·새로 만들기·복제) 떠나는 순간의 것이 곧 「마지막으로 보던 것」이다. */
     const tabs = (stashed.tabs ?? []).map((c) =>
       c.id === spec.activeTab ? { ...c, lastSceneGroup: spec.activeSceneGroup } : c,

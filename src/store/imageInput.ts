@@ -369,7 +369,7 @@ export const useImageInput = create<S>((set, get) => ({
  *
  *  ★`addVibe` 는 꽉 차면 조용히 아무것도 안 한다. 그 뒤에 「길이 − 1」을 고치면 엉뚱한
  *    항목이 바뀌므로 여기서 먼저 막고 결과를 돌려준다. 캐시 뷰어와 `.naiv4vibe` 임포트가
- *    같은 길을 쓴다 — 넣는 창구가 여럿이 되면 켬/끔 처리가 갈린다. */
+ *    같은 경로를 쓴다 — 넣는 창구가 여럿이 되면 켬/끔 처리가 갈린다. */
 export function pushVibe(v: Vibe): boolean {
   const s = useImageInput.getState();
   if (s.vibes.length >= MAX_VIBES) return false;

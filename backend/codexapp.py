@@ -8,7 +8,7 @@
 
       codex.exe -c features.code_mode_host=true app-server --analytics-default-enabled
 
-  CLI 도움말은 `[experimental]` 이라 적어 두지만, OpenAI 자기네 출시 제품이 쓰는 길이다.
+  CLI 도움말은 `[experimental]` 이라 적어 두지만, OpenAI 자기네 출시 제품이 쓰는 방식이다.
 
 우리가 쓰는 요청은 다섯뿐이다 (전부 실측으로 확인, v0.147.0):
 

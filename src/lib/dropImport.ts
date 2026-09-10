@@ -12,7 +12,7 @@ import type { ImageMeta } from "../store/gallery";
  *  ★거기에 `full` 만 켠다. 앱(Tauri)에는 **경로만** 와서 화면에 원본 바이트가 없는데,
  *    떨군 그림을 베이스 이미지·바이브로 넣으려면 그 바이트가 있어야 한다
  *    (`preview` 는 320px JPEG 이라 못 쓴다).
- *  ★`.naiv4vibe` 는 **그림이 아니라 JSON** 이라 이 길로 못 간다 — 글로 읽어야 한다.
+ *  ★`.naiv4vibe` 는 **그림이 아니라 JSON** 이라 이 경로로 못 간다 — 글로 읽어야 한다.
  */
 
 /** 서버가 돌려주는 것 — 내부 메타데이터에 드롭이 쓰는 넷을 얹은 모양 (`backend/tools.read_meta`) */

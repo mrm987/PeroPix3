@@ -106,7 +106,7 @@ export function BlockList({
        카드로 옮겨지게"*). 끄는 동작은 서랍에 넣는 것과 같은 것(`dir: "save"`)이고 **어디에
        놓느냐**만 다르다 — 서랍이면 사본이 들어가고 원본은 그대로, 다른 목록이면 옮겨진다.
      ★출발한 목록에서 빼는 것은 명부(`blockZones`)를 거친다 — 칩을 카드 너머로 옮길 때와
-       같은 길이다 (`moveTag` 의 ★★주). 빼는 것을 **먼저** 한다.
+       같은 경로다 (`moveTag` 의 ★★주). 빼는 것을 **먼저** 한다.
      ★씬 칸(`single`)에 놓으면 그 하나에 태그가 붙는다 — 서랍에서 받을 때와 같은 규칙. */
   const moveIn = useDropZone({
     id: `blockmove-${libZone ?? "none"}`,
@@ -268,7 +268,7 @@ export function BlockList({
     if (!auto.current.has(b.id) || b.tags.length) return;
     auto.current.delete(b.id);
     /* ★★담아 둔 「블록 추가」 칸을 **도로 버린다** — 그 블록은 지금 사라지므로, 남겨 두면
-         `Ctrl+Z` 가 없어진 그것을 되살린다. 이 길은 사용자가 물러난 것이라 되돌릴 일이 없다. */
+         `Ctrl+Z` 가 없어진 그것을 되살린다. 이 경로는 사용자가 물러난 것이라 되돌릴 일이 없다. */
     dropUndo();
     onChange(blocks.filter((_, j) => j !== i));
   };
@@ -360,7 +360,7 @@ export function BlockList({
                  ★`auto` 에는 `Shift+Enter` 로 생긴 것만 든다 (`enterAt`). `+` 로 만든 빈 블록은
                    글이 없어 앞뒤가 같은 자리라 이 값을 줄 필요가 없다. */
               autoCaret={auto.current.has(b.id) ? 0 : undefined}
-              /* ★★**켜고끄기만** 담는다 (사용자 지시 2026-08-22). 이 길은 칩 편집·가중치도
+              /* ★★**켜고끄기만** 담는다 (사용자 지시 2026-08-22). 이 경로는 칩 편집·가중치도
                  함께 지나는데, 그것들은 `BlockBody` 가 이미 담고 있어 두 번 담기면 `Ctrl+Z` 를
                  두 번 눌러야 한 걸음이 물러난다. */
               onChange={(nb) => {

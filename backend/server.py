@@ -836,7 +836,7 @@ def write_mcp_endpoint() -> None:
     try:
         # ★★**문이 안 잠겨 있으면 열쇠를 적지 않는다** (실측 2026-08-31). 개발 모드에서는
         #   껍데기가 열쇠를 안 만들어 `KEY_PREFIX` 가 비고, KeyGate 가 통째로 지나간다 —
-        #   그런데 주소에 `/k/…` 를 붙이면 **그런 길이 없어 404** 가 온다. 실제로 밟았다.
+        #   그런데 주소에 `/k/…` 를 붙이면 **그런 라우트가 없어 404** 가 온다. 실제로 밟았다.
         MCP_ENDPOINT.write_text(
             json.dumps({"port": CURRENT_PORT, "key": k if KEY_PREFIX else ""}, ensure_ascii=False),
             encoding="utf-8")
@@ -1470,7 +1470,7 @@ class RenumberBody(BaseModel):
 async def renumber_files(ws: str, body: RenumberBody):
     """씬 순서가 바뀌면 **파일 이름의 씬 번호도 따라간다** (사용자 지시 2026-08-24).
 
-    ★조수가 시켰든 사람이 끌어다 놓았든 **같은 길**을 지난다 — 화면의 `moveScene` 이 부른다.
+    ★조수가 시켰든 사람이 끌어다 놓았든 **같은 경로**를 지난다 — 화면의 `moveScene` 이 부른다.
 
     ★★**딴 실에서 돈다** (실측 2026-08-27). 파일을 옮기고 색인을 다시 쓰는 통짜 작업이라
       `async` 안에서 그대로 부르면 **이벤트 루프가 그동안 멈춘다** — 이미 뜬 그림은 멀쩡한데
@@ -2166,7 +2166,7 @@ async def _process_job(job: dict) -> None:
 async def _start_queue():
     app.state.queue_task = asyncio.create_task(genqueue.run_loop(Q, _process_job))
     # ★★**주소는 여기서 남긴다** (실측 2026-08-31). `main()` 에만 두면 개발 리로드 모드에서
-    #   워커가 그 길을 안 지나 **파일이 옛 주소로 남는다** — 실제로 시험 서버가 적어 둔 포트가
+    #   워커가 그 경로를 안 지나 **파일이 옛 주소로 남는다** — 실제로 시험 서버가 적어 둔 포트가
     #   그대로 남아 개발판에 못 붙었다. 서버가 뜨는 자리는 어느 모드든 반드시 지난다.
     write_mcp_endpoint()
     # ★검열 모델을 뒤에서 미리 올린다 (`censor.warm` 의 ★★주). 데몬 스레드 — 끝나기 전에 서버가 내려가도 붙잡지 않는다
@@ -2555,7 +2555,7 @@ async def keep_drop_folder(body: KeepName):
 async def keep_abs_path(body: KeepPath):
     """보관함 그림의 **절대 경로** — 갤러리의 「일괄 변환으로 보내기」가 쓴다 (사용자 지시 2026-09-07).
     ★보관함은 아웃풋 루트 밖이라 변환 도구의 `rel` 로는 못 가리킨다. 절대 경로(`path`)로 싣는다 —
-      밖에서 끌어다 놓은 그림과 같은 길이다 (`tools._read`)."""
+      밖에서 끌어다 놓은 그림과 같은 경로다 (`tools._read`)."""
     try:
         p = keep.safe_folder(KEEP_DIR, body.path)
     except ValueError as e:
@@ -2993,7 +2993,7 @@ def censor_detect(body: CensorDetect):
 def censor_image(body: CensorImage):
     """원본 한 장을 화면에 넘긴다 (떨군 그림·워크스페이스 밖의 그림용).
 
-    ★아웃풋 안의 그림은 이 길로 안 온다 — 화면이 `/api/file` 주소를 바로 가리킨다."""
+    ★아웃풋 안의 그림은 이 경로로 안 온다 — 화면이 `/api/file` 주소를 바로 가리킨다."""
     im, _ = _censor_open(body)
     w, h = im.width, im.height
     out = im

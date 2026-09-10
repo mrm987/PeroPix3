@@ -74,7 +74,7 @@ export function ImageInputPanel() {
       toast(t("imgIn.vibeFileBad"), "warn");
     }
   };
-  /** 참조·베이스도 같은 길로 받는다. 그림만 오므로 `data` 하나면 된다 */
+  /** 참조·베이스도 같은 경로로 받는다. 그림만 오므로 `data` 하나면 된다 */
   const addRefPath = async (path: string) => {
     const r = await readDropped(path).catch(() => null);
     if (!r?.data) {

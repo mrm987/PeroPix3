@@ -250,7 +250,7 @@ def _select_in_explorer(f: Path) -> bool:
         finally:
             ole32.CoUninitialize()
         return True
-    except Exception as e:  # 안 되면 폴더만 여는 길로 떨어진다
+    except Exception as e:  # 안 되면 폴더만 여는 쪽으로 떨어진다
         print(f"[reveal] 파일을 고른 채로 열지 못했습니다 ({e})")
         return False
 
@@ -307,7 +307,7 @@ def pick_dir(start: str = "") -> str | None:
       열면 창이 뜨는 동안 서버가 통째로 멈춘다 (그 사이 화면의 다른 요청이 전부 밀린다).
     ★★고른 경로는 **아웃풋 루트 밖일 수 있다** — 그게 이 창을 두는 이유다 (사용자 지시
       2026-08-23: 드롭다운 말고 윈도우 폴더 찾기로). 그래서 `under()` 로 가두지 않는다.
-      대신 **사용자가 직접 고른 것만** 이 길로 들어온다 — 화면이 적어 보낸 문자열은 못 쓴다.
+      대신 **사용자가 직접 고른 것만** 이 경로로 들어온다 — 화면이 적어 보낸 문자열은 못 쓴다.
     ★맨 앞에 세울 자리(`start`)는 부르는 쪽이 준다 (첫 그림이 있는 폴더)."""
     code = "\n".join([
         "import sys, tkinter as tk",

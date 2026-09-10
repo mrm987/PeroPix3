@@ -515,7 +515,7 @@ async function legacyAction(action: string, args: Record<string, any>): Promise<
 
        워크스페이스 설정(`workspace.json`)의 주인은 **화면**이다 — 앱이 통째로 들고 있다가
        통째로 저장하므로, 백엔드가 파일에 끼어들어 쓰면 다음 저장에 덮인다. 그래서
-       `edit_style_card` 와 같은 길을 쓴다: 조수가 시키고, **앱이 자기 창구로** 만든다.
+       `edit_style_card` 와 같은 경로를 쓴다: 조수가 시키고, **앱이 자기 창구로** 만든다.
        그러면 화면도 그 자리에서 따라온다.
        ★새 창구를 만들지 않는다 — 사람이 `+` 를 눌렀을 때와 **같은 함수**를 부른다
          (`addTab`·`addSceneGroup`·`addSlot`). 두 벌이 되면 이름 겹침 처리·번호 발급이 갈린다. */
@@ -570,7 +570,7 @@ async function legacyAction(action: string, args: Record<string, any>): Promise<
         : spec?.sceneGroups.find((x) => x.id === spec?.activeSceneGroup);
       if (!set || set.kind !== "sceneGroup") return { error: "세트를 찾지 못했습니다." };
       /* ★씬은 **카드 안**에 산다. 카드가 하나도 없으면 씬을 놓을 자리가 없으므로 먼저 만든다
-         (씬 줄의 「씬 세트 만들기」와 같은 길이다). */
+         (씬 줄의 「씬 세트 만들기」와 같은 경로다). */
       const name = String(args.name ?? "").trim();
       const had = new Set(allCells(set).map((c) => c.id));
       if (!set.cards.length) ws2.addCard(set.id, name ? { cells: [{ id: "", name, blocks: [] }] } : {});
@@ -964,7 +964,7 @@ function consumePending(m: Record<string, any>, set: Setter, get: () => S, mine 
      ★판정 기준을 **대기 항목에서 「보고 있는 씬」으로** 옮겼다. 예전에는 «걷히는 대기가
        내가 고른 그것인가»를 물었는데(`consumePending`), 그 물음은 대기 장부가 성할 때만
        답이 나온다 — 대기가 그림보다 **먼저** 걷히는 길이 여럿이고(`settleBatch`·취소·
-       `applyStatus` 의 청소), 그 길로 가면 옮길 상대를 잃은 채 선택만 남아 놓아졌다.
+       `applyStatus` 의 청소), 그 경로로 가면 옮길 상대를 잃은 채 선택만 남아 놓아졌다.
      ★지금 묻는 것은 «그림이 **내가 보고 있는 씬**에 나왔는가»뿐이다. 대기 장부와 무관하고,
        화면이 다시 그려지든 말든(컴포넌트가 새로 마운트돼도) 같은 답이 나온다.
      ★대기 칸을 고르고 있을 때만 돈다 — 이미 어떤 장을 보고 있으면 새 그림이 나와도

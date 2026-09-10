@@ -6,7 +6,7 @@ import type { DragImage } from "./dragStore";
  *
  *  ★창(`ThumbDialog`)은 `App` 이 하나만 매달고, 여는 것은 여러 자리다 (프롬프트 섹션 배너 ·
  *    덱 카드 앞면 · **씬 카드 머리**). 앞의 둘은 부모가 콜백을 내려 주지만, 씬 줄은
- *    `Canvas` 안에 props 없이 서 있어 그 길이 없었다.
+ *    `Canvas` 안에 props 없이 서 있어 그 방법이 없었다.
  *  ★`prompt.ts` 의 `setPromptSaver` 와 **같은 방식**이다 — 주인이 함수를 등록해 두고
  *    나머지는 그것을 부른다. 상태를 한 벌 더 두지 않으므로 「어느 쪽이 진짜냐」가 안 생긴다.
  */

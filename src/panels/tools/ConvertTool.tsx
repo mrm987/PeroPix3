@@ -469,7 +469,7 @@ export function ConvertTool() {
             <>
               {/* ★★**윈도우 폴더 찾기**로 고른다 (사용자 지시 2026-08-23) — 목록에서 고르는
                   방식은 아웃풋 루트 안으로만 갈 수 있었다. 창은 서버가 띄운다
-                  (`backend/files.pick_dir`) — 브라우저에는 폴더를 고르는 표준 길이 없다.
+                  (`backend/files.pick_dir`) — 브라우저에는 폴더를 고르는 표준 방법이 없다.
                   ★맨 앞에 세울 자리는 **첫 그림이 있는 폴더**다. */}
               <button data-dest-pick onClick={() => void pickDest()} style={{ ...box, width: "100%", textAlign: "left" }}>
                 {dest || t("tools.destPick")}

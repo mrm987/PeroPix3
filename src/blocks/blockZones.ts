@@ -5,7 +5,7 @@ import type { Block } from "../lib/blocks";
  *
  *  ★★칩 끌기는 원래 **한 목록 안**에서만 돌았다 (`useTagDrag` 이 자기 `rows` 만 봤다).
  *    목록은 카드마다·씬 칸마다 따로 서므로(`BlockList` 인스턴스), 카드를 넘으려면 **놓는 쪽의
- *    `onChange` 를 부를 길**이 있어야 한다. 자리는 DOM 으로 찾을 수 있지만(`data-block-list`)
+ *    `onChange` 를 부를 방법**이 있어야 한다. 자리는 DOM 으로 찾을 수 있지만(`data-block-list`)
  *    그 목록을 고치는 함수는 DOM 에 없다 — 그래서 명부를 둔다.
  *
  *  ★★**값이 아니라 상자를 담는다** (`ref`). 값을 담으면 렌더마다 다시 등록해야 하고,

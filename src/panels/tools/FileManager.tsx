@@ -171,7 +171,7 @@ export function FileManager({ onConvert }: { onConvert: () => void }) {
           }}
           /* ★★**줄을 누르면 고르고 동시에 펼친다** (사용자 지시 2026-08-23) — 화살표를
              정확히 겨눠야만 펼쳐지던 자리다. 자식이 없으면 펼칠 것이 없으니 고르기만 한다.
-             ★화살표 단추는 그대로 둔다 — **고르지 않고 펼치기만** 하는 길이다. */
+             ★화살표 단추는 그대로 둔다 — **고르지 않고 펼치기만** 하려면 이것뿐이다. */
           onClick={() => {
             void go(node.path);
             if (node.children.length) toggleOpen(node.path);
