@@ -86,6 +86,7 @@ export const ja: Dict = {
     closeFrame: "フレームを閉じる (プラグインは動き続けます)",
     fitAll: "全体表示",
     reload: "再読み込み",
+    resetSize: "既定のサイズに",
     openInBrowser: "ブラウザで開く",
     zoomIn: "拡大",
     zoomOut: "縮小",

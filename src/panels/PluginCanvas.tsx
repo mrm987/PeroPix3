@@ -4,17 +4,15 @@ import { HEAD, PAN0, defaultFrame, raiseFrame, type Pan } from "../lib/pluginFra
 import { useI18n } from "../i18n";
 import { Icon } from "../components/Icon";
 import { fresh, useThemeName, type PluginInfo } from "../lib/pluginHost";
-import { linkOf } from "../lib/pluginLink";
-import { openExternal } from "../lib/openExternal";
 
 /** 플러그인 캔버스 — 설치된 플러그인을 **자유 배치 프레임**으로 띄운다 (사용자 결정 2026-09-09, 시안 `docs/design/plugins-canvas/`).
  *
  *  ★탭(2026-09-08)을 걷고 캔버스로 바꿨다. 프레임은 캔버스 좌표(배율 1 기준)로 `useUi.view.frame` 에, 화면 이동·배율은
  *    `useUi.view.pan["plugins"]` 에 저장된다. 꺼내 두지 않은 플러그인은 `view.hide` 가 true 다 (탭 때와 같은 열쇠).
- *  ★프레임 안은 플러그인 페이지(iframe, 백엔드 오리진)다. 머리(이름·판·딱지·GitHub·접기·닫기)와 크기 손잡이는 앱이 그린다.
+ *  ★프레임 안은 플러그인 페이지(iframe, 백엔드 오리진)다. 머리(이름·판·딱지·새로고침·기본 크기·접기·닫기)와 크기 손잡이는 앱이 그린다.
  *  ★★프레임은 **진짜 브라우저 창**이다 (사용자 결정 2026-09-10). iframe 이 프레임을 채우고, 크기를 바꾸면 페이지가 창을 늘리듯
  *    다시 흐른다. 앱은 확대·축소 같은 브라우저에 없는 손질을 하지 않는다 (한때 있던 `fit: "scale"` 은 글자가 깨져 걷었다).
- *    머리에 **새로고침**과 **브라우저에서 열기**를 둔다 — 제작자가 크롬의 개발자 도구로 작업할 수 있어야 한다.
+ *    창의 단추는 창을 다루는 것만 둔다 (새로고침·기본 크기·접기·닫기). 제작자용(브라우저에서 열기·GitHub)은 관리 화면에 있다.
  *  ★★iframe 의 `color-scheme` 을 **앱 테마에 맞춘다** — 그러면 페이지가 `prefers-color-scheme` 으로 앱 테마를 받고, 테마를
  *    바꾸면 새로고침 없이 따라온다 (실측 2026-09-10). 브라우저가 OS 테마를 알려 주는 것과 같은 자리다. 배색을 선언한 페이지
  *    (`color-scheme: dark light`, `_app/base.css` 가 해 준다)는 투명이 유지돼 앱 바탕이 비치고, 선언 안 한 페이지는 크롬에서와
@@ -231,7 +229,6 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
         {shown.map((p) => {
           const f = frameOf(p);
           const official = p.origin?.source === "bundled";
-          const link = linkOf({ id: p.id, homepage: p.homepage, origin: p.origin });
           return (
             <div
               key={p.id}
@@ -273,15 +270,20 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
                 <span style={{ fontSize: "var(--text-3xs)", color: "var(--ink-faint)", fontFamily: "var(--font-mono)" }}>{p.version}</span>
                 {official && <span style={{ padding: "0 6px", fontSize: "var(--text-3xs)", lineHeight: "16px", borderRadius: "var(--r-2)", border: "1px solid var(--mode-plugins)", color: "var(--mode-plugins)" }}>{t("plugins.official")}</span>}
                 <span style={{ marginLeft: "auto", display: "inline-flex", gap: 2 }}>
-                  {/* 브라우저 창이니 브라우저의 두 가지를 둔다 — 새로고침, 그리고 진짜 브라우저에서 열기 (제작자는 거기서 개발자 도구를 쓴다) */}
+                  {/* ★창의 단추는 **창을 다루는 것만** 둔다 (사용자 지시 2026-09-10: 브라우저에서 열기·GitHub 는 앱 상자에 필요 없다).
+                      제작자용 두 가지는 관리 화면의 설치된 줄로 옮겼다. */}
                   <button data-plugin-frame-reload={p.id} data-tip={t("plugins.reload")} onClick={() => setReloads((r) => ({ ...r, [p.id]: Date.now() }))} style={iconBtn}>
                     {Icon.refresh}
                   </button>
-                  <button data-plugin-frame-browser={p.id} data-tip={t("plugins.openInBrowser")} onClick={() => openExternal(`${base}${p.web}`)} style={iconBtn}>
-                    {Icon.globe}
-                  </button>
-                  {link && (
-                    <button data-plugin-frame-link title={link} data-tip={t("plugins.github")} onClick={() => openExternal(link)} style={iconBtn}>{Icon.external}</button>
+                  {p.canvas.resize && (f.w !== p.canvas.width || f.h !== p.canvas.height + HEAD) && (
+                    <button
+                      data-plugin-frame-reset={p.id}
+                      data-tip={t("plugins.resetSize")}
+                      onClick={() => setFrame(p.id, { ...f, w: p.canvas.width, h: p.canvas.height + HEAD })}
+                      style={iconBtn}
+                    >
+                      {Icon.restore}
+                    </button>
                   )}
                   <button data-plugin-frame-fold={p.id} data-tip={t(f.fold ? "plugins.unfold" : "plugins.fold")} onClick={() => setFrame(p.id, { ...f, fold: !f.fold })} style={iconBtn}>
                     {f.fold ? Icon.chevronUp12 : Icon.chevronDown12}

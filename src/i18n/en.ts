@@ -86,6 +86,7 @@ export const en = {
     closeFrame: "Close frame (the plugin keeps running)",
     fitAll: "Fit",
     reload: "Reload",
+    resetSize: "Reset size",
     openInBrowser: "Open in browser",
     zoomIn: "Zoom in",
     zoomOut: "Zoom out",

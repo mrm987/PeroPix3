@@ -86,6 +86,7 @@ export const ko: Dict = {
     closeFrame: "프레임 닫기 (플러그인은 계속 돕니다)",
     fitAll: "맞춤",
     reload: "새로고침",
+    resetSize: "기본 크기로",
     openInBrowser: "브라우저에서 열기",
     zoomIn: "확대",
     zoomOut: "축소",

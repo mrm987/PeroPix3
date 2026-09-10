@@ -483,6 +483,7 @@ const COLS = "36px minmax(0, 1fr) 90px 80px 96px 140px";
 function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
   const t = useI18n((s) => s.t);
   const busy = useMgr((m) => m.busy);
+  const base = usePlugins((s) => s.base);
   const on = p.enabled !== false;
   const kind: "official" | "user" | "folder" = p.origin?.source === "bundled" || r?.official ? "official" : p.origin ? "user" : "folder";
   const link = linkOf({ id: p.id, homepage: p.homepage, origin: p.origin });
@@ -516,6 +517,13 @@ function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
         {t(on ? "plugins.on" : "plugins.off")}
       </button>
       <span style={{ display: "inline-flex", justifyContent: "flex-end", gap: "var(--sp-2)" }}>
+        {/* ★제작자용 — 플러그인 페이지를 진짜 브라우저에서 연다 (거기서 개발자 도구를 쓴다). 창에 두지 않고 여기 둔다
+            (사용자 지시 2026-09-10: 앱 상자에는 창을 다루는 단추만) */}
+        {p.web && base && (
+          <button data-plugin-open-browser={p.id} data-tip={t("plugins.openInBrowser")} onClick={() => openExternal(`${base}${p.web}`)} style={{ ...btn, width: 26, padding: 0, justifyContent: "center", color: "var(--ink-faint)" }}>
+            <span style={{ display: "grid", placeItems: "center", width: 14, height: 14 }}>{Icon.globe}</span>
+          </button>
+        )}
         {r && <UpdateButton r={r} />}
         <button data-plugin-remove={p.id} data-tip={t("plugins.remove")} disabled={!!busy} onClick={() => void useMgr.getState().remove(p)} style={{ ...btn, width: 26, padding: 0, justifyContent: "center", color: "var(--ink-faint)" }}>
           <span style={{ display: "grid", placeItems: "center", width: 14, height: 14 }}>{Icon.trash}</span>
