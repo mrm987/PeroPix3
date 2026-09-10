@@ -3306,10 +3306,10 @@ def files_thumb(rel: str):
 # ── 플러그인 (`docs/plugin-design.md`) ─────────────────────────────
 #: 사용자가 플러그인을 넣는 자리 — 앱 뿌리(사용자 영역)라 업데이트가 `app/` 을 갈아 끼워도 남는다
 PLUGINS_DIR = APP_DIR / "plugins"
-#: 앱과 함께 배포되는 공식 플러그인 (저장소 `plugins-official/`, 사용자 결정 2026-09-07: 같은 저장소).
-#  설치 = 여기서 `plugins/` 로 복사. 남의 것은 zip 주소로 받는다.
-OFFICIAL_DIR = INNER_DIR / "plugins-official"
-#: 원격 목록 주소 — 설정 `plugin_registry` 로 바꾼다. 못 받아도 번들 목록은 보인다
+#: 플러그인이 함께 쓰는 자산 (`plug-app/` → `/plug/_app/`). ★**앱 것이다** — 앱 판과 짝이 맞아야 하고
+#  인터넷 없이도 있어야 해서 앱과 함께 배포한다. 플러그인 코드는 앱에 담지 않는다 (사용자 결정 2026-09-10).
+PLUG_APP_DIR = INNER_DIR / "plug-app"
+#: 원격 목록 주소 — 설정 `plugin_registry` 로 바꾼다. 못 받으면 관리 화면이 그 까닭을 보여 준다
 PLUGIN_REGISTRY = "https://raw.githubusercontent.com/mrm987/peropix-plugins/main/index.json"
 # ★플러그인 파이썬이 앱 액션을 시키는 창구 — import 되기 **전에** 채운다
 plugins_mod.host.tools = tools
@@ -3319,9 +3319,7 @@ plugins_mod.host.app_dir = APP_DIR
 #: 꺼 둔 플러그인 id — 폴더는 그대로, 켤 때 붙이지 않는다 (관리 탭의 켜기/끄기, 사용자 지시 2026-09-08)
 # ★★플러그인이 함께 쓰는 자산 — `/plug/_app/base.css`(앱과 같은 모양) · `/plug/_app/peropix.js`(앱 창구).
 #   플러그인 페이지와 **같은 오리진**이라 한 줄 링크로 쓴다. `_` 로 시작해 플러그인 id 와 겹치지 않는다 (ID_RE).
-plugins_mod.mount_shared(app, OFFICIAL_DIR / "_app")
-# ★앱과 함께 오는 플러그인의 설치 사본을 번들에 맞춘다 — 앱을 고치면 플러그인도 따라온다 (`plugins.sync_bundled` 주)
-plugins_mod.sync_bundled(PLUGINS_DIR, OFFICIAL_DIR)
+plugins_mod.mount_shared(app, PLUG_APP_DIR)
 PLUGINS = plugins_mod.load_all(app, PLUGINS_DIR, set(CONFIG.get("plugins_disabled") or []))
 
 
@@ -3354,7 +3352,7 @@ async def plugins_set_enabled(pid: str, body: PluginEnabled):
 @app.get("/api/plugins/registry")
 async def plugins_registry():
     """받을 수 있는 것 — 번들(공식) + 원격 목록. `installed` 는 지금 `plugins/` 에 있는 판."""
-    return await plugins_mod.registry(PLUGINS_DIR, OFFICIAL_DIR, str(CONFIG.get("plugin_registry") or PLUGIN_REGISTRY))
+    return await plugins_mod.registry(PLUGINS_DIR, str(CONFIG.get("plugin_registry") or PLUGIN_REGISTRY))
 
 
 class PluginInstall(BaseModel):
@@ -3368,7 +3366,7 @@ class PluginInstall(BaseModel):
 @app.post("/api/plugins/install")
 async def plugins_install(body: PluginInstall):
     """★사용자가 누를 때만 돈다. 파일만 놓는다 — 붙는 것은 다음에 켤 때다 (답의 `restart`)."""
-    r = await plugins_mod.install(PLUGINS_DIR, OFFICIAL_DIR, sys.executable, id=body.id.strip(), zip=body.zip.strip(),
+    r = await plugins_mod.install(PLUGINS_DIR, sys.executable, id=body.id.strip(), zip=body.zip.strip(),
                                   sha256=body.sha256.strip(), url=str(CONFIG.get("plugin_registry") or PLUGIN_REGISTRY))
     if not r.get("ok"):
         raise HTTPException(400, r.get("error", "설치 실패") + (f"\n{r['pip'][-600:]}" if r.get("pip") else ""))

@@ -135,7 +135,7 @@ export const ko: Dict = {
     restart: "다시 켜야 적용됩니다",
     restartBtn: "다시 켜기",
     noAvailable: "목록에 받을 플러그인이 없습니다.",
-    registryFail: "원격 목록은 못 받았습니다. 공식 플러그인만 보입니다.",
+    registryFail: "목록을 못 받았습니다. 인터넷 연결을 확인하고 다시 열어 보십시오. zip 주소로는 바로 설치할 수 있습니다.",
     zipUrl: "플러그인 zip 주소 (https://…)",
     installZip: "주소로 설치",
     extFail: "플러그인 「{n}」 의 확장을 못 불렀습니다: {e}",

@@ -65,7 +65,8 @@ class Plugin:
     description: str = ""
     #: 꺼진 플러그인 — 폴더는 그대로 두고 **붙이지 않는다** (설정 `plugins_disabled`). 켜고 끄는 것은 다음에 켤 때 적용
     enabled: bool = True
-    #: 어디서 왔나 (`_origin.json`: bundled / repo+repo / zip+zip). 폴더에 직접 넣은 것은 None — 화면이 GitHub 링크·출처 표시에 쓴다
+    #: 어디서 왔나 (`_origin.json`: `{source: repo|zip, repo?, zip?, official?}`). 폴더에 직접 넣은 것은 None —
+    #  화면이 GitHub 링크·출처 표시·「공식」 딱지에 쓴다
     origin: dict | None = None
     #: 매니페스트의 `homepage` (선택) — 있으면 링크는 이것이 우선
     homepage: str = ""
@@ -259,10 +260,13 @@ host = _Host()
 
 
 # ── 관리: 목록·설치·삭제 (설계 문서 3단계) ──────────────────────────────
-#  ★공식 플러그인은 앱 저장소의 `plugins-official/` 에 있고 배포물에 함께 담긴다 (사용자 결정 2026-09-07).
-#    설치 = 그 사본을 `plugins/` 로 복사 — 네트워크가 없어도 되고 업데이트는 앱과 함께 온다.
-#  ★남의 플러그인은 제작자 저장소에서 받는다 — 목록 저장소 `peropix-plugins/index.json` 에 `{id, repo, tag}` 만 오르고
-#    (`remote_items`), 코드·라이선스는 제작자 것이다 (ComfyUI 레지스트리와 같은 꼴, 사용자 결정 2026-09-08). zip 주소 직접 넣기도 된다.
+#  ★★**플러그인은 앱에 담기지 않는다. 전부 받아서 깐다** (사용자 결정 2026-09-10: *"공식 플러그인이 기본으로 포함되면
+#    안됨. 모든 플러그인은 직접 다운로드로만 설치되어야함"*). 공식도 예외가 아니다 — 공식 플러그인이 늘 때마다 앱이
+#    그만큼 무거워지고, tag roll 처럼 모델을 지닌 것이 붙으면 수십 MB 씩 는다. 앱에 남는 것은 공통 자산(`plug-app/`)뿐이다.
+#  ★코드는 제작자 저장소에 있고, 목록 저장소 `peropix-plugins/index.json` 에 `{id, repo, tag}` 만 오른다
+#    (`remote_items`, ComfyUI 레지스트리와 같은 꼴, 사용자 결정 2026-09-08). zip 주소 직접 넣기도 된다.
+#  ★「공식」은 **목록이 말한다** (`official: true`). 목록 저장소가 우리 것이라 그 표식을 믿는다 — 남이 PR 로 넣는 것은
+#    그쪽 CI 가 막는다. 앱은 플러그인 코드를 안 갖고 있으니 「번들이면 공식」이던 옛 기준은 쓸 수 없다.
 #  ★설치·삭제는 **사용자가 누를 때만** 돈다. 자동 갱신은 없다 (`CLAUDE.md` 「상한은 ComfyUI」).
 #  ★★지우지 않는다: 갈아 끼우는 옛 폴더는 `_old-<id>-<시각>` 으로, 지운 것은 OS 휴지통(안 되면 `_removed-…`)으로.
 #    `_` 접두 폴더는 `load_all` 이 건너뛴다.
@@ -282,17 +286,6 @@ def _entry(m: dict, pid: str, source: str, **extra) -> dict:
     }
 
 
-def official_list(official: Path) -> list[dict]:
-    out: list[dict] = []
-    if not official.is_dir():
-        return out
-    for d in sorted(official.iterdir()):
-        m = _manifest_of(d) if d.is_dir() else None
-        if m and str(m["id"]) == d.name and ID_RE.match(d.name):
-            out.append(_entry(m, d.name, "bundled"))
-    return out
-
-
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 TAG_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
@@ -302,7 +295,9 @@ def remote_items(data) -> list[dict]:
     - `{id, repo: "owner/name", tag}` — 제작자 저장소의 태그 (ComfyUI 처럼 코드는 제작자 것, 목록은 주소만.
       사용자 결정 2026-09-08). zip 은 GitHub 의 태그 압축 주소로 만든다 — 폴더 한 겹은 `install` 이 벗긴다.
     - `{id, zip, sha256?}` — 아무 zip 주소.
-    `version` 을 안 적으면 태그에서 앞의 `v` 를 뗀 것이다. 둘 다 없는 항목은 버린다."""
+    `version` 을 안 적으면 태그에서 앞의 `v` 를 뗀 것이다. 둘 다 없는 항목은 버린다.
+    ★`official: true` 는 **목록 저장소만 붙일 수 있는 표식**이다 (사용자 결정 2026-09-10). 남이 보내는 PR 에는
+      그 칸이 못 들어가게 목록 저장소의 CI 가 막고, 우리가 main 에 직접 올릴 때만 붙는다."""
     items = data.get("items") if isinstance(data, dict) else data
     out: list[dict] = []
     for it in items or []:
@@ -313,9 +308,10 @@ def remote_items(data) -> list[dict]:
         if repo and tag and REPO_RE.match(repo) and TAG_RE.match(tag):
             it = {**it, "version": it.get("version") or re.sub(r"^v", "", tag)}
             out.append(_entry(it, pid, "repo", zip=f"https://github.com/{repo}/archive/refs/tags/{tag}.zip",
-                              sha256=str(it.get("sha256") or ""), repo=repo, tag=tag))
+                              sha256=str(it.get("sha256") or ""), repo=repo, tag=tag, official=it.get("official") is True))
         elif it.get("zip"):
-            out.append(_entry(it, pid, "zip", zip=str(it["zip"]), sha256=str(it.get("sha256") or "")))
+            out.append(_entry(it, pid, "zip", zip=str(it["zip"]), sha256=str(it.get("sha256") or ""),
+                              official=it.get("official") is True))
     return out
 
 
@@ -352,20 +348,24 @@ def _vt(v: str) -> tuple[int, ...]:
 
 
 # ── 출처 — 「같은 플러그인」의 기준은 id 가 아니라 id + 출처다 (사용자 지적 2026-09-08) ──
-#  id 만 같으면 새 판으로 보던 규칙은, 목록의 남이 공식 id 를 쓰거나 폴더에 직접 넣은 것과 같은 id 를 쓰면
-#  그것을 「업데이트」로 덮어쓰게 했다. 그래서 (1) 공식(번들) id 는 예약 — 목록 항목이 있어도 무시하고,
-#  (2) 설치할 때 출처를 `_origin.json` 에 남겨, 업데이트는 **출처가 같을 때만** 제안한다. 폴더에 직접 넣은 것은
-#  출처가 없으니 업데이트 제안이 없다. 목록 저장소의 CI 도 같은 규칙으로 등록 자체를 거른다 (두 겹).
+#  id 만 같으면 새 판으로 보던 규칙은, 폴더에 직접 넣은 것·다른 저장소의 것과 id 가 겹치면 그것을 「업데이트」로
+#  덮어쓰게 했다. 그래서 설치할 때 출처를 `_origin.json` 에 남기고, 업데이트는 **출처가 같을 때만** 제안한다.
+#  폴더에 직접 넣은 것은 출처가 없으니 업데이트 제안이 없다. 목록 안의 id 중복은 목록 저장소의 CI 가 거른다.
+#  ★`_origin.json` 에는 대조용 열쇠(`source`·`repo`·`zip`) 말고 `official` 표식도 함께 적는다 — 인터넷이 없어도
+#    「공식」 딱지가 남게. 대조는 `_origin_key()` 로 열쇠 부분만 본다.
 ORIGIN_FILE = "_origin.json"
 
 
 def _origin_of(entry: dict) -> dict:
     """목록 항목의 출처 — 이것이 같아야 같은 플러그인이다"""
-    if entry["source"] == "bundled":
-        return {"source": "bundled"}
     if entry["source"] == "repo":
         return {"source": "repo", "repo": entry["repo"]}
     return {"source": "zip", "zip": entry["zip"]}
+
+
+def _origin_key(o: dict | None) -> dict | None:
+    """대조에 쓰는 부분만 — `official` 같은 곁 표식은 뺀다"""
+    return None if o is None else {k: v for k, v in o.items() if k in ("source", "repo", "zip")}
 
 
 def _installed_origin(d: Path) -> dict | None:
@@ -376,97 +376,39 @@ def _installed_origin(d: Path) -> dict | None:
         return None
 
 
-#: 사본 대조에서 빼는 것 — 설치 때 pip 으로 받은 의존성·출처 표식·캐시
-_SYNC_SKIP = {"_lib", ORIGIN_FILE, "__pycache__"}
-
-
-def _tree_digest(d: Path) -> dict[str, tuple[int, int]]:
-    """폴더 안 파일들의 (상대경로 → (크기, mtime_ns)). 사본이 번들과 같은지 보는 데 쓴다 — 작은 폴더라 통째로 본다."""
-    out: dict[str, tuple[int, int]] = {}
-    for p in d.rglob("*"):
-        rel = p.relative_to(d)
-        if any(part in _SYNC_SKIP for part in rel.parts) or not p.is_file():
-            continue
-        st = p.stat()
-        out[rel.as_posix()] = (st.st_size, st.st_mtime_ns)
-    return out
-
-
-def sync_bundled(root: Path, official: Path) -> list[str]:
-    """★★**앱과 함께 오는 플러그인은 앱이 갱신한다** (사용자 지시 2026-09-09: *"앱이 변경된 건데 앱이 플러그인을 갱신해 줘야 하는 거
-    아니야?"*). 번들에서 깔린 사본(`_origin.json` 의 source == bundled)이 번들과 다르면 켤 때 번들 것으로 갈아 끼운다.
-    설치 사본은 번들의 거울일 뿐이라 잃을 것이 없다 — `_lib`(pip 의존성)과 출처 표식만 남긴다. 판을 올릴 필요도, 관리 화면에서
-    업데이트를 누를 필요도 없다. 폴더에 직접 넣은 것·목록에서 받은 것은 건드리지 않는다. 갈아 끼운 id 목록을 돌려준다."""
-    done: list[str] = []
-    if not root.is_dir() or not official.is_dir():
-        return done
-    for d in sorted(root.iterdir()):
-        if not d.is_dir() or d.name.startswith((".", "_")):
-            continue
-        o = _installed_origin(d)
-        src = official / d.name
-        if not o or o.get("source") != "bundled" or not src.is_dir() or not (src / "plugin.json").is_file():
-            continue
-        if _tree_digest(src) == _tree_digest(d):
-            continue
-        try:
-            for child in d.iterdir():
-                if child.name in _SYNC_SKIP:
-                    continue
-                shutil.rmtree(child) if child.is_dir() else child.unlink()
-            for child in src.iterdir():
-                if child.name == "__pycache__":
-                    continue
-                if child.is_dir():
-                    shutil.copytree(child, d / child.name, ignore=shutil.ignore_patterns("__pycache__"))
-                else:
-                    shutil.copy2(child, d / child.name)
-            done.append(d.name)
-        except OSError as e:
-            print(f"[plugins] 번들 사본 갱신 실패 「{d.name}」: {e}", flush=True)
-    if done:
-        print(f"[plugins] synced bundled {done}", flush=True)
-    return done
-
-
-async def _catalog(official: Path, url: str) -> tuple[list[dict], str]:
-    """번들 + 원격을 한 목록으로. ★공식 id 는 예약 — 원격에 같은 id 가 있으면 버리고 콘솔에만 남긴다."""
-    bundled = official_list(official)
-    reserved = {b["id"] for b in bundled}
+async def _catalog(url: str) -> tuple[list[dict], str]:
+    """받을 수 있는 것 — 목록 하나뿐이다 (앱은 플러그인 코드를 갖고 있지 않다). 같은 id 가 두 번 오면 앞의 것만 쓴다."""
     remote_error = ""
     try:
         remote = await remote_list(url)
-    except Exception as e:  # noqa: BLE001 — 인터넷이 없어도 번들 목록은 보인다
+    except Exception as e:  # noqa: BLE001 — 못 받아도 앱은 뜬다. 화면이 `remoteError` 를 보여 준다
         remote, remote_error = [], f"{type(e).__name__}: {e}"
     kept: list[dict] = []
     seen: set[str] = set()
     for it in remote:
-        if it["id"] in reserved:
-            print(f"[plugins] 목록의 「{it['id']}」 는 공식 플러그인 id 라 무시합니다 ({it.get('repo') or it.get('zip')})", flush=True)
-        elif it["id"] in seen:
+        if it["id"] in seen:
             print(f"[plugins] 목록에 「{it['id']}」 가 두 번 있어 뒤의 것은 무시합니다", flush=True)
         else:
             seen.add(it["id"])
             kept.append(it)
-    return bundled + kept, remote_error
+    return kept, remote_error
 
 
-async def registry(root: Path, official: Path, url: str) -> dict:
-    """받을 수 있는 것 전부 — 번들(공식) + 원격. `installed` 는 지금 깔린 판, `update` 는 같은 출처의 더 높은 판이 있는가."""
-    items, remote_error = await _catalog(official, url)
+async def registry(root: Path, url: str) -> dict:
+    """받을 수 있는 것 전부 (목록). `installed` 는 지금 깔린 판, `update` 는 같은 출처의 더 높은 판이 있는가."""
+    items, remote_error = await _catalog(url)
     have = installed_versions(root)
     for it in items:
         it["installed"] = have.get(it["id"])
-        it["official"] = it["source"] == "bundled"
-        origin = _installed_origin(root / it["id"]) if it["installed"] else None
+        origin = _origin_key(_installed_origin(root / it["id"])) if it["installed"] else None
         #: 깔린 것보다 높은 판이 **같은 출처**에 있다 — 화면은 「설치된 플러그인」 줄의 업데이트 단추로 보여 준다
         it["update"] = bool(it["installed"]) and origin == _origin_of(it) and _vt(it["version"]) > _vt(it["installed"] or "")
     return {"items": sorted(items, key=lambda x: x["id"]), "remoteError": remote_error}
 
 
-async def install(root: Path, official: Path, python: str, *, id: str = "", zip: str = "",
+async def install(root: Path, python: str, *, id: str = "", zip: str = "",
                   sha256: str = "", url: str = "") -> dict:
-    """번들 사본을 복사하거나 zip 을 받아 `plugins/<id>/` 에 놓고, `requirements.txt` 가 있으면 `_lib/` 에 pip 으로 넣는다.
+    """zip 을 받아 `plugins/<id>/` 에 놓고, `requirements.txt` 가 있으면 `_lib/` 에 pip 으로 넣는다.
     붙는 것은 다음에 켤 때다 (라우터는 켤 때 mount 한다)."""
     import asyncio
     import hashlib
@@ -476,55 +418,50 @@ async def install(root: Path, official: Path, python: str, *, id: str = "", zip:
     import zipfile
 
     root.mkdir(parents=True, exist_ok=True)
-    src_dir: Path | None = None
     zip_url, want = zip, sha256
     origin: dict = {"source": "zip", "zip": zip_url}
     if id and not zip_url:
-        # ★`registry` 와 같은 목록(`_catalog`)에서 고른다 — 공식 id 는 번들, 나머지는 목록 항목 (공식 id 는 예약이라 겹치지 않는다)
-        items, remote_error = await _catalog(official, url)
+        # ★`registry` 와 같은 목록(`_catalog`)에서 고른다
+        items, remote_error = await _catalog(url)
         hit = next((r for r in items if r["id"] == id), None)
         if hit is None:
             return {"ok": False, "error": f"원격 목록을 못 받았습니다: {remote_error}" if remote_error else f"「{id}」 를 목록에서 못 찾았습니다"}
         origin = _origin_of(hit)
-        if hit["source"] == "bundled":
-            src_dir = official / id
-        else:
-            zip_url, want = hit["zip"], hit.get("sha256", "")
+        if hit.get("official"):
+            origin = {**origin, "official": True}   # 인터넷이 없어도 딱지가 남게 (대조는 `_origin_key`)
+        zip_url, want = hit["zip"], hit.get("sha256", "")
         # ★출처가 다른 같은 id 가 이미 깔려 있으면 덮지 않는다 — 폴더에 직접 넣은 것·다른 저장소의 것은 별개 플러그인이다
-        have = _installed_origin(root / id) if (root / id).is_dir() and _manifest_of(root / id) else None
-        if (root / id).is_dir() and _manifest_of(root / id) and have != origin:
+        have = _origin_key(_installed_origin(root / id)) if (root / id).is_dir() and _manifest_of(root / id) else None
+        if (root / id).is_dir() and _manifest_of(root / id) and have != _origin_key(origin):
             return {"ok": False, "error": f"「{id}」 는 다른 출처로 이미 설치되어 있습니다 ({(have or {}).get('source') or '폴더에 직접 넣음'}). 지우고 다시 설치하십시오"}
-    if src_dir is None and not zip_url:
+    if not zip_url:
         return {"ok": False, "error": "무엇을 설치할지 없습니다 (id 또는 zip 주소)"}
 
     stage = root / f"_stage-{int(time.time() * 1000)}"
     shutil.rmtree(stage, ignore_errors=True)
     stage.mkdir(parents=True)
     try:
-        if src_dir is not None:
-            new = stage / src_dir.name
-            shutil.copytree(src_dir, new, ignore=shutil.ignore_patterns("__pycache__", "_lib", ".git"))
-        else:
-            import httpx
+        import httpx
 
-            zpath = stage / "plugin.zip"
-            async with httpx.AsyncClient(timeout=None, follow_redirects=True) as c:
-                r = await c.get(zip_url)
-                r.raise_for_status()
-                zpath.write_bytes(r.content)
-            if want and hashlib.sha256(zpath.read_bytes()).hexdigest().lower() != want.lower():
-                return {"ok": False, "error": "받은 파일의 sha256 이 목록과 다릅니다"}
-            un = stage / "unzip"
-            un.mkdir()
-            with zipfile.ZipFile(zpath) as z:
-                # ★zip 밖으로 나가는 경로를 막는다 (`..`·절대경로) — 남이 만든 zip 이다
-                for name in z.namelist():
-                    p = (un / name).resolve()
-                    if un.resolve() not in p.parents and p != un.resolve():
-                        return {"ok": False, "error": f"수상한 경로가 들어 있습니다: {name}"}
-                z.extractall(un)
-            kids = list(un.iterdir())
-            new = kids[0] if len(kids) == 1 and kids[0].is_dir() and (kids[0] / "plugin.json").is_file() else un
+        zpath = stage / "plugin.zip"
+        async with httpx.AsyncClient(timeout=None, follow_redirects=True) as c:
+            r = await c.get(zip_url)
+            r.raise_for_status()
+            zpath.write_bytes(r.content)
+        if want and hashlib.sha256(zpath.read_bytes()).hexdigest().lower() != want.lower():
+            return {"ok": False, "error": "받은 파일의 sha256 이 목록과 다릅니다"}
+        un = stage / "unzip"
+        un.mkdir()
+        with zipfile.ZipFile(zpath) as z:
+            # ★zip 밖으로 나가는 경로를 막는다 (`..`·절대경로) — 남이 만든 zip 이다
+            for name in z.namelist():
+                p = (un / name).resolve()
+                if un.resolve() not in p.parents and p != un.resolve():
+                    return {"ok": False, "error": f"수상한 경로가 들어 있습니다: {name}"}
+            z.extractall(un)
+        kids = list(un.iterdir())
+        # ★GitHub 태그 압축본은 바깥에 폴더 한 겹이 있다 — 벗긴다
+        new = kids[0] if len(kids) == 1 and kids[0].is_dir() and (kids[0] / "plugin.json").is_file() else un
         m = _manifest_of(new)
         if not m:
             return {"ok": False, "error": "plugin.json 이 없거나 id 가 없습니다"}

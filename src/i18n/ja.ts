@@ -135,7 +135,7 @@ export const ja: Dict = {
     restart: "再起動が必要です",
     restartBtn: "今すぐ再起動",
     noAvailable: "入手可能なプラグインはありません。",
-    registryFail: "リモート一覧を取得できませんでした。公式プラグインのみ表示します。",
+    registryFail: "一覧を取得できませんでした。接続を確認して開き直してください。zip の URL からは今すぐ入れられます。",
     zipUrl: "プラグイン zip の URL (https://…)",
     installZip: "URL からインストール",
     extFail: "プラグイン「{n}」の拡張を読み込めませんでした: {e}",

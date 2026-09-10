@@ -31,11 +31,11 @@ type RegItem = {
   version: string;
   description: string;
   homepage: string;
-  source: "bundled" | "repo" | "zip";
+  source: "repo" | "zip";
   repo?: string;
   zip?: string;
   installed: string | null;
-  /** 앱과 함께 오는 번들(공식)인가 — 아니면 목록에 오른 유저 플러그인 */
+  /** 목록이 「공식」이라고 말한 것인가 (`index.json` 의 `official: true`). 목록 저장소만 붙일 수 있는 표식이다 */
   official: boolean;
   /** 깔린 것보다 높은 판이 같은 출처에 있다 */
   update: boolean;
@@ -485,7 +485,8 @@ function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
   const busy = useMgr((m) => m.busy);
   const base = usePlugins((s) => s.base);
   const on = p.enabled !== false;
-  const kind: "official" | "user" | "folder" = p.origin?.source === "bundled" || r?.official ? "official" : p.origin ? "user" : "folder";
+  // ★「공식」은 목록이 말한다 — 설치할 때 적어 둔 표식(`origin.official`)을 쓰고, 목록을 받았으면 그것이 정본이다
+  const kind: "official" | "user" | "folder" = r?.official || p.origin?.official ? "official" : p.origin ? "user" : "folder";
   const link = linkOf({ id: p.id, homepage: p.homepage, origin: p.origin });
   const sub = p.error ? `${t("plugins.broken")} — ${p.error}` : p.description || (p.origin?.repo ?? "");
   return (

@@ -241,7 +241,7 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
       <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${pan.x}px, ${pan.y}px) scale(${pan.z})`, transformOrigin: "0 0" }}>
         {shown.map((p) => {
           const f = frameOf(p);
-          const official = p.origin?.source === "bundled";
+          const official = p.origin?.official === true;
           return (
             <div
               key={p.id}

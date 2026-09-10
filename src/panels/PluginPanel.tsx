@@ -78,7 +78,7 @@ export function PluginPanel() {
           {usable.map((p) => {
             const on = !hide[p.id];
             const fold = on && !!frames[p.id]?.fold;
-            const official = p.origin?.source === "bundled";
+            const official = p.origin?.official === true;
             const link = linkOf({ id: p.id, homepage: p.homepage, origin: p.origin });
             return (
               <div

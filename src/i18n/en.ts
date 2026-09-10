@@ -135,7 +135,7 @@ export const en = {
     restart: "Restart to apply",
     restartBtn: "Restart now",
     noAvailable: "Nothing new in the list.",
-    registryFail: "Could not fetch the remote list. Only official plugins are shown.",
+    registryFail: "Could not fetch the list. Check your connection and reopen this screen. You can still install from a zip URL.",
     zipUrl: "Plugin zip URL (https://…)",
     installZip: "Install from URL",
     extFail: "Could not load the extension of plugin \"{n}\": {e}",
