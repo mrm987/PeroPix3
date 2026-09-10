@@ -450,16 +450,13 @@ function Cell({
         overflow: "hidden",
         cursor: "pointer",
         background: "var(--surface2)",
-        /* ★★고른 칸이 **한눈에** 보여야 한다 (사용자 지시 2026-09-10: *"단일 선택했을 때 나오는
-           보라색 자체가 잘 안 보여"*). 색은 강조색이 아니라 **고른 칸 전용 `--pick`** 이다
-           (`styles/tokens.css` 의 ★★주 — 보라는 그림에 묻힌다). 단일·다중을 색으로 가르지
-           않는다: 고른 것은 몇 장이든 같은 색이다.
-           ★테두리 3px 에 **어두운 링**을 둘러 밝은 그림 위에서도 윤곽이 선다. 자리는 안 밀린다
-             (`box-shadow` 는 레이아웃을 안 건드린다).
-           ★그림을 흐리게 하지는 않는다 (같은 날 결정) — 견주며 고르는 화면이라 고른 것이
-             흐려지면 안 된다 (씬 줄은 흐리게 한다). */
-        border: `3px solid ${picked ? "var(--pick)" : "transparent"}`,
-        boxShadow: picked ? "0 0 0 2px rgba(0,0,0,0.65)" : undefined,
+        /* ★★고른 칸은 **테두리 + 칸 전체를 덮는 옅은 강조색**이다 (사용자 지시 2026-09-10:
+           *"그냥 보라색으로 두고 선택된 이미지를 아주 얇은 보라색 오버레이를 씌워주면 어때.
+           탐색기에서 파일 선택하면 전체를 칠하듯이"*). 테두리 색만으로는 그 색이 그림에 들어
+           있을 때 묻힌다 — 면을 덮으면 **칸 전체의 색이 옮겨 가므로** 무엇을 골랐는지 멀리서도
+           읽힌다. 덮개는 아래 `pick-veil` 이다.
+           ★그림을 흐리게 하지는 않는다 (같은 날 결정) — 견주며 고르는 화면이다 (씬 줄은 흐리게 한다). */
+        border: `2px solid ${picked ? "var(--accent)" : "transparent"}`,
       }}
     >
       <img
@@ -469,6 +466,17 @@ function Cell({
         decoding="async"
         style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
       />
+      {/* ★★고른 칸을 덮는 **옅은 강조색** (위 ★★주). `opacity` 로 태워 **테마를 그대로 따른다** —
+          밝은 테마의 강조색은 파랑이라 색을 박아 넣으면 거기서 엉뚱한 색이 뜬다.
+          ★`pointer-events: none` 이 **반드시** 있어야 한다 — 덧그림이 커서를 가로채면 그 위의
+            누름이 칸에 안 닿는다 (CLAUDE.md 「덧그림」의 그 함정). */}
+      {picked && (
+        <span
+          data-cell-veil
+          style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: 0.28,
+                   pointerEvents: "none" }}
+        />
+      )}
       {/* ★여기서 **켜고 끈다** (페로픽스파이 `.thumb-star`). 큰 그림에는 별표를 두지 않는다 —
           견주며 고르는 일은 격자에서 일어난다. */}
       <span
