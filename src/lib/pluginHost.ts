@@ -52,7 +52,7 @@ export type PluginInfo = {
   homepage: string;
   description: string;
   /** 캔버스 프레임 규격 — 백엔드가 기본값을 채워 준다 (`plugins.py canvas_spec`) */
-  canvas: { width: number; height: number; minWidth: number; minHeight: number };
+  canvas: { width: number; height: number; minWidth: number; minHeight: number; resize: boolean };
 };
 
 /** 화면에 내놓아도 되는 플러그인인가 — 켜져 있고 읽혔다. ★끄면 다시 켜기 전에도 단추·메뉴·캔버스는 바로 감춘다

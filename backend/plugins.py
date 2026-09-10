@@ -92,8 +92,10 @@ CANVAS_FLOOR = {"width": 320, "height": 200}
 
 
 def canvas_spec(m: dict) -> dict:
-    """`plugin.json` 의 `canvas` 를 정리한다 — `{width, height, minWidth, minHeight}` (전부 선택).
-    `width`·`height` 는 **처음 꺼낼 때의 창 크기**, `minWidth`·`minHeight` 는 그 아래로 못 줄이는 크기다."""
+    """`plugin.json` 의 `canvas` 를 정리한다 — `{width, height, minWidth, minHeight, resize}` (전부 선택).
+    `width`·`height` 는 **처음 꺼낼 때의 창 크기**, `minWidth`·`minHeight` 는 그 아래로 못 줄이는 크기다.
+    ★`resize: false` 면 **설계 크기 창**이다 — 크기 손잡이가 없고 언제나 `width`×`height` 로 뜬다 (사용자 결정 2026-09-10:
+      반응형 앱 창과 설계 크기 창을 둘 다 둔다). 그림판·게임판처럼 배치가 한 크기로 짜인 플러그인이 고른다."""
     c = m.get("canvas") if isinstance(m.get("canvas"), dict) else {}
 
     def num(k: str, default: float) -> int:
@@ -105,6 +107,7 @@ def canvas_spec(m: dict) -> dict:
         "width": w, "height": h,
         "minWidth": min(num("minWidth", CANVAS_FLOOR["width"]), w),
         "minHeight": min(num("minHeight", CANVAS_FLOOR["height"]), h),
+        "resize": c.get("resize") is not False,
     }
 
 

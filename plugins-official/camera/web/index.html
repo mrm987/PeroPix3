@@ -4,92 +4,57 @@
 <meta charset="utf-8">
 <title>카메라 구도</title>
 <!--
-  PeroPix 공식 플러그인 「카메라 구도」 — docs/camera-view-mockup.html (2026-08-11) 을 그대로 옮긴 것.
+  PeroPix 공식 플러그인 「카메라 구도」 — docs/camera-view-mockup.html (2026-08-11) 을 옮긴 것.
   카메라 위치를 고르는 게 아니라 **보이는 모습**을 보면서 옮긴다. 설 수 있는 자리는 실측으로 확정한 것뿐이다
-  (방위 16 · 높이 12 · 거리 11). 실측 표와 그리기·조작은 목업과 같고, 앱에 닿는 것만 더했다:
-    · 「지금 씬에 넣기」 — 스타일 카드의 「카메라」 블록을 갈아 끼우고, 없으면 새로 붙인다 (postMessage → action edit_style_card)
-    · 「복사」 — 프롬프트 문자열을 클립보드로
-    · 색은 고정(어두운 목업색). 콘텐츠 밖(body)만 투명해서 앱 바탕이 테마대로 비친다
+  (방위 16 · 높이 12 · 거리 11).
+  ★★**작은 앱의 본보기다** (사용자 지시 2026-09-10: *"박스 자체가 앱인 느낌"*). 앱이 주는 공통 자산 두 줄만 쓰고,
+    창 골격은 `header`(도구줄) · `main`(본문) · `footer`(상태줄) 로 짠다 — 창을 키우면 **그림판만** 커진다.
+  ★그림판은 늘어나는 것이 아니라 **그 크기로 다시 그린다** (`fit()`): 어떤 크기에서도 선이 또렷하다.
 -->
+<link rel="stylesheet" href="/plug/_app/base.css">
+<script src="/plug/_app/peropix.js"></script>
 <style>
-  :root{
-    --bg-deep:#14181d; --bg:#1c2127; --panel:#232931; --line:#39424d;
-    --ink:#e8eef5; --ink-soft:rgba(232,238,245,.72); --ink-dim:rgba(232,238,245,.55);
-    --ink-faint:rgba(232,238,245,.42); --accent:#75b9ff; --gold:#ffd76b;
-  }
-  *{box-sizing:border-box}
-  /* ★콘텐츠(.wrap 안)는 위 :root 의 **고정 어두운 색**으로 칠하고, 그 밖(body)만 투명하게 둔다 — 앱 캔버스 바탕이
-     테마대로 비친다 (사용자 지시 2026-09-08). 앱 토큰을 받아 쓰지 않는다: 밝은 테마의 토큰이 들어오면 실측 캔버스·
-     금색 글자가 안 보이고, 앱이 테마를 바꿔도 한 번 받은 값은 안 바뀐다. */
-  body{margin:0;color:var(--ink);
-       font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif}
-  /* 폭 상한을 두지 않는다 — 프레임(창)을 키우면 실측 캔버스가 같이 넓어진다 (사용자 지시 2026-09-09). canvas 는 width:100% + aspect-ratio */
-  .wrap{margin:12px;padding:12px 14px 20px;background:var(--bg-deep);border-radius:12px}
-  .bar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-  .bar .sub{color:var(--ink-dim);font-size:12px;flex:1;min-width:0}
-  .bar button{padding:5px 12px;background:var(--bg);color:var(--ink);border:1px solid var(--line);
-              border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap}
-  .bar button.primary{background:var(--accent);color:#0f141a;border-color:var(--accent);font-weight:650}
-  .bar button:disabled{opacity:.5;cursor:default}
-  .card{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px}
-  canvas{display:block;width:100%;border-radius:9px;background:#10141a;cursor:grab;
-         touch-action:none;user-select:none}
-  canvas:active{cursor:grabbing}
-  .hint{color:var(--ink-faint);font-size:11px;margin-top:8px}
-  .stat{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
-        color:var(--ink-dim);font-size:12px;margin-top:10px}
-  .stat b{color:var(--gold);font-weight:600}
-  .mulrow{display:flex;align-items:center;gap:8px;margin-top:8px;
-          color:var(--ink-faint);font-size:11px}
-  .mulrow label{color:var(--accent);font-weight:650;font-size:12px}
-  .mulrow input{width:74px;padding:4px 7px;color:var(--gold);background:#10141a;
-    border:1px solid var(--line);border-radius:5px;font:12px Consolas,monospace}
-  pre{margin:8px 0 0;padding:9px 10px;background:#10141a;border:1px solid var(--line);border-radius:8px;
-      color:#fff2a6;font:12px/1.5 Consolas,monospace;white-space:pre-wrap;word-break:break-all}
-  .note{color:var(--ink-faint);font-size:11px;min-height:16px;margin-top:6px}
+  /* 그림판 안의 색은 앱 토큰이 아니라 **이 그림의 팔레트**다 — 3D 뷰포트처럼 테마와 무관하게 어둡다 */
+  :root { --gold: #ffd76b; --shot: #7fb9f0; }
+  main { gap: var(--sp-4); }
+  /* 그림판 — 남는 자리를 채우되 비율을 지킨다 (`.stage` 가 가운데 정렬) */
+  /* 크기는 `fit()` 이 px 로 정한다 — 남는 자리에 들어가는 가장 큰 720:520 상자 */
+  #cv { display: block; border-radius: var(--r-3); background: #10141a; cursor: grab; touch-action: none; user-select: none; }
+  #cv:active { cursor: grabbing; }
+  #out { margin: 0; color: #fff2a6; background: #10141a; }
+  .stat b { color: var(--gold); font-weight: var(--w-semi); }
+  .mulrow input { width: 78px; color: var(--gold); font-family: var(--font-mono); }
+  #note { min-height: 16px; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="bar">
-    <button class="primary" id="btnPut" data-put>지금 씬에 넣기</button>
-    <button id="btnCopy" data-copy>복사</button>
-    <span class="sub">드래그로 둘러보기 · 휠로 거리. 넣기는 스타일 카드의 「카메라」 블록을 갈아 끼웁니다.</span>
-  </div>
+<header>
+  <button class="primary" id="btnPut" data-put>지금 씬에 넣기</button>
+  <button id="btnCopy" data-copy>복사</button>
+  <span class="muted spacer">드래그로 둘러보기 · 휠로 거리. 넣기는 스타일 카드의 「카메라」 블록을 갈아 끼웁니다.</span>
+</header>
 
-  <div class="card">
-    <canvas id="cv"></canvas>
-    <div class="stat">
-      <span>방위 <b id="vAz">정면</b> · 높이 <b id="vEl">수평</b> · 거리 <b id="vDist">전신</b></span>
-      <span><span style="color:#7fb9f0">■</span> 앞 &nbsp;<span style="color:#d98a5c">■</span> 뒤</span>
-    </div>
-    <pre id="out"></pre>
-    <div class="note" id="note"></div>
-    <div class="mulrow">
-      <label for="mulN">배율</label>
-      <input type="number" id="mulN" min="0.1" max="5" step="0.1" value="1.0">
-      <span>모든 가중치에 곱합니다. 실측 최적 1.0 · 2.5 부근부터 그림이 무너집니다.</span>
-    </div>
-    <div class="hint">
-      <b>드래그</b>로 둘러보기 · <b>휠</b>로 거리 · <b>← →</b> 방위 · <b>↑ ↓</b> 높이 · <b>Home</b> 정면
-    </div>
+<main>
+  <div class="stage"><canvas id="cv"></canvas></div>
+  <div class="row stat">
+    <span>방위 <b id="vAz">정면</b> · 높이 <b id="vEl">수평</b> · 거리 <b id="vDist">전신</b></span>
+    <span class="spacer"></span>
+    <span class="muted"><span style="color:#7fb9f0">■</span> 앞 <span style="color:#d98a5c">■</span> 뒤</span>
   </div>
-</div>
+  <pre id="out"></pre>
+  <div class="row mulrow">
+    <label for="mulN">배율</label>
+    <input type="number" id="mulN" min="0.1" max="5" step="0.1" value="1.0">
+    <span class="muted">모든 가중치에 곱합니다. 실측 최적 1.0 · 2.5 부근부터 그림이 무너집니다.</span>
+  </div>
+  <div class="muted" id="note"></div>
+</main>
+
+<footer><b>드래그</b> 둘러보기 · <b>휠</b> 거리 · <b>← →</b> 방위 · <b>↑ ↓</b> 높이 · <b>Home</b> 정면</footer>
 
 <script>
-// ── 앱과의 창구 (lib/pluginHost 의 postMessage) ─────────────────────────────
-let seq = 0; const pending = new Map();
-window.addEventListener("message", (e) => {
-  const d = e.data;
-  if (d && d.type === "peropix" && pending.has(d.id)) { pending.get(d.id)(d); pending.delete(d.id); }
-});
-const host = (msg) => new Promise((resolve) => {
-  const id = ++seq; pending.set(id, resolve);
-  parent.postMessage({ type: "peropix", id, ...msg }, "*");
-  setTimeout(() => { if (pending.has(id)) { pending.delete(id); resolve({ ok: false, error: "앱이 답하지 않습니다" }); } }, 20000);
-});
-const inApp = window.parent !== window;
-
+// 앱 창구는 `/plug/_app/peropix.js` 가 준다 — `peropix.action` · `toast` · `inApp`
+const inApp = peropix.inApp;
 
 // ── 실측 표 ────────────────────────────────────────────────────────────────
 const EL = [
@@ -155,9 +120,21 @@ const C_FRONT = "#7fb9f0", C_BACK = "#d98a5c";
 
 const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
 const VW = 720, VH = 520;
-function fit(){ const dpr = Math.min(devicePixelRatio||1,2);
-  cv.style.aspectRatio = VW+"/"+VH; cv.width = VW*dpr; cv.height = VH*dpr;
-  ctx.setTransform(dpr,0,0,dpr,0,0); }
+/* ★★**늘리는 것이 아니라 그 크기로 다시 그린다** (사용자 지적 2026-09-10: 창을 키우면 그림만 확대돼 이상하다).
+   그리는 코드는 720×520 좌표계 그대로 두고, 화면에 놓인 실제 크기만큼 변환을 걸어 준다 — 어느 크기에서도 선이 또렷하다.
+   `.stage` 가 비율을 지켜 주므로 찌그러지지 않는다. */
+const stage = cv.parentElement;   // `.stage` — 본문에서 남는 자리
+function fit(){
+  const dpr = Math.min(devicePixelRatio||1,2);
+  const box = stage.getBoundingClientRect();
+  const k = Math.max(0.2, Math.min(box.width/VW, box.height/VH));   // 그 자리에 들어가는 가장 큰 배수
+  const w = Math.floor(VW*k), h = Math.floor(VH*k);
+  cv.style.width = w+"px"; cv.style.height = h+"px";                // 비율 그대로, 넘치지 않게
+  cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);      // 그 크기로 **다시 그린다** (늘리는 게 아니다)
+  ctx.setTransform(k*dpr,0,0,k*dpr,0,0);
+}
+/* ★자리(`.stage`)를 본다 — 캔버스를 보면 우리가 바꾼 크기에 스스로 반응해 맴돈다 */
+new ResizeObserver(()=>{ fit(); draw(); }).observe(stage);
 fit(); addEventListener("resize",()=>{ fit(); draw(); });
 
 // 몸 좌표 → 시점 좌표. 방위만큼 세계를 돌리고, 높이만큼 기울인다.
@@ -370,12 +347,12 @@ btnPut.onclick = async () => {
   btnPut.disabled = true; note("넣는 중…");
   try {
     // 같은 이름의 블록이 하나 있으면 갈아 끼우고, 없으면 새로 붙인다 (여럿이면 앱이 되묻는 대신 새로 붙인다)
-    let r = await host({ call: "action", name: "edit_style_card", args: { label: LABEL, tags, mode: "replace", block: "" } });
+    let r = await peropix.call({ call: "action", name: "edit_style_card", args: { label: LABEL, tags, mode: "replace", block: "" } });
     const failed = !r.ok || (r.result && r.result.error);
-    if (failed) r = await host({ call: "action", name: "edit_style_card", args: { label: LABEL, tags, mode: "add" } });
+    if (failed) r = await peropix.call({ call: "action", name: "edit_style_card", args: { label: LABEL, tags, mode: "add" } });
     if (!r.ok) note("앱이 거절했습니다: " + r.error);
     else if (r.result && r.result.error) note("앱이 거절했습니다: " + (r.result.error.message || JSON.stringify(r.result.error)));
-    else { note((r.result && r.result.did) || "넣었습니다."); host({ call: "toast", text: "카메라 구도를 스타일 카드에 넣었습니다" }); }
+    else { note((r.result && r.result.did) || "넣었습니다."); peropix.toast("카메라 구도를 스타일 카드에 넣었습니다"); }
   } finally { btnPut.disabled = false; }
 };
 document.getElementById("btnCopy").onclick = async () => {

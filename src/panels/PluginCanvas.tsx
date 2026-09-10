@@ -22,6 +22,9 @@ import { openExternal } from "../lib/openExternal";
  *  ★입력 규칙 (시안 Spec): 바탕 끌기 = 이동, 바탕 휠 = 확대, 프레임 머리 끌기 = 옮기기, 스페이스 + 끌기 = 프레임 위에서도 이동.
  *    iframe 위의 마우스·휠은 플러그인에 그대로 간다. 끄는 동안만 iframe 의 pointer-events 를 끊는다 — 안 그러면 iframe 이
  *    움직임을 삼켜 끌기가 끊긴다.
+ *  ★★창은 두 갈래다 (사용자 결정 2026-09-10). **반응형 앱 창**(기본)은 크기를 바꿀 수 있고, 공통 스타일의 골격
+ *    (`header`/`main`/`footer`)을 쓰면 본문만 커진다. **설계 크기 창**(`canvas.resize: false`)은 크기 손잡이가 없고
+ *    언제나 규격의 크기로 뜬다 — 배치가 한 크기로 짜인 그림판·게임판용이다.
  *  ★캔버스에 있는 프레임의 iframe 은 **떼지 않는다** — 접어도 숨기기만 한다 (플러그인 상태를 지키려고, 탭 때의 규칙 그대로). */
 
 const PAD = 24;
@@ -62,8 +65,9 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
     spots.set(p.id, defaultFrame(p, [...spots.values()]));
   }
   const frameOf = (p: PluginInfo): PluginFrame => {
-    if (drag && liveFrame?.id === p.id) return liveFrame.f;
-    return frames[p.id] ?? spots.get(p.id) ?? defaultFrame(p);
+    const f = drag && liveFrame?.id === p.id ? liveFrame.f : frames[p.id] ?? spots.get(p.id) ?? defaultFrame(p);
+    // ★설계 크기 창은 저장된 크기가 있어도 규격대로 — 규격이 바뀌면 바로 따라온다
+    return p.canvas.resize ? f : { ...f, w: p.canvas.width, h: p.canvas.height + HEAD };
   };
   const setFrame = (id: string, f: PluginFrame) => useUi.getState().setView("frame", id, f);
   const setPan = (v: Pan) => useUi.getState().setView("pan", "plugins", v);
@@ -309,7 +313,7 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
                 )}
               </div>
               {/* 크기 손잡이 — 오른쪽 아래, 최소 크기까지만 */}
-              {!f.fold && (
+              {!f.fold && p.canvas.resize && (
                 <span
                   data-plugin-frame-resize={p.id}
                   onPointerDown={(e) => {
