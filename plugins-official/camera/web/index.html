@@ -10,17 +10,33 @@
   ★★**작은 앱의 본보기다** (사용자 지시 2026-09-10: *"박스 자체가 앱인 느낌"*). 앱이 주는 공통 자산 두 줄만 쓰고,
     창 골격은 `header`(도구줄) · `main`(본문) · `footer`(상태줄) 로 짠다 — 창을 키우면 **그림판만** 커진다.
   ★그림판은 늘어나는 것이 아니라 **그 크기로 다시 그린다** (`fit()`): 어떤 크기에서도 선이 또렷하다.
+
+  ★★2026-09-10: 캡슐 마네킹을 **입체 모델**로 바꿨다 (사용자 지시).
+    · 모델 `model/character.glb` — 사용자가 Blender 로 만든 3등신 데포르메 경찰 캐릭터.
+      리깅·애니메이션 없음, +Y 위 · +Z 정면 · 미터 단위, 키 1.4655 (발 0.0025 ~ 경찰모 1.468).
+    · three.js r180 (MIT, `lib/three-LICENSE.txt`) 를 함께 담았다 — 인터넷 없이 떠야 하므로 CDN 을 쓰지 않는다.
+      `lib/` 안의 배치(`three.module.min.js` + `three.core.min.js` · `loaders/` · `utils/`)는 배포본 그대로다 —
+      그 파일들이 서로를 상대 경로로 부르므로 옮기면 깨진다. 이름표 `three` 는 문서 머리의 importmap 이 이어 준다.
+    · 앞·뒤를 색으로 갈라 칠하던 것을 걷었다. 얼굴·꼬리·모자가 있으니 방향은 모습으로 안다.
+    · ★거리 표(`FRAME`)는 **사람 비율(발 0 · 머리끝 1.795) 그대로 둔다.** 그 값들은 생성 결과로 맞춘 것이라
+      정본이고, 대신 그릴 때 `toModel()` 이 **같은 부위끼리** 옮겨 준다 (아래 `MARK` 표). 그래서 3등신 모델에서도
+      「얼굴」은 얼굴이, 「허벅지」는 허벅지가 화면에 담긴다. 모델을 바꾸면 `MARK` 만 다시 재면 된다.
 -->
 <link rel="stylesheet" href="/plug/_app/base.css">
 <script src="/plug/_app/peropix.js"></script>
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.min.js" } }
+</script>
 <style>
   /* 그림판 안의 색은 앱 토큰이 아니라 **이 그림의 팔레트**다 — 3D 뷰포트처럼 테마와 무관하게 어둡다 */
-  :root { --gold: #ffd76b; --shot: #7fb9f0; }
+  :root { --gold: #ffd76b; }
   main { gap: var(--sp-4); }
   /* 그림판 — 남는 자리를 채우되 비율을 지킨다 (`.stage` 가 가운데 정렬) */
   /* 크기는 `fit()` 이 px 로 정한다 — 남는 자리에 들어가는 가장 큰 720:520 상자 */
-  #cv { display: block; border-radius: var(--r-3); background: #10141a; cursor: grab; touch-action: none; user-select: none; }
-  #cv:active { cursor: grabbing; }
+  #view { position: relative; border-radius: var(--r-3); overflow: hidden; background: #10141a; cursor: grab; touch-action: none; user-select: none; }
+  #view:active { cursor: grabbing; }
+  #cv, #hud { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { pointer-events: none; }
   #out { margin: 0; color: #fff2a6; background: #10141a; }
   .stat b { color: var(--gold); font-weight: var(--w-semi); }
   .mulrow input { width: 78px; color: var(--gold); font-family: var(--font-mono); }
@@ -35,11 +51,9 @@
 </header>
 
 <main>
-  <div class="stage"><canvas id="cv"></canvas></div>
+  <div class="stage"><div id="view"><canvas id="cv"></canvas><canvas id="hud"></canvas></div></div>
   <div class="row stat">
     <span>방위 <b id="vAz">정면</b> · 높이 <b id="vEl">수평</b> · 거리 <b id="vDist">전신</b></span>
-    <span class="spacer"></span>
-    <span class="muted"><span style="color:#7fb9f0">■</span> 앞 <span style="color:#d98a5c">■</span> 뒤</span>
   </div>
   <pre id="out"></pre>
   <div class="row mulrow">
@@ -52,7 +66,10 @@
 
 <footer><b>드래그</b> 둘러보기 · <b>휠</b> 거리 · <b>← →</b> 방위 · <b>↑ ↓</b> 높이 · <b>Home</b> 정면</footer>
 
-<script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "./lib/loaders/GLTFLoader.js";
+
 // 앱 창구는 `/plug/_app/peropix.js` 가 준다 — `peropix.action` · `toast` · `inApp`
 const inApp = peropix.inApp;
 
@@ -102,180 +119,157 @@ function azTags(x){
     .map((n)=> ({ tag:DIR[n], w:r[n]*total }));
 }
 
+// ── 사람 비율 ↔ 이 모델의 같은 부위 ────────────────────────────────────────
+/* ★거리 표(`FRAME`)는 **키 1.8 의 사람**을 담는 값이고 바꾸지 않는다 (생성 결과로 맞춘 정본).
+   이 모델은 3등신이라 같은 숫자를 그대로 쓰면 「얼굴」에서 입이 잘린다 — 그래서 화면에 담을 위아래 끝을
+   **부위끼리 짝지어** 옮긴다. 모델 값은 GLB 의 노드별 경계 상자를 실제로 재서 얻었다 (2026-09-10). */
+const MARK = [
+  [0.000, 0.0000],   // 발바닥
+  [0.500, 0.2300],   // 무릎 — 모델에 무릎 마디가 없어 다리(0.00~0.476)의 절반쯤으로 잡았다
+  [0.900, 0.4500],   // 사타구니 (속바지 아래단 0.427)
+  [1.050, 0.5142],   // 허리 (속바지 위)
+  [1.360, 0.8700],   // 어깨 (견장 위 0.866 · 깃 0.884)
+  [1.485, 0.8800],   // 턱 (얼굴 구 아래) — 이 모델은 목이 짧아 어깨와 거의 붙는다
+  [1.680, 1.1150],   // 눈 (홍채 가운데)
+  [1.795, 1.4680],   // 머리끝 (경찰모 꼭대기)
+];
+const MODEL_H = 1.4655, HUMAN_H = 1.795;
+const OUT_K = MODEL_H/HUMAN_H;          // 머리 위·발 아래의 여백은 부위가 없으니 전체 배수로 줄인다
+function toModel(y){
+  if (y <= 0) return y*OUT_K;
+  const top = MARK[MARK.length-1];
+  if (y >= top[0]) return top[1] + (y-top[0])*OUT_K;
+  for (let i = 1; i < MARK.length; i++) {
+    if (y > MARK[i][0]) continue;
+    const [a0,a1] = MARK[i-1], [b0,b1] = MARK[i];
+    return a1 + (y-a0)/(b0-a0)*(b1-a1);
+  }
+  return y*OUT_K;
+}
+/** 거리 칸 → 모델 좌표의 { 가운데, 담을 높이 } */
+function frameOf(i){
+  const f = DIST[i].f;
+  const bot = toModel(f.c - f.h/2), top = toModel(f.c + f.h/2);
+  return { mid:(bot+top)/2, h:Math.max(0.02, top-bot) };
+}
+
 // ── 상태 ───────────────────────────────────────────────────────────────────
 const AZ_PINS = Array.from({length:16},(_,k)=> -0.875 + k*0.125);
 let azIdx = AZ_PINS.indexOf(0), elIdx = 6, distIdx = 6, mul = 1;   // elIdx 는 EL 배열 인덱스
 
-// ── 마네킹 (발 0 · 머리끝 1.8 · +z 가 정면) ─────────────────────────────────
-const B = [   // [시작, 끝, 굵기]
-  [[0,0.90,0],[0,1.33,0],0.36],                    // 몸통 — 캡슐 위끝 1.51 (머리와 겹침)
-  [[-0.195,1.36,0],[-0.300,0.75,0],0.115],         // 왼팔 — 몸통에서 조금 떼어 A 포즈
-  [[ 0.195,1.36,0],[ 0.300,0.75,0],0.115],         // 오른팔
-  [[-0.11,0.95,0],[-0.12,0.08,0],0.155],           // 왼다리
-  [[ 0.11,0.95,0],[ 0.12,0.08,0],0.155],           // 오른다리
-];
-const HEAD = { c:[0,1.64,0], r:0.155 };
-// ★앞뒤는 밝기가 아니라 **색**으로 가른다 (밝기로 하면 멀어서 어두운 건지 뒤라서 어두운 건지 헷갈린다)
-const C_FRONT = "#7fb9f0", C_BACK = "#d98a5c";
-
-const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+// ── 그림판 ─────────────────────────────────────────────────────────────────
+const view = document.getElementById("view");
+const cv = document.getElementById("cv"), hud = document.getElementById("hud");
+const hctx = hud.getContext("2d");
 const VW = 720, VH = 520;
+const FOV = 30;                                  // 세로 화각 — 인물 사진에 가깝게 얕게 잡는다
+const MARGIN = VH/(VH-40);                       // 위아래 20px 여백 (옛 그림판과 같은 여백)
+const EL_LIMIT = Math.PI/2 - 0.001;              // 바로 위·아래에서 위 방향이 무너지지 않게
+
+let renderer = null, scene = null, camera = null, model = null;
+const note = (s) => { document.getElementById("note").textContent = s; };
+
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setClearColor(0x10141a, 1);
+} catch (e) {
+  note("이 환경에서는 입체 그림을 그릴 수 없습니다 (WebGL 없음). 태그 만들기는 그대로 됩니다.");
+}
+
+if (renderer) {
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(FOV, VW/VH, 0.02, 200);
+  scene.add(camera);
+  // ★빛을 **카메라에 붙인다** — 어느 방위로 돌아가도 인물이 읽힌다 (세계에 고정하면 뒤로 돌 때 새까매진다)
+  const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(-0.5, 0.8, 1.0); camera.add(key);
+  const fill = new THREE.DirectionalLight(0x9fc4ff, 0.8); fill.position.set(0.9, -0.2, 0.4); camera.add(fill);
+  scene.add(new THREE.HemisphereLight(0xdce9ff, 0x252a33, 1.5));
+
+  // 인물을 감싸는 고리 둘(가로·앞뒤 수직면)과 바닥 — 방위·높이를 눈으로 가늠하는 자리
+  const ORB_Y = toModel(0.90), ORB_R = 0.90*OUT_K;
+  const ring = (fn, color, opacity) => {
+    const pts = Array.from({length:129},(_,k)=> fn(k/128*Math.PI*2));
+    const g = new THREE.BufferGeometry().setFromPoints(pts);
+    const line = new THREE.Line(g, new THREE.LineDashedMaterial({ color, transparent:true, opacity, dashSize:0.045, gapSize:0.055 }));
+    line.computeLineDistances();
+    scene.add(line);
+  };
+  ring((t)=> new THREE.Vector3(Math.sin(t)*ORB_R, ORB_Y, Math.cos(t)*ORB_R), 0x8cb4e1, 0.42);
+  ring((t)=> new THREE.Vector3(0, ORB_Y + Math.sin(t)*ORB_R, Math.cos(t)*ORB_R), 0x8cb4e1, 0.30);
+  ring((t)=> new THREE.Vector3(Math.cos(t)*ORB_R, 0, Math.sin(t)*ORB_R), 0x75b9ff, 0.22);
+
+  note("모델을 불러오는 중…");
+  new GLTFLoader().load("./model/character.glb", (gltf) => {
+    model = gltf.scene;
+    scene.add(model);
+    note("");
+    draw();
+  }, undefined, (err) => note("모델을 불러오지 못했습니다: " + (err && err.message ? err.message : err)));
+}
+
 /* ★★**늘리는 것이 아니라 그 크기로 다시 그린다** (사용자 지적 2026-09-10: 창을 키우면 그림만 확대돼 이상하다).
    그리는 코드는 720×520 좌표계 그대로 두고, 화면에 놓인 실제 크기만큼 변환을 걸어 준다 — 어느 크기에서도 선이 또렷하다.
    `.stage` 가 비율을 지켜 주므로 찌그러지지 않는다. */
-const stage = cv.parentElement;   // `.stage` — 본문에서 남는 자리
+const stage = view.parentElement;   // `.stage` — 본문에서 남는 자리
 function fit(){
   const dpr = Math.min(devicePixelRatio||1,2);
   const box = stage.getBoundingClientRect();
   const k = Math.max(0.2, Math.min(box.width/VW, box.height/VH));   // 그 자리에 들어가는 가장 큰 배수
   const w = Math.floor(VW*k), h = Math.floor(VH*k);
-  cv.style.width = w+"px"; cv.style.height = h+"px";                // 비율 그대로, 넘치지 않게
-  cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);      // 그 크기로 **다시 그린다** (늘리는 게 아니다)
-  ctx.setTransform(k*dpr,0,0,k*dpr,0,0);
+  view.style.width = w+"px"; view.style.height = h+"px";            // 비율 그대로, 넘치지 않게
+  if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(w, h, false); }
+  hud.width = Math.round(w*dpr); hud.height = Math.round(h*dpr);    // 그 크기로 **다시 그린다** (늘리는 게 아니다)
+  hctx.setTransform(k*dpr,0,0,k*dpr,0,0);
 }
 /* ★자리(`.stage`)를 본다 — 캔버스를 보면 우리가 바꾼 크기에 스스로 반응해 맴돈다 */
 new ResizeObserver(()=>{ fit(); draw(); }).observe(stage);
 fit(); addEventListener("resize",()=>{ fit(); draw(); });
 
-// 몸 좌표 → 시점 좌표. 방위만큼 세계를 돌리고, 높이만큼 기울인다.
-function view(p){
-  const th = AZ_PINS[azIdx]*Math.PI, ph = EL[elIdx].y*Math.PI/2;
-  const x1 = p[0]*Math.cos(th) - p[2]*Math.sin(th);
-  const z1 = p[0]*Math.sin(th) + p[2]*Math.cos(th);
-  return { x:x1,
-           y: p[1]*Math.cos(ph) - z1*Math.sin(ph),
-           d: p[1]*Math.sin(ph) + z1*Math.cos(ph) };
+// 방위·높이·거리 → 카메라 자리. 담을 높이가 세로 화각에 꼭 차도록 거리를 정한다.
+function place(){
+  const fr = frameOf(distIdx);
+  const th = AZ_PINS[azIdx]*Math.PI;
+  const ph = Math.max(-EL_LIMIT, Math.min(EL_LIMIT, EL[elIdx].y*Math.PI/2));
+  const d = (fr.h*MARGIN/2) / Math.tan(FOV*Math.PI/360);
+  camera.position.set(d*Math.sin(th)*Math.cos(ph), fr.mid + d*Math.sin(ph), d*Math.cos(th)*Math.cos(ph));
+  camera.up.set(0,1,0);
+  camera.lookAt(0, fr.mid, 0);
+  camera.near = Math.max(0.02, d - 3); camera.far = d + 6;
+  camera.updateProjectionMatrix();
 }
+
 function draw(){
-  const f = DIST[distIdx].f, scale = (VH-40)/f.h;
-  const anchor = view([0,f.c,0]);                  // 프레임 중심을 화면 중앙에
-  const S = (p) => { const v = view(p);
-    return { x:VW/2 + v.x*scale, y:VH/2 - (v.y-anchor.y)*scale, d:v.d }; };
+  if (renderer && model) { place(); renderer.render(scene, camera); }
+  drawHud();
+  sync();
+}
 
-  ctx.clearRect(0,0,VW,VH);
-  const g = ctx.createLinearGradient(0,0,0,VH);
-  g.addColorStop(0,"#161c23"); g.addColorStop(1,"#11151a");
-  ctx.fillStyle = g; ctx.fillRect(0,0,VW,VH);
+// 거리 눈금 — 휠이 바꾸는 값. 입체 그림 위에 겹쳐 그린다.
+function drawHud(){
+  hctx.clearRect(0,0,VW,VH);
+  hctx.strokeStyle="rgba(232,238,245,.10)"; hctx.lineWidth=1;
+  hctx.strokeRect(14.5,14.5,VW-29,VH-29);
 
-  // 인물을 감싸는 고리 둘 — 가로(수평면)와 세로(앞뒤 수직면)
-  const ORB_Y = 0.90, ORB_R = 0.90;
-  const ringPts = (fn) => Array.from({length:97}, (_,k) => S(fn(k/96*Math.PI*2)));
-  const HORZ = ringPts((t)=>[Math.sin(t)*ORB_R, ORB_Y, Math.cos(t)*ORB_R]);
-  const VERT = ringPts((t)=>[0, ORB_Y + Math.sin(t)*ORB_R, Math.cos(t)*ORB_R]);
-  function ringPass(pts, near, col, w) {
-    ctx.strokeStyle = col; ctx.lineWidth = w; ctx.setLineDash([4,7]);
-    ctx.beginPath();
-    let pen = false;
-    for (const q of pts) {
-      const on = near ? q.d >= 0 : q.d < 0;
-      if (on) { pen ? ctx.lineTo(q.x,q.y) : ctx.moveTo(q.x,q.y); pen = true; }
-      else pen = false;
-    }
-    ctx.stroke(); ctx.setLineDash([]);
-  }
-  ringPass(HORZ, false, "rgba(140,180,225,.30)", 1.3);
-  ringPass(VERT, false, "rgba(140,180,225,.22)", 1.3);
-
-  // 바닥
-  ctx.beginPath();
-  for (let k=0;k<=64;k++){ const t=k/64*Math.PI*2;
-    const q=S([Math.cos(t)*ORB_R,0,Math.sin(t)*ORB_R]); k?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y); }
-  ctx.closePath(); ctx.strokeStyle="rgba(117,185,255,.16)"; ctx.lineWidth=1.2;
-  ctx.setLineDash([5,7]); ctx.stroke(); ctx.setLineDash([]);
-
-  const f0 = view([0,0,0]), f1 = view([0,0,1]);
-  const FWD = { sx:f1.x-f0.x, sy:-(f1.y-f0.y), d:f1.d-f0.d };
-
-  const clipHalf = (px,py,nx,ny) => {
-    const L = 4000, ex = -ny*L, ey = nx*L;
-    ctx.beginPath();
-    ctx.moveTo(px+ex, py+ey);           ctx.lineTo(px-ex, py-ey);
-    ctx.lineTo(px-ex+nx*L, py-ey+ny*L); ctx.lineTo(px+ex+nx*L, py+ey+ny*L);
-    ctx.closePath(); ctx.clip();
-  };
-  const splitT = (fn) => {
-    const m = Math.hypot(fn, FWD.d) || 1;
-    return Math.max(-1, Math.min(1, -FWD.d/m));
-  };
-
-  const hr = HEAD.r*scale;
-  const H = S(HEAD.c);
-  const items = B.map(([a,b,w])=>{ const A=S(a),C=S(b); return {t:"limb",A,C,w,d:(A.d+C.d)/2}; });
-  items.push({ t:"head", d:H.d });
-  items.sort((m,n)=>m.d-n.d);
-
-  for (const it of items) {
-    if (it.t === "limb") {
-      const half = it.w*scale/2;
-      let ux = it.C.x-it.A.x, uy = it.C.y-it.A.y;
-      const ul = Math.hypot(ux,uy);
-      let nx, ny, fn;
-      if (ul < half) {
-        const hl = Math.hypot(FWD.sx, FWD.sy);
-        if (hl < 1e-6) { nx = 1; ny = 0; fn = 0; }
-        else { nx = FWD.sx/hl; ny = FWD.sy/hl; fn = hl; }
-      } else {
-        ux/=ul; uy/=ul; nx = -uy; ny = ux; fn = FWD.sx*nx + FWD.sy*ny;
-        if (fn < 0) { nx=-nx; ny=-ny; fn=-fn; }
-      }
-      const t = splitT(fn);
-      const line = () => { ctx.beginPath(); ctx.moveTo(it.A.x,it.A.y); ctx.lineTo(it.C.x,it.C.y); ctx.stroke(); };
-      ctx.lineWidth = it.w*scale; ctx.lineCap = "round";
-      if (t <= -0.999) { ctx.strokeStyle = C_FRONT; line(); continue; }
-      ctx.strokeStyle = C_BACK; line();
-      if (t < 1) { ctx.save(); clipHalf(it.A.x+nx*t*half, it.A.y+ny*t*half, nx, ny);
-                   ctx.strokeStyle = C_FRONT; line(); ctx.restore(); }
-      continue;
-    }
-    const hl = Math.hypot(FWD.sx, FWD.sy);
-    const circle = () => { ctx.beginPath(); ctx.arc(H.x,H.y,hr,0,Math.PI*2); ctx.fill(); };
-    const ht = hl < 1e-6 ? (FWD.d > 0 ? -1 : 1) : splitT(hl);
-    if (ht <= -0.999) { ctx.fillStyle = C_FRONT; circle(); }
-    else {
-      ctx.fillStyle = C_BACK; circle();
-      if (ht < 1 && hl >= 1e-6) {
-        const nx = FWD.sx/hl, ny = FWD.sy/hl;
-        ctx.save(); clipHalf(H.x+nx*ht*hr, H.y+ny*ht*hr, nx, ny);
-        ctx.fillStyle = C_FRONT; circle(); ctx.restore();
-      }
-    }
-    if (FWD.d > 0) {
-      ctx.fillStyle = "#14202a";
-      for (const sx of [-0.40,0.40]) {
-        const e = S([sx*HEAD.r, HEAD.c[1]+0.03, HEAD.r*0.88]);
-        ctx.beginPath(); ctx.arc(e.x, e.y, Math.max(1.3,hr*.14), 0, Math.PI*2); ctx.fill();
-      }
-    }
-  }
-
-  ringPass(HORZ, true, "rgba(160,200,240,.42)", 1.4);
-  ringPass(VERT, true, "rgba(160,200,240,.30)", 1.4);
-
-  ctx.strokeStyle="rgba(232,238,245,.10)"; ctx.lineWidth=1;
-  ctx.strokeRect(14.5,14.5,VW-29,VH-29);
-
-  // 거리 눈금 — 휠이 바꾸는 값
   const gx = VW-42, gyT = 96, gyB = 424;
   const at = (i) => gyT + i/(DIST.length-1)*(gyB-gyT);
-  ctx.strokeStyle = "rgba(232,238,245,.20)"; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(gx, gyT); ctx.lineTo(gx, gyB); ctx.stroke();
-  ctx.textAlign = "right";
+  hctx.strokeStyle = "rgba(232,238,245,.20)"; hctx.lineWidth = 1;
+  hctx.beginPath(); hctx.moveTo(gx, gyT); hctx.lineTo(gx, gyB); hctx.stroke();
+  hctx.textAlign = "right";
   for (let i = 0; i < DIST.length; i++) {
     const named = !DIST[i].mix;
-    ctx.strokeStyle = named ? "rgba(232,238,245,.40)" : "rgba(232,238,245,.20)";
-    ctx.lineWidth = named ? 1.6 : 1;
-    ctx.beginPath(); ctx.moveTo(gx-(named?12:6), at(i)); ctx.lineTo(gx, at(i)); ctx.stroke();
+    hctx.strokeStyle = named ? "rgba(232,238,245,.40)" : "rgba(232,238,245,.20)";
+    hctx.lineWidth = named ? 1.6 : 1;
+    hctx.beginPath(); hctx.moveTo(gx-(named?12:6), at(i)); hctx.lineTo(gx, at(i)); hctx.stroke();
     if (named) {
-      ctx.fillStyle = i === distIdx ? "#e8eef5" : "rgba(232,238,245,.36)";
-      ctx.font = (i === distIdx ? "600 " : "") + "10px 'Malgun Gothic',sans-serif";
-      ctx.fillText(DIST[i].kr, gx-16, at(i)+3);
+      hctx.fillStyle = i === distIdx ? "#e8eef5" : "rgba(232,238,245,.36)";
+      hctx.font = (i === distIdx ? "600 " : "") + "10px 'Malgun Gothic',sans-serif";
+      hctx.fillText(DIST[i].kr, gx-16, at(i)+3);
     }
   }
-  ctx.fillStyle = "rgba(232,238,245,.34)"; ctx.font = "10px 'Malgun Gothic',sans-serif";
-  ctx.fillText("거리", gx+4, gyT-13);
-  ctx.fillStyle = "#7fb9f0";
-  ctx.beginPath(); ctx.arc(gx, at(distIdx), 5.5, 0, Math.PI*2); ctx.fill();
-  sync();
+  hctx.fillStyle = "rgba(232,238,245,.34)"; hctx.font = "10px 'Malgun Gothic',sans-serif";
+  hctx.fillText("거리", gx+4, gyT-13);
+  hctx.fillStyle = "#7fb9f0";
+  hctx.beginPath(); hctx.arc(gx, at(distIdx), 5.5, 0, Math.PI*2); hctx.fill();
 }
 
 // ── 출력 ───────────────────────────────────────────────────────────────────
@@ -302,9 +296,9 @@ function sync(){
 
 // ── 조작 ───────────────────────────────────────────────────────────────────
 let drag = null;
-cv.addEventListener("pointerdown",(ev)=>{ cv.setPointerCapture(ev.pointerId);
+view.addEventListener("pointerdown",(ev)=>{ view.setPointerCapture(ev.pointerId);
   drag = { x:ev.clientX, y:ev.clientY, az:azIdx, el:elIdx, id:ev.pointerId }; });
-cv.addEventListener("pointermove",(ev)=>{
+view.addEventListener("pointermove",(ev)=>{
   if (!drag || drag.id !== ev.pointerId) return;
   // 인물을 손으로 잡아 돌리는 감각 — 끄는 방향으로 인물이 돌아간다
   const stepX = Math.round((ev.clientX-drag.x)/26), stepY = Math.round((ev.clientY-drag.y)/34);
@@ -313,8 +307,8 @@ cv.addEventListener("pointermove",(ev)=>{
   draw();
 });
 const stop = () => drag = null;
-cv.addEventListener("pointerup",stop); cv.addEventListener("pointercancel",stop);
-cv.addEventListener("wheel",(ev)=>{ ev.preventDefault();
+view.addEventListener("pointerup",stop); view.addEventListener("pointercancel",stop);
+view.addEventListener("wheel",(ev)=>{ ev.preventDefault();
   const dv = ev.deltaY !== 0 ? ev.deltaY : ev.deltaX;
   if (dv === 0) return;
   distIdx = Math.max(0, Math.min(DIST.length-1, distIdx + (dv>0?1:-1)));   // 휠은 거리만
@@ -339,7 +333,6 @@ mulN.oninput = () => {
 
 // ── 앱에 넣기 · 복사 ────────────────────────────────────────────────────────
 const LABEL = "카메라";
-const note = (s) => { document.getElementById("note").textContent = s; };
 const btnPut = document.getElementById("btnPut");
 btnPut.disabled = !inApp;
 btnPut.onclick = async () => {
