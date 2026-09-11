@@ -15,7 +15,8 @@ import { PluginCanvas } from "./PluginCanvas";
 /** 플러그인 모드 — **캔버스**(`PluginCanvas`, 자유 배치 프레임) + 「플러그인 목록」·「설치된 플러그인」 두 관리 화면
  *  (설계: `docs/plugin-design.md`, 시안: `docs/design/plugins/`·`docs/design/plugins-canvas/`).
  *
- *  ★2026-09-08 의 탭 줄은 2026-09-09 에 캔버스로 바꿨다 (사용자 결정). 오른쪽 패널(`PluginPanel`)이 꺼내기·관리 전환을 맡는다.
+ *  ★2026-09-08 의 탭 줄은 2026-09-09 에 캔버스로 바꿨다 (사용자 결정). 오른쪽 패널(`PluginPanel`)이 꺼내기를 맡고,
+ *    관리 전환은 **캔버스 우상단에 떠 있는 단추** 하나가 맡는다 (사용자 지시 2026-09-11) — 여는 문과 닫는 문이 한 자리다.
  *  ★관리는 `view.tab["plugins"] === "manage"` 일 때 캔버스 자리에 뜬다. 캔버스는 그동안 숨기기만 한다 (iframe 을 지키려고).
  *  ★「플러그인 목록」(카드 격자) / 「설치된 플러그인」(줄 목록). 업데이트는 **양쪽 어디서나** 받고, 받는 중·다시 켜기 안내는
  *    두 화면이 한 상태(`useMgr`)를 본다. ★★설치·삭제·업데이트·켜기/끄기는 파일과 설정만 바꾼다 — **다시 켜야 적용**된다. */
@@ -125,6 +126,7 @@ const useMgr = create<Mgr>((set, get) => ({
 
 /** @param hidden 다른 모드를 보는 중 — 떼지 않고 숨긴다 (`App` 의 ★주). 숨은 동안에도 캔버스의 iframe 은 살아 있다 */
 export function Plugins({ hidden = false }: { hidden?: boolean }) {
+  const t = useI18n((s) => s.t);
   const items = usePlugins((s) => s.items);
   const dir = usePlugins((s) => s.dir);
   const base = usePlugins((s) => s.base);
@@ -144,7 +146,38 @@ export function Plugins({ hidden = false }: { hidden?: boolean }) {
 
   return (
     // ★숨김은 인라인 display 로 — `hidden` 속성만 주면 인라인 `display: flex` 가 이겨 다른 모드 위에 그대로 그려진다 (사용자 보고 2026-09-08)
-    <div data-plugins-root data-hidden={hidden ? "" : undefined} style={{ flex: 1, minHeight: 0, display: hidden ? "none" : "flex", flexDirection: "column" }}>
+    <div data-plugins-root data-hidden={hidden ? "" : undefined} style={{ position: "relative", flex: 1, minHeight: 0, display: hidden ? "none" : "flex", flexDirection: "column" }}>
+      {/* ★★관리 단추는 **캔버스 우상단에 떠 있다** (사용자 지시 2026-09-11). 관리 화면에서도 **같은 자리**에 남아,
+          한 번 더 누르면 닫힌다 — 여는 문과 닫는 문이 한 자리다. 전에는 오른쪽 패널 안에 있었다. */}
+      {!hidden && (
+      <button
+        data-plugins-manage-btn
+        data-on={manageOn ? "" : undefined}
+        onClick={() => useUi.getState().setView("tab", "plugins", (manageOn ? "canvas" : "manage") as never)}
+        title={manageOn ? t("plugins.backToCanvas") : t("plugins.manage")}
+        style={{
+          position: "absolute",
+          top: "var(--sp-4)",
+          right: "var(--sp-4)",
+          zIndex: 200,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "var(--sp-1)",
+          height: 26,
+          padding: "0 var(--sp-4)",
+          fontSize: "var(--text-2xs)",
+          border: "1px solid",
+          borderColor: manageOn ? "var(--accent)" : "var(--line)",
+          borderRadius: "var(--r-2)",
+          background: manageOn ? "var(--accent-bg)" : "var(--panel)",
+          color: manageOn ? "var(--accent-ink)" : "var(--ink-soft)",
+          boxShadow: "var(--shadow-1, 0 1px 3px rgba(0,0,0,.14))",
+        }}
+      >
+        <span style={{ display: "grid", placeItems: "center", width: 13, height: 13 }}>{Icon.settings}</span>
+        {t("plugins.manage")}
+      </button>
+      )}
       {/* ★캔버스는 떼지 않고 숨긴다 — 관리 화면을 보는 동안에도 프레임의 iframe 이 살아 있어야 한다 */}
       <div style={{ flex: 1, minHeight: 0, display: manageOn ? "none" : "flex", flexDirection: "column" }}>
         <PluginCanvas items={items} base={base} />
@@ -282,11 +315,6 @@ function Head({ sub, setSub, q, setQ, installedCount, right }: { sub: string; se
   };
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-7)", flexShrink: 0 }}>
-      {/* 캔버스로 돌아가기 — 오른쪽 패널의 「관리」 를 다시 눌러도 된다 */}
-      <button data-plugins-back onClick={() => useUi.getState().setView("tab", "plugins", "canvas" as never)} style={{ ...btn, height: 28, gap: "var(--sp-2)" }}>
-        <span style={{ display: "grid", placeItems: "center", width: 12, height: 12 }}>{Icon.chevronLeft}</span>
-        {t("plugins.backToCanvas")}
-      </button>
       <div style={{ display: "flex", gap: 2, padding: 3, border: "1px solid var(--line)", borderRadius: "var(--r-3)", background: "var(--panel)" }}>
         {seg(LIST, t("plugins.availableHead"))}
         {seg(INSTALLED, t("plugins.installedHead"), installedCount)}
@@ -301,7 +329,8 @@ function Head({ sub, setSub, q, setQ, installedCount, right }: { sub: string; se
           style={{ flex: 1, minWidth: 0, border: "none", background: "none", color: "var(--ink)", fontSize: "var(--text-xs)", outline: "none" }}
         />
       </label>
-      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "var(--sp-5)" }}>{right}</div>
+      {/* ★오른쪽 끝은 **관리 단추의 자리**다 (캔버스 우상단에 떠 있다) — 그만큼 비워 두지 않으면 링크가 가려진다 */}
+      <div style={{ marginLeft: "auto", marginRight: 84, display: "flex", alignItems: "center", gap: "var(--sp-5)" }}>{right}</div>
     </div>
   );
 }

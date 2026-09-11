@@ -19,8 +19,6 @@ export function PluginPanel() {
   const items = usePlugins((s) => s.items);
   const hide = useUi((u) => u.view.hide);
   const frames = useUi((u) => u.view.frame);
-  const tab = useUi((u) => (u.view.tab["plugins"] as string | undefined) ?? "");
-  const manageOn = tab === "manage";
 
   useEffect(() => {
     void usePlugins.getState().load().catch((e) => toast(String(e), "warn"));
@@ -45,28 +43,8 @@ export function PluginPanel() {
 
   return (
     <div data-plugin-panel style={{ display: "flex", flexDirection: "column", gap: "var(--sp-3)", padding: "var(--sp-4)", minHeight: "100%", boxSizing: "border-box" }}>
+      {/* ★관리 단추는 여기 없다 — **캔버스 우상단**으로 옮겼다 (사용자 지시 2026-09-11, `Plugins.tsx`) */}
       <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
-        <button
-          data-plugin-panel-manage
-          data-on={manageOn ? "" : undefined}
-          onClick={() => useUi.getState().setView("tab", "plugins", (manageOn ? "canvas" : "manage") as never)}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "var(--sp-1)",
-            height: 24,
-            padding: "0 var(--sp-3)",
-            fontSize: "var(--text-2xs)",
-            border: "1px solid",
-            borderColor: manageOn ? "var(--accent)" : "var(--line)",
-            borderRadius: "var(--r-2)",
-            background: manageOn ? "var(--accent-bg)" : "var(--panel)",
-            color: manageOn ? "var(--accent-ink)" : "var(--ink-soft)",
-          }}
-        >
-          <span style={{ display: "grid", placeItems: "center", width: 13, height: 13 }}>{Icon.settings}</span>
-          {t("plugins.manage")}
-        </button>
         <span data-plugin-panel-summary style={{ marginLeft: "auto", fontSize: "var(--text-3xs)", color: "var(--ink-faint)" }}>
           {t("plugins.summary", { n: onCanvas.length, m: folded.length })}
         </span>
