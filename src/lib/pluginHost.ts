@@ -169,8 +169,21 @@ export function hostApi(p: PluginInfo) {
       const q = usePlugins.getState().items.find((x) => x.id === id);
       if (q) putOnCanvas(q);
     },
-    /** 앱 액션 — 조수가 쓰는 것과 같은 목록. ★승인 카드를 지나지 않는다 */
-    action: (name: string, args: Record<string, unknown> = {}) => runAction(name, args, false),
+    /** 앱 액션·백엔드 도구 — 조수가 쓰는 것과 같은 목록(`GET /api/agent/tools`). ★승인 카드를 지나지 않는다 */
+    action: async (name: string, args: Record<string, unknown> = {}) => {
+      const out = await runAction(name, args, false);
+      // ★★앱 액션이 아니면 **백엔드 도구**로 넘긴다 (`get_workspace` 처럼 읽기만 하는 것들). 플러그인에게는
+      //   「이름은 도구 목록과 같다」고 안내해 놓고 앱 액션만 되던 구멍이었다 — 태그 굴리기가 지금 씬의 블록을
+      //   읽으려다 「모르는 행동」을 받고 조용히 아무것도 못 했다 (실측 2026-09-11).
+      if (out && typeof (out as { error?: unknown }).error === "string" && String((out as { error: string }).error).startsWith("모르는 행동")) {
+        const r = await fetch(`${usePlugins.getState().base}/api/agent/call`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name, input: args }),
+        });
+        return (await r.json()) as Record<string, unknown>;
+      }
+      return out;
+    },
     /** 지금 보고 있는 화면 주소 (workspace · tab · sceneGroup) */
     state: () => screenAddr(),
     /** 디자인 토큰 값 — `theme("--accent")`. 이름 없이 부르면 지금 테마 이름(`"dark"` | `"light"`) */
