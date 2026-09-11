@@ -100,7 +100,12 @@ body {
   background: transparent;   /* 앱 캔버스 바탕이 비친다 */
   color: var(--ink);
   font: var(--w-norm) var(--text-md) / 1.5 var(--font-sans);
-  -webkit-font-smoothing: antialiased;
+  /* ★★**글자 다듬기를 건드리지 않는다** (사용자 지적 2026-09-11: *"태그 굴리기 왜 모든 텍스트가 엄청 뿌옇게 나오지"*).
+     여기 `-webkit-font-smoothing: antialiased` 가 있었다 — 앱 본체는 같은 까닭으로 2026-08-25 에 이미 걷어 낸
+     **맥 관용구**인데(`src/styles/globals.css` 의 ★주), 플러그인 공통 CSS 에만 남아 있었다.
+     윈도우 크로미움(WebView2)에서는 뜻이 정반대다: 이 값이 **서브픽셀 다듬기(ClearType)를 끄고** 회색조로
+     떨어뜨려 작은 글자가 통째로 흐려진다. 플러그인 페이지는 한글이 Malgun Gothic 으로 떨어져 더 도드라졌다.
+     ★그래서 아무것도 지정하지 않는다. 「선명하게 하려고」 다시 넣지 말 것 — 반대로 간다. */
 }
 
 /* ── 창 골격 — **문서가 아니라 작은 앱**이 되게 (사용자 지시 2026-09-10: *"박스 자체가 앱인 느낌"*) ──
