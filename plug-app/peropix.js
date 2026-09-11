@@ -4,9 +4,12 @@
  *
  *     await peropix.action("add_style_card", { ... });   // 앱 액션 (조수가 쓰는 것과 같은 목록)
  *     const st = await peropix.state();                  // 지금 화면 주소 (워크스페이스·탭·씬…)
+ *     const sc = await peropix.scene();                   // 지금 씬의 살아 있는 블록 { base, chars }
  *     peropix.toast("넣었습니다");                        // 앱 알림
  *     const c = await peropix.theme("--accent");          // 앱 토큰 값 (이름 없이 부르면 "dark" | "light")
  *     peropix.onTheme((name) => …);                      // 테마가 바뀔 때
+ *     const lang = await peropix.locale();                // 지금 앱 언어 ("ko" | "en" | "ja")
+ *     peropix.onLocale((lang) => …);                     // 앱 언어가 바뀔 때 — 자기 문구를 다시 그린다
  *     await peropix.openCanvas();                        // 이 플러그인을 캔버스에 꺼내 맨 앞으로
  *     const me = await peropix.plugin();                 // 내 매니페스트
  *
@@ -19,6 +22,7 @@
   var seq = 0;
   var pending = new Map();
   var themeHandlers = [];
+  var localeHandlers = [];
   var inApp = window.parent !== window;
 
   window.addEventListener("message", function (e) {
@@ -27,6 +31,13 @@
     if (d.event === "theme") {
       themeHandlers.forEach(function (fn) {
         try { fn(d.theme); } catch (err) { console.error("[peropix] onTheme", err); }
+      });
+      return;
+    }
+    if (d.event === "locale") {                                   // 앱 설정에서 언어를 바꿨다
+      document.documentElement.lang = d.locale;
+      localeHandlers.forEach(function (fn) {
+        try { fn(d.locale); } catch (err) { console.error("[peropix] onLocale", err); }
       });
       return;
     }
@@ -70,6 +81,8 @@
     call: call,
     action: function (name, args) { return unwrap(call({ call: "action", name: name, args: args || {} })); },
     state: function () { return unwrap(call({ call: "state" })); },
+    /** 지금 씬의 **살아 있는** 블록 — `{ base, chars }` (블록마다 id). 저장을 기다리지 않는다 */
+    scene: function () { return unwrap(call({ call: "scene" })); },
     plugin: function () { return unwrap(call({ call: "plugin" })); },
     openCanvas: function (id) { return call({ call: "openCanvas", name: id }); },
     toast: function (text) { return call({ call: "toast", text: String(text) }); },
@@ -77,10 +90,21 @@
     theme: function (name) { return unwrap(call({ call: "theme", name: name || "" })); },
     /** 앱 번역 (`t("plugins.install")`) */
     t: function (key, args) { return unwrap(call({ call: "t", key: key, args: args })); },
+    /** 지금 앱 언어 — `"ko"` | `"en"` | `"ja"`. 앱 밖에서는 브라우저 언어로 떨어진다 */
+    locale: function () {
+      return call({ call: "locale" }).then(function (r) {
+        return (r && r.ok && r.result) || (navigator.language || "en").slice(0, 2);
+      });
+    },
     /** 테마가 바뀔 때 부른다 → 끊는 함수 */
     onTheme: function (fn) {
       themeHandlers.push(fn);
       return function () { themeHandlers = themeHandlers.filter(function (x) { return x !== fn; }); };
+    },
+    /** 앱 언어가 바뀔 때 부른다 → 끊는 함수. 받은 자리에서 자기 문구를 다시 그리면 된다 */
+    onLocale: function (fn) {
+      localeHandlers.push(fn);
+      return function () { localeHandlers = localeHandlers.filter(function (x) { return x !== fn; }); };
     },
   };
 

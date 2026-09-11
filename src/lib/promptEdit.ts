@@ -30,6 +30,20 @@ export function screenAddr(): Addr {
   };
 }
 
+/** 지금 화면에 **살아 있는** 씬의 블록 — 스타일 카드(`base`)와 캐릭터 카드들.
+ *
+ *  ★★조수의 `get_workspace` 는 **저장된 파일**을 읽으므로 방금 손댄 것을 모른다. 그래서 블록을 지우고 넣는
+ *    플러그인이 자기가 조금 전에 넣은 것(또는 사용자가 방금 만든 것)을 못 보고 지나쳤다 (게스트 실측 2026-09-11:
+ *    지울 대상이 스냅샷에 없어 지우기가 통째로 헛돌았다). 이 함수는 **스토어를 그대로** 읽는다. */
+export function sceneBlocks() {
+  const p = usePrompt.getState();
+  const strip = (b: Block) => ({ id: b.id, label: b.label, on: b.on, tags: b.tags });
+  return {
+    base: p.base.map(strip),
+    chars: p.chars.map((c) => ({ id: c.id, name: c.name, prompt: (c.prompt ?? []).map(strip) })),
+  };
+}
+
 /** 사용자 말에 붙여 보내는 한 줄 — id 와 이름을 함께 (지침이 이 줄을 설명한다). */
 export function screenAddrText(): string {
   const ws = useWs.getState();

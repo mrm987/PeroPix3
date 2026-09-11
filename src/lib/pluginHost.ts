@@ -21,9 +21,9 @@ import { api, backendUrl } from "./backend";
 import { useUi } from "../store/ui";
 import { putOnCanvas } from "./pluginFrames";
 import { toast } from "../store/toast";
-import { screenAddr } from "./promptEdit";
+import { sceneBlocks, screenAddr } from "./promptEdit";
 import { runAction } from "../store/queue";
-import { t } from "../i18n";
+import { t, useI18n } from "../i18n";
 
 /** 이번 기동의 표식 — 플러그인 캔버스·확장 JS 주소에 `?v=` 로 붙인다.
  *  ★★여기는 일반 브라우저가 아니라 **우리가 플러그인을 띄워 주는 환경**이다: 플러그인을 고치거나 업데이트했으면 앱을 새로고침하든
@@ -186,9 +186,16 @@ export function hostApi(p: PluginInfo) {
     },
     /** 지금 보고 있는 화면 주소 (workspace · tab · sceneGroup) */
     state: () => screenAddr(),
+    /** 지금 씬의 **살아 있는** 블록 — `{ base, chars }`. 블록마다 id 가 있어 이름이 겹쳐도 하나를 짚을 수 있다.
+     *  ★`action("get_workspace")` 와 달리 저장된 파일이 아니라 화면의 스토어를 읽는다 (`promptEdit.sceneBlocks`). */
+    scene: () => sceneBlocks(),
     /** 디자인 토큰 값 — `theme("--accent")`. 이름 없이 부르면 지금 테마 이름(`"dark"` | `"light"`) */
     theme: (name: string) => (name ? getComputedStyle(document.documentElement).getPropertyValue(name).trim() : currentTheme()),
     t,
+    /** 지금 앱 언어 (`"ko"` | `"en"` | `"ja"`) — 플러그인이 **자기 문구**를 고를 때 쓴다.
+     *  ★앱은 플러그인의 사전을 관리하지 않는다 (사용자 결정 2026-09-11): 언어만 알려 주고,
+     *    무엇을 어떻게 번역할지는 플러그인이 정한다. 공식 플러그인은 셋을 다 갖추고, 남의 것은 자유다. */
+    locale: () => useI18n.getState().locale,
     toast,
   };
 }
@@ -274,6 +281,18 @@ function watchTheme() {
     }
   };
   new MutationObserver(tellStyle).observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
+
+  // ★언어도 알린다 (사용자 결정 2026-09-11). 설정에서 언어를 바꾸면 캔버스가 그 자리에서 다시 그린다 —
+  //   테마·글꼴과 달리 CSS 로는 못 따라오므로, 알림을 받아 플러그인이 자기 문구를 갈아 끼운다.
+  let lastLoc = useI18n.getState().locale;
+  useI18n.subscribe(() => {
+    const now = useI18n.getState().locale;
+    if (now === lastLoc) return;
+    lastLoc = now;
+    for (const f of document.querySelectorAll<HTMLIFrameElement>("iframe[data-plugin-canvas]")) {
+      f.contentWindow?.postMessage({ type: "peropix", event: "locale", locale: now }, "*");
+    }
+  });
 }
 
 /** `<html>` 에 꽂힌 앱 토큰 값 (`--font-sans`·`--text-scale`) */
@@ -307,10 +326,12 @@ function installBridge() {
         switch (d.call) {
           case "action": result = await a.action(String(d.name ?? ""), d.args ?? {}); break;
           case "state": result = a.state(); break;
+          case "scene": result = a.scene(); break;
           case "openCanvas": a.openCanvas(String(d.name ?? p.id)); break;
           case "toast": toast(String(d.text ?? "")); break;
           case "theme": result = a.theme(String(d.name ?? "")); break;
           case "t": result = t(String(d.key ?? d.name ?? ""), d.args as Record<string, string | number> | undefined); break;
+          case "locale": result = a.locale(); break;
           case "plugin": result = { id: p.id, name: p.name, version: p.version, backend: base }; break;
           default: throw new Error(`모르는 호출: ${d.call}`);
         }
