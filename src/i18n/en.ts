@@ -94,8 +94,6 @@ export const en = {
     emptyCanvas: "Put a plugin on the canvas from the panel on the right.",
     search: "Search by name or id",
     filterAll: "All",
-    officialNote: "Ships with the app",
-    userNote: "Downloaded from the author's repository · maintained by the author",
     openDirBtn: "Open folder",
     changed: "Something changed. Restart to apply",
     notListed: "Plugin not in the list",

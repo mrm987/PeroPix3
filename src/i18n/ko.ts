@@ -94,8 +94,6 @@ export const ko: Dict = {
     emptyCanvas: "오른쪽 패널에서 플러그인을 꺼내 놓으세요.",
     search: "이름·id 로 찾기",
     filterAll: "전체",
-    officialNote: "앱과 함께 옵니다",
-    userNote: "제작자 저장소에서 받습니다 · 동작은 제작자가 관리합니다",
     openDirBtn: "폴더 열기",
     changed: "바뀐 것이 있습니다. 다시 켜야 적용됩니다",
     notListed: "목록에 없는 플러그인",

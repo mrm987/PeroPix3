@@ -433,9 +433,9 @@ function List({ q, setQ, sub, setSub, installedCount }: { q: string; setQ: (v: s
   /** 목록 — 전부. 깔린 것은 「설치됨」 표식 (+ 새 판이 있으면 업데이트 단추) */
   const listed = (reg ?? []).filter((r) => matches(q, r.name, r.id, r.description));
   const groups = ([
-    { key: "official", items: listed.filter((r) => r.official), note: t("plugins.officialNote") },
-    { key: "user", items: listed.filter((r) => !r.official), note: t("plugins.userNote") },
-  ] as { key: Filter; items: RegItem[]; note: string }[]).filter((g) => g.items.length > 0 && (filter === "all" || filter === g.key));
+    { key: "official", items: listed.filter((r) => r.official) },
+    { key: "user", items: listed.filter((r) => !r.official) },
+  ] as { key: Filter; items: RegItem[] }[]).filter((g) => g.items.length > 0 && (filter === "all" || filter === g.key));
 
   const installZip = async () => {
     await useMgr.getState().install({ zip: zip.trim() });
@@ -482,10 +482,7 @@ function List({ q, setQ, sub, setSub, installedCount }: { q: string; setQ: (v: s
         ) : (
           groups.map((g) => (
             <div key={g.key} data-plugin-group={g.key} style={{ display: "flex", flexDirection: "column", gap: "var(--sp-3)" }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: "var(--sp-3)" }}>
-                <span style={eyebrow}>{t(g.key === "official" ? "plugins.official" : "plugins.user")}</span>
-                <span style={{ fontSize: "var(--text-3xs)", color: "var(--ink-ghost)" }}>{g.note}</span>
-              </div>
+              <span style={eyebrow}>{t(g.key === "official" ? "plugins.official" : "plugins.user")}</span>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "var(--sp-5)" }}>
                 {g.items.map((r) => <Card key={r.id} r={r} />)}
               </div>

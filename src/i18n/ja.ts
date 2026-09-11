@@ -94,8 +94,6 @@ export const ja: Dict = {
     emptyCanvas: "右のパネルからプラグインをキャンバスに出してください。",
     search: "名前・id で探す",
     filterAll: "すべて",
-    officialNote: "アプリに同梱",
-    userNote: "作者のリポジトリから取得 · 動作は作者が管理します",
     openDirBtn: "フォルダを開く",
     changed: "変更があります。再起動すると反映されます",
     notListed: "一覧にないプラグイン",
