@@ -237,8 +237,11 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
         </div>
       )}
 
-      {/* 캔버스 좌표계 */}
-      <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${pan.x}px, ${pan.y}px) scale(${pan.z})`, transformOrigin: "0 0" }}>
+      {/* 캔버스 좌표계 — ★★확대는 `transform: scale` 이 아니라 **`zoom`** 이다 (사용자 결정 2026-09-11 「1안」).
+          `scale` 은 그려 놓은 것을 늘리는데, 플러그인 프레임은 **다른 프로세스의 iframe** 이라 자기 배율로 한 번
+          그린 것이 그대로 늘어나 글자가 뭉갰다 (실측: 110%에서 뚜렷). `zoom` 은 배치부터 그 배율로 다시 잡으므로
+          안의 문서도 그 해상도로 다시 그려진다. 이동(translate)은 `zoom` 안에서 곱해지므로 나누어 넣는다. */}
+      <div style={{ position: "absolute", left: 0, top: 0, zoom: pan.z, transform: `translate(${pan.x / pan.z}px, ${pan.y / pan.z}px)`, transformOrigin: "0 0" }}>
         {shown.map((p) => {
           const f = frameOf(p);
           const official = p.origin?.official === true;
