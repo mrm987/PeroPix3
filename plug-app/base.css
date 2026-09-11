@@ -49,13 +49,16 @@
   --font-sans: "Pretendard Variable", Pretendard, "Segoe UI", "Malgun Gothic", sans-serif;
   --font-mono: ui-monospace, Consolas, "D2Coding", monospace;
 
-  /* 글자 크기 — 앱과 같은 계단 */
-  --text-3xs: 11px;
-  --text-2xs: 12px;
-  --text-xs: 13px;
-  --text-md: 14px;
-  --text-lg: 15px;
-  --text-xl: 16px;
+  /* 글자 크기 — 앱과 같은 계단이고, **앱 설정의 글자 크기를 따라간다** (사용자 지시 2026-09-11).
+     `peropix.js` 가 켤 때 앱의 `--text-scale` 을 여기 꽂고, 설정에서 바꾸면 알림으로 따라온다.
+     ★앱의 `src/styles/tokens.css` 와 같은 셈이다 — 그쪽 계단을 고치면 여기도 맞춘다. */
+  --text-scale: 1;
+  --text-3xs: calc(11px * var(--text-scale));
+  --text-2xs: calc(12px * var(--text-scale));
+  --text-xs: calc(13px * var(--text-scale));
+  --text-md: calc(14px * var(--text-scale));
+  --text-lg: calc(15px * var(--text-scale));
+  --text-xl: calc(16px * var(--text-scale));
   /* 굵기 — 한글은 굵으면 획이 뭉쳐 한 단씩 낮게 잡는다 */
   --w-norm: 370;
   --w-semi: 500;

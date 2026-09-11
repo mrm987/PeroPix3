@@ -30,7 +30,8 @@
       });
       return;
     }
-    if (d.event === "font") { applyFont(d.font); return; }   // 앱 설정에서 글꼴을 바꿨다
+    if (d.event === "font") { applyFont(d.font); return; }        // 앱 설정에서 글꼴을 바꿨다
+    if (d.event === "scale") { applyScale(d.scale); return; }     // 앱 설정에서 글자 크기를 바꿨다
     var slot = pending.get(d.id);
     if (slot) {
       pending.delete(d.id);
@@ -91,9 +92,18 @@
     if (!stack || typeof stack !== "string") return;
     document.documentElement.style.setProperty("--font-sans", stack);
   }
+  /** 글자 크기 — 앱 설정의 `--text-scale` 을 그대로 쓴다 (base.css 의 `--text-*` 가 여기에 곱해진다) */
+  function applyScale(v) {
+    var n = parseFloat(v);
+    if (!isFinite(n) || n <= 0) return;
+    document.documentElement.style.setProperty("--text-scale", String(n));
+  }
   if (inApp) {
     call({ call: "theme", name: "--font-sans" }).then(function (r) {
       if (r && r.ok) applyFont(r.result);
+    });
+    call({ call: "theme", name: "--text-scale" }).then(function (r) {
+      if (r && r.ok) applyScale(r.result);
     });
   }
 })();
