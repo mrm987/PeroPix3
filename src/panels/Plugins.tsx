@@ -388,7 +388,7 @@ function Card({ r }: { r: RegItem }) {
         </div>
         <span style={{ marginLeft: "auto", flexShrink: 0 }}><Badge kind={r.official ? "official" : "user"} /></span>
       </div>
-      <div style={{ fontSize: "var(--text-2xs)", lineHeight: 1.5, color: "var(--ink-soft)", minHeight: 36, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{pick(r.description)}</div>
+      <div style={{ fontSize: "var(--text-2xs)", lineHeight: 1.5, color: "var(--ink-soft)", minHeight: 72, display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{pick(r.description)}</div>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", paddingTop: 2, minWidth: 0 }}>
         {link ? <GitLink href={link} label={owner || t("plugins.github")} /> : <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{owner}</span>}
         <span style={{ marginLeft: "auto", display: "inline-flex", gap: "var(--sp-2)", flexShrink: 0 }}>
