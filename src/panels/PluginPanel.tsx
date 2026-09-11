@@ -96,9 +96,18 @@ export function PluginPanel() {
                   <span style={{ width: 22, flexShrink: 0 }} />
                 )}
                 {on ? (
-                  <span data-plugin-panel-state={fold ? "folded" : "canvas"} title={t(fold ? "plugins.onCanvasFolded" : "plugins.onCanvas")} style={{ width: 22, height: 22, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: 3, background: "var(--accent-ink)", opacity: fold ? 0.5 : 1 }} />
-                  </span>
+                  /* ★꺼내고 나면 **끄는 단추**가 된다 (사용자 지시 2026-09-11). 전에는 켜짐을 알리는 점만 있어,
+                     꺼낸 뒤에는 이 줄에서 닫을 길이 없었다 (프레임의 X 로만 닫혔다).
+                     ★접힘 표식(`data-plugin-panel-state`)은 그대로 이 자리에 둔다 — 점검이 그것으로 접힘을 본다. */
+                  <button
+                    data-plugin-panel-state={fold ? "folded" : "canvas"}
+                    data-plugin-panel-off={p.id}
+                    data-tip={t("plugins.closeFrame")}
+                    onClick={() => useUi.getState().setView("hide", p.id, true)}
+                    style={{ ...iconBtn, border: "1px solid var(--accent-line)", borderRadius: "var(--r-2)", color: "var(--accent-ink)", opacity: fold ? 0.7 : 1 }}
+                  >
+                    <span style={{ display: "grid", placeItems: "center", width: 13, height: 13 }}>{Icon.close12}</span>
+                  </button>
                 ) : (
                   <button data-plugin-panel-out={p.id} data-tip={t("plugins.takeOut")} onClick={() => takeOut(p)} style={{ ...iconBtn, border: "1px solid var(--line)", borderRadius: "var(--r-2)", color: "var(--ink-soft)" }}>
                     <span style={{ display: "grid", placeItems: "center", width: 13, height: 13 }}>{Icon.plus}</span>
