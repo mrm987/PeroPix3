@@ -6,7 +6,7 @@ import { Icon } from "../components/Icon";
 import { usePlugins, usePickText, type PluginInfo } from "../lib/pluginHost";
 import { linkOf } from "../lib/pluginLink";
 import { openExternal } from "../lib/openExternal";
-import { currentPan, defaultFrame, raiseFrame, putOnCanvas } from "../lib/pluginFrames";
+import { currentPan, defaultFrame, raiseFrame, putOnCanvas, useManage } from "../lib/pluginFrames";
 
 /** 오른쪽 「플러그인」 패널 — 생성 모드의 카드덱과 같은 자리·같은 어법의 **간략판** (사용자 선택 2026-09-09, 시안 `Compact.dc.html`).
  *  줄 하나 = 머리글자 · 이름 · GitHub · 꺼내기(+) 또는 상태 점. 설명·판·딱지는 관리 화면에만.
@@ -34,7 +34,7 @@ export function PluginPanel() {
   const focus = (p: PluginInfo) => {
     const pan = currentPan();
     const f = frames[p.id] ?? defaultFrame(p);
-    useUi.getState().setView("tab", "plugins", "canvas" as never);
+    useManage.getState().set(false);
     useUi.getState().setView("pan", "plugins", { ...pan, x: 40 - f.x * pan.z, y: 40 - f.y * pan.z });
     raiseFrame(p.id, f);
   };

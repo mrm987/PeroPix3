@@ -11,17 +11,18 @@ import { usePlugins, usePickText, pickText, type LocText, type PluginInfo } from
 import { openExternal } from "../lib/openExternal";
 import { PLUGIN_LIST_REPO, linkOf } from "../lib/pluginLink";
 import { PluginCanvas } from "./PluginCanvas";
+import { useManage } from "../lib/pluginFrames";
 
 /** 플러그인 모드 — **캔버스**(`PluginCanvas`, 자유 배치 프레임) + 「플러그인 목록」·「설치된 플러그인」 두 관리 화면
  *  (설계: `docs/plugin-design.md`, 시안: `docs/design/plugins/`·`docs/design/plugins-canvas/`).
  *
  *  ★2026-09-08 의 탭 줄은 2026-09-09 에 캔버스로 바꿨다 (사용자 결정). 오른쪽 패널(`PluginPanel`)이 꺼내기를 맡고,
  *    관리 전환은 **캔버스 우상단에 떠 있는 단추** 하나가 맡는다 (사용자 지시 2026-09-11) — 여는 문과 닫는 문이 한 자리다.
- *  ★관리는 `view.tab["plugins"] === "manage"` 일 때 캔버스 자리에 뜬다. 캔버스는 그동안 숨기기만 한다 (iframe 을 지키려고).
+ *  ★관리는 `useManage` 가 켜져 있을 때 캔버스 자리에 뜬다. 캔버스는 그동안 숨기기만 한다 (iframe 을 지키려고).
+ *    ★그 값은 **저장하지 않는다** — 플러그인 화면에 들어가면 언제나 캔버스부터다 (사용자 지시 2026-09-11).
  *  ★「플러그인 목록」(카드 격자) / 「설치된 플러그인」(줄 목록). 업데이트는 **양쪽 어디서나** 받고, 받는 중·다시 켜기 안내는
  *    두 화면이 한 상태(`useMgr`)를 본다. ★★설치·삭제·업데이트·켜기/끄기는 파일과 설정만 바꾼다 — **다시 켜야 적용**된다. */
 
-const MANAGE = "manage";
 /** 관리 안의 두 화면 (`useUi.view.tab["plugins-manage"]`) */
 const INSTALLED = "installed";
 const LIST = "list";
@@ -130,8 +131,9 @@ export function Plugins({ hidden = false }: { hidden?: boolean }) {
   const items = usePlugins((s) => s.items);
   const dir = usePlugins((s) => s.dir);
   const base = usePlugins((s) => s.base);
-  /** 캔버스를 보나 관리를 보나 — ★**저장되는 작업 상태**다 (`useUi.view.tab["plugins"]`: "manage" 면 관리, 그 밖은 캔버스) */
-  const tab = useUi((u) => (u.view.tab["plugins"] as string | undefined) ?? "");
+  /** 캔버스를 보나 관리를 보나 — ★★**저장하지 않는다** (사용자 지시 2026-09-11): 화면을 벗어나거나 앱을 다시 켜면
+   *  언제나 캔버스부터다. 전에는 `useUi.view.tab["plugins"]` 에 저장돼 관리 화면을 보던 채로 되돌아왔다. */
+  const manageOn = useManage((m) => m.on);
   /** 관리 안의 어느 화면인가 — 이것도 저장되는 작업 상태. ★처음은 「플러그인 목록」, 그 뒤로는 마지막에 보던 곳 (사용자 지시 2026-09-08) */
   const sub = useUi((u) => (u.view.tab["plugins-manage"] as string | undefined) ?? LIST);
   const setSub = (k: string) => useUi.getState().setView("tab", "plugins-manage", k as never);
@@ -142,7 +144,10 @@ export function Plugins({ hidden = false }: { hidden?: boolean }) {
     void usePlugins.getState().load().catch((e) => toast(String(e), "warn"));
   }, []);
 
-  const manageOn = tab === MANAGE;
+  // ★플러그인 화면을 벗어나면 관리를 끈다 — 다시 들어올 때 캔버스부터 보이게 (사용자 지시 2026-09-11)
+  useEffect(() => {
+    if (hidden) useManage.getState().set(false);
+  }, [hidden]);
 
   return (
     // ★숨김은 인라인 display 로 — `hidden` 속성만 주면 인라인 `display: flex` 가 이겨 다른 모드 위에 그대로 그려진다 (사용자 보고 2026-09-08)
@@ -153,7 +158,7 @@ export function Plugins({ hidden = false }: { hidden?: boolean }) {
       <button
         data-plugins-manage-btn
         data-on={manageOn ? "" : undefined}
-        onClick={() => useUi.getState().setView("tab", "plugins", (manageOn ? "canvas" : "manage") as never)}
+        onClick={() => useManage.getState().set(!manageOn)}
         title={manageOn ? t("plugins.backToCanvas") : t("plugins.manage")}
         style={{
           position: "absolute",

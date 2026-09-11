@@ -1,3 +1,4 @@
+import { create } from "zustand";
 import { useUi, type PluginFrame } from "../store/ui";
 import type { PluginInfo } from "./pluginHost";
 
@@ -69,10 +70,15 @@ export function raiseFrame(id: string, f: PluginFrame) {
 /** 캔버스에 꺼내 놓고 맨 앞으로.
  *  ★자리를 처음 받는 것은 **빈 자리**에 놓고, 이미 자리가 있던 것은 그 자리 그대로 되돌린다 — 닫았다 다시 꺼내면
  *    있던 자리로 돌아오는 것이 예상에 맞다 (그때 화면 밖이면 패널의 이름을 눌러 찾아간다). */
+/** 관리 화면을 보고 있나 — ★★**저장하지 않는다** (사용자 지시 2026-09-11): 플러그인 화면에 들어가면 언제나
+ *  캔버스부터다. 화면을 벗어나면 꺼지고(`Plugins` 의 useEffect), 앱을 다시 켜면 처음부터 꺼져 있다.
+ *  ★전에는 `useUi.view.tab["plugins"]` 에 저장돼, 관리 화면을 보던 채로 나갔다 오면 그대로 관리가 떴다. */
+export const useManage = create<{ on: boolean; set: (on: boolean) => void }>((set) => ({ on: false, set: (on) => set({ on }) }));
+
 export function putOnCanvas(p: PluginInfo) {
   const ui = useUi.getState();
   const f = ui.view.frame[p.id] ?? defaultFrame(p);
   ui.setView("hide", p.id, false);
-  ui.setView("tab", "plugins", "canvas" as never);
+  useManage.getState().set(false);
   raiseFrame(p.id, { ...f, fold: false });
 }
