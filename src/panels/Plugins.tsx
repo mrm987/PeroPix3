@@ -242,6 +242,18 @@ function Badge({ kind }: { kind: "official" | "user" | "folder" }) {
 }
 
 /** 머리글자 타일 — 아이콘이 없는 플러그인의 얼굴 (시안). 공식은 강조 바탕, 유저는 회색 */
+/** 단추 안에서 도는 작은 고리 — 「무언가 되고 있다」만 알린다 (진행률이 아니다).
+ *  ★움직임을 줄이라는 설정이면 도는 대신 흐려진다 (`globals.css` 의 `.busy-spin`). */
+function Spin() {
+  return (
+    <span
+      className="busy-spin"
+      aria-hidden
+      style={{ width: 11, height: 11, flexShrink: 0, borderRadius: "50%", border: "2px solid currentColor", borderTopColor: "transparent", opacity: 0.85 }}
+    />
+  );
+}
+
 function Monogram({ name, official, size = 36 }: { name: string; official: boolean; size?: number }) {
   return (
     <span
@@ -288,7 +300,7 @@ function UpdateButton({ r }: { r: RegItem }) {
   return (
     <button data-plugin-update={r.id} disabled={!!busy} onClick={() => void useMgr.getState().install({ id: r.id }, pick(r.name))} style={accentBtn}>
       <span style={{ display: "grid", placeItems: "center", width: 12, height: 12 }}>{Icon.refresh}</span>
-      {busy === r.id ? t("plugins.installing") : `${t("plugins.update")} ${r.version}`}
+      {busy === r.id ? <><Spin />{t("plugins.installing")}</> : `${t("plugins.update")} ${r.version}`}
     </button>
   );
 }
@@ -407,7 +419,7 @@ function Card({ r }: { r: RegItem }) {
             </>
           ) : (
             <button data-plugin-install={r.id} disabled={!!busy} onClick={() => void useMgr.getState().install({ id: r.id }, pick(r.name))} style={accentBtn}>
-              {busy === r.id ? t("plugins.installing") : t("plugins.install")}
+              {busy === r.id ? <><Spin />{t("plugins.installing")}</> : t("plugins.install")}
             </button>
           )}
         </span>
