@@ -7,7 +7,7 @@ import { useFiles } from "../store/files";
 import { toast } from "../store/toast";
 import { FolderOpenButton } from "../components/FolderOpenButton";
 import { Icon } from "../components/Icon";
-import { usePlugins, type PluginInfo } from "../lib/pluginHost";
+import { usePlugins, usePickText, pickText, type LocText, type PluginInfo } from "../lib/pluginHost";
 import { openExternal } from "../lib/openExternal";
 import { PLUGIN_LIST_REPO, linkOf } from "../lib/pluginLink";
 import { PluginCanvas } from "./PluginCanvas";
@@ -27,9 +27,9 @@ const LIST = "list";
 
 type RegItem = {
   id: string;
-  name: string;
+  name: LocText;
   version: string;
-  description: string;
+  description: LocText;
   homepage: string;
   source: "repo" | "zip";
   repo?: string;
@@ -52,7 +52,7 @@ type Mgr = {
   changes: { id: string; text: string }[];
   loadReg: () => Promise<void>;
   install: (body: { id?: string; zip?: string }, name?: string) => Promise<void>;
-  remove: (p: { id: string; name: string }) => Promise<void>;
+  remove: (p: { id: string; name: LocText }) => Promise<void>;
   setEnabled: (p: PluginInfo, on: boolean) => Promise<void>;
 };
 
@@ -99,7 +99,7 @@ const useMgr = create<Mgr>((set, get) => ({
       await api(`/api/plugins/${encodeURIComponent(p.id)}`, { method: "DELETE" });
       toast(tr("plugins.removed", { n: p.id }));
       useUi.getState().setView("hide", p.id, false); // 지운 플러그인의 「닫음」 을 남기지 않는다
-      set({ changes: noted(get().changes, p.id, tr("plugins.chgRemoved", { n: p.name })) });
+      set({ changes: noted(get().changes, p.id, tr("plugins.chgRemoved", { n: pickText(p.name) })) });
       await Promise.all([get().loadReg(), usePlugins.getState().load()]);
     } catch (e) {
       toast(String(e), "warn");
@@ -112,8 +112,8 @@ const useMgr = create<Mgr>((set, get) => ({
     set({ busy: p.id });
     try {
       await post(`/api/plugins/${encodeURIComponent(p.id)}/enabled`, { enabled: on });
-      toast(tr("plugins.toggled", { n: p.name, s: tr(on ? "plugins.on" : "plugins.off") }));
-      set({ changes: noted(get().changes, p.id, tr(on ? "plugins.chgOn" : "plugins.chgOff", { n: p.name })) });
+      toast(tr("plugins.toggled", { n: pickText(p.name), s: tr(on ? "plugins.on" : "plugins.off") }));
+      set({ changes: noted(get().changes, p.id, tr(on ? "plugins.chgOn" : "plugins.chgOff", { n: pickText(p.name) })) });
       await usePlugins.getState().load();
     } catch (e) {
       toast(String(e), "warn");
@@ -244,10 +244,11 @@ function GitLink({ href, label }: { href: string; label: string }) {
 /** 업데이트 단추 — 두 화면이 같은 것을 쓴다 (같은 출처의 새 판이 있을 때만) */
 function UpdateButton({ r }: { r: RegItem }) {
   const t = useI18n((s) => s.t);
+  const pick = usePickText();
   const busy = useMgr((m) => m.busy);
   if (!r.update) return null;
   return (
-    <button data-plugin-update={r.id} disabled={!!busy} onClick={() => void useMgr.getState().install({ id: r.id }, r.name)} style={accentBtn}>
+    <button data-plugin-update={r.id} disabled={!!busy} onClick={() => void useMgr.getState().install({ id: r.id }, pick(r.name))} style={accentBtn}>
       <span style={{ display: "grid", placeItems: "center", width: 12, height: 12 }}>{Icon.refresh}</span>
       {busy === r.id ? t("plugins.installing") : `${t("plugins.update")} ${r.version}`}
     </button>
@@ -335,29 +336,30 @@ function RestartBand() {
   );
 }
 
-const matches = (q: string, ...fields: string[]) => {
+const matches = (q: string, ...fields: (LocText | undefined)[]) => {
   const k = q.trim().toLowerCase();
-  return !k || fields.some((f) => f.toLowerCase().includes(k));
+  return !k || fields.some((f) => pickText(f).toLowerCase().includes(k));
 };
 
 /* ── 플러그인 목록 — 카드 격자 ─────────────────────────────────────────── */
 
 function Card({ r }: { r: RegItem }) {
   const t = useI18n((s) => s.t);
+  const pick = usePickText();   // 이름·설명이 언어별 묶음일 수 있다
   const busy = useMgr((m) => m.busy);
   const link = linkOf(r);
   const owner = r.repo ? r.repo.split("/")[0] : r.official ? "PeroPix" : "";
   return (
     <div data-plugin-avail={r.id} style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)", padding: "var(--sp-6) var(--sp-6) var(--sp-5)", border: "1px solid var(--line)", borderRadius: "var(--r-4)", background: "var(--panel)", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)", minWidth: 0 }}>
-        <Monogram name={r.name} official={r.official} />
+        <Monogram name={pick(r.name)} official={r.official} />
         <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
-          <span style={{ fontSize: "var(--text-md)", fontWeight: "var(--w-semi)", color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
+          <span style={{ fontSize: "var(--text-md)", fontWeight: "var(--w-semi)", color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pick(r.name)}</span>
           <span style={mono}>{r.id} · {r.installed ?? r.version}</span>
         </div>
         <span style={{ marginLeft: "auto", flexShrink: 0 }}><Badge kind={r.official ? "official" : "user"} /></span>
       </div>
-      <div style={{ fontSize: "var(--text-2xs)", lineHeight: 1.5, color: "var(--ink-soft)", minHeight: 36, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.description}</div>
+      <div style={{ fontSize: "var(--text-2xs)", lineHeight: 1.5, color: "var(--ink-soft)", minHeight: 36, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{pick(r.description)}</div>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", paddingTop: 2, minWidth: 0 }}>
         {link ? <GitLink href={link} label={owner || t("plugins.github")} /> : <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{owner}</span>}
         <span style={{ marginLeft: "auto", display: "inline-flex", gap: "var(--sp-2)", flexShrink: 0 }}>
@@ -370,7 +372,7 @@ function Card({ r }: { r: RegItem }) {
               <UpdateButton r={r} />
             </>
           ) : (
-            <button data-plugin-install={r.id} disabled={!!busy} onClick={() => void useMgr.getState().install({ id: r.id }, r.name)} style={accentBtn}>
+            <button data-plugin-install={r.id} disabled={!!busy} onClick={() => void useMgr.getState().install({ id: r.id }, pick(r.name))} style={accentBtn}>
               {busy === r.id ? t("plugins.installing") : t("plugins.install")}
             </button>
           )}
@@ -481,6 +483,7 @@ function List({ q, setQ, sub, setSub, installedCount }: { q: string; setQ: (v: s
 const COLS = "36px minmax(0, 1fr) 90px 80px 96px 140px";
 
 function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
+  const pick = usePickText();   // 이름·설명이 언어별 묶음일 수 있다
   const t = useI18n((s) => s.t);
   const busy = useMgr((m) => m.busy);
   const base = usePlugins((s) => s.base);
@@ -488,13 +491,13 @@ function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
   // ★「공식」은 목록이 말한다 — 설치할 때 적어 둔 표식(`origin.official`)을 쓰고, 목록을 받았으면 그것이 정본이다
   const kind: "official" | "user" | "folder" = r?.official || p.origin?.official ? "official" : p.origin ? "user" : "folder";
   const link = linkOf({ id: p.id, homepage: p.homepage, origin: p.origin });
-  const sub = p.error ? `${t("plugins.broken")} — ${p.error}` : p.description || (p.origin?.repo ?? "");
+  const sub = p.error ? `${t("plugins.broken")} — ${p.error}` : pick(p.description) || (p.origin?.repo ?? "");
   return (
     <div data-plugin-row={p.id} data-on={on ? "" : undefined} style={{ display: "grid", gridTemplateColumns: COLS, alignItems: "center", gap: "var(--sp-5)", padding: "var(--sp-5) var(--sp-6)", borderBottom: "1px solid var(--line-soft)", opacity: on ? 1 : 0.6 }}>
-      <Monogram name={p.name} official={kind === "official"} />
+      <Monogram name={pick(p.name)} official={kind === "official"} />
       <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
         <span style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", minWidth: 0 }}>
-          <span style={{ fontSize: "var(--text-md)", fontWeight: "var(--w-semi)", color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+          <span style={{ fontSize: "var(--text-md)", fontWeight: "var(--w-semi)", color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pick(p.name)}</span>
           <span style={mono}>{p.id}</span>
           {link && <GitLink href={link} label={t("plugins.github")} />}
         </span>

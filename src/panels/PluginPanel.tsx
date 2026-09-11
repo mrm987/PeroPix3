@@ -3,7 +3,7 @@ import { useUi } from "../store/ui";
 import { useI18n } from "../i18n";
 import { toast } from "../store/toast";
 import { Icon } from "../components/Icon";
-import { usePlugins, type PluginInfo } from "../lib/pluginHost";
+import { usePlugins, usePickText, type PluginInfo } from "../lib/pluginHost";
 import { linkOf } from "../lib/pluginLink";
 import { openExternal } from "../lib/openExternal";
 import { currentPan, defaultFrame, raiseFrame, putOnCanvas } from "../lib/pluginFrames";
@@ -14,6 +14,7 @@ import { currentPan, defaultFrame, raiseFrame, putOnCanvas } from "../lib/plugin
  *    플러그인도 꺼낼 것이 없으니 안 뜬다. 줄을 캔버스로 끌어 놓아도 된다 (HTML 드래그, `PluginCanvas.onDrop`). */
 
 export function PluginPanel() {
+  const pick = usePickText();   // 플러그인 이름이 언어별 묶음일 수 있다
   const t = useI18n((s) => s.t);
   const items = usePlugins((s) => s.items);
   const hide = useUi((u) => u.view.hide);
@@ -101,7 +102,7 @@ export function PluginPanel() {
                 }}
               >
                 <span style={{ width: 22, height: 22, flexShrink: 0, display: "grid", placeItems: "center", borderRadius: "var(--r-2)", background: official ? "var(--accent-bg)" : "var(--line-soft)", color: official ? "var(--accent-ink)" : "var(--ink-soft)", fontSize: "var(--text-2xs)", fontWeight: "var(--w-semi)" as never }}>
-                  {(p.name.trim()[0] ?? "?").toUpperCase()}
+                  {(pick(p.name).trim()[0] ?? "?").toUpperCase()}
                 </span>
                 <button
                   data-plugin-panel-name={p.id}
@@ -109,7 +110,7 @@ export function PluginPanel() {
                   title={on ? t(fold ? "plugins.onCanvasFolded" : "plugins.onCanvas") : t("plugins.takeOut")}
                   style={{ flex: 1, minWidth: 0, textAlign: "left", fontSize: "var(--text-xs)", fontWeight: "var(--w-semi)", color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
                 >
-                  {p.name}
+                  {pick(p.name)}
                 </button>
                 {link ? (
                   <button data-plugin-panel-link={p.id} title={link} onClick={() => openExternal(link)} style={iconBtn}>{Icon.external}</button>

@@ -53,7 +53,9 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 class Plugin:
     id: str
     dir: Path
-    name: str = ""
+    #: 이름·설명은 **문자열 하나이거나 언어별 묶음**(`{"ko":…,"en":…}`)이다 — 고르는 것은 화면의 몫이다
+    #  (백엔드는 앱 설정의 언어를 모른다). `str | dict` 를 그대로 실어 보낸다.
+    name: str | dict = ""
     version: str = ""
     #: 캔버스 주소 (`/plug/<id>/web/`) — 비면 캔버스가 없다 (버튼만 두는 플러그인)
     web: str = ""
@@ -62,7 +64,7 @@ class Plugin:
     contributes: dict = field(default_factory=dict)
     #: 못 읽었으면 까닭. 비면 정상
     error: str = ""
-    description: str = ""
+    description: str | dict = ""
     #: 꺼진 플러그인 — 폴더는 그대로 두고 **붙이지 않는다** (설정 `plugins_disabled`). 켜고 끄는 것은 다음에 켤 때 적용
     enabled: bool = True
     #: 어디서 왔나 (`_origin.json`: `{source: repo|zip, repo?, zip?, official?}`). 폴더에 직접 넣은 것은 None —
@@ -136,9 +138,9 @@ def _load_one(app: FastAPI, d: Path) -> Plugin:
     p = Plugin(id=d.name, dir=d, origin=_installed_origin(d))
     try:
         m = _read_manifest(d)
-        p.name = str(m.get("name") or d.name)
+        p.name = m.get("name") or d.name
         p.version = str(m.get("version") or "")
-        p.description = str(m.get("description") or "")
+        p.description = m.get("description") or ""
         p.homepage = str(m.get("homepage") or "")
         p.canvas = canvas_spec(m)
         p.contributes = m.get("contributes") if isinstance(m.get("contributes"), dict) else {}
@@ -203,8 +205,8 @@ def _skipped(d: Path) -> Plugin:
     p = Plugin(id=d.name, dir=d, enabled=False, origin=_installed_origin(d))
     m = _manifest_of(d)
     if m:
-        p.name, p.version = str(m.get("name") or d.name), str(m.get("version") or "")
-        p.description, p.homepage = str(m.get("description") or ""), str(m.get("homepage") or "")
+        p.name, p.version = m.get("name") or d.name, str(m.get("version") or "")
+        p.description, p.homepage = m.get("description") or "", str(m.get("homepage") or "")
         p.canvas = canvas_spec(m)
     return p
 
@@ -281,8 +283,8 @@ def _manifest_of(d: Path) -> dict | None:
 
 def _entry(m: dict, pid: str, source: str, **extra) -> dict:
     return {
-        "id": pid, "name": str(m.get("name") or pid), "version": str(m.get("version") or ""),
-        "description": str(m.get("description") or ""), "homepage": str(m.get("homepage") or ""), "source": source, **extra,
+        "id": pid, "name": m.get("name") or pid, "version": str(m.get("version") or ""),
+        "description": m.get("description") or "", "homepage": str(m.get("homepage") or ""), "source": source, **extra,
     }
 
 

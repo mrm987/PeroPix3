@@ -8,7 +8,7 @@ import { pushUndo } from "../lib/undo";
 import { useUi } from "../store/ui";
 import { ask } from "../store/ask";
 import { toast } from "../store/toast";
-import { usePlugins, isOn } from "../lib/pluginHost";
+import { usePlugins, isOn, usePickText } from "../lib/pluginHost";
 import {
   applyMeta,
   applyMetaParams,
@@ -751,11 +751,12 @@ function SendMenu({ busy, items: given, img }: { busy: boolean; items: SendItem[
   const t = useI18n((s) => s.t);
   /* ★플러그인이 「보내기」에 둔 갈래 (`lib/pluginHost`, 메뉴 이름 image.send) — 앱 갈래 뒤에 붙는다.
      그림은 주소와 이름만 넘긴다 (개별 책임: 무엇을 하든 플러그인 몫이다). */
+  const pick = usePickText();   // 갈래 이름표가 언어별 묶음일 수 있다
   const plug = usePlugins((s) => s.menus["image.send"]);
   usePlugins((s) => s.items); // 켜기/끄기가 바뀌면 다시 그린다
   const items: SendItem[] = [
     ...given,
-    ...(img ? (plug ?? []).filter((m) => isOn(m.plugin)).map((m) => ({ mark: `plugin:${m.key}`, label: m.label, run: () => m.onClick(img) })) : []),
+    ...(img ? (plug ?? []).filter((m) => isOn(m.plugin)).map((m) => ({ mark: `plugin:${m.key}`, label: pick(m.label), run: () => m.onClick(img) })) : []),
   ];
   const [open, setOpen] = useState(false);
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);

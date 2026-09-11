@@ -33,9 +33,35 @@ import { t, useI18n } from "../i18n";
 export const BOOT = Date.now();
 export const fresh = (u: string) => `${u.includes("?") ? "&" : "?"}v=${BOOT}`;
 
+/** 매니페스트가 적은 문구 — 문자열 하나이거나 **언어별 묶음**(`{ "ko": "…", "en": "…" }`)이다.
+ *  ★제작자가 한 언어만 적어도 그대로 쓰인다 (사용자 결정 2026-09-11: 대응은 제작자 마음). */
+export type LocText = string | Record<string, string>;
+
+/** 지금 앱 언어로 고른다. 그 언어가 없으면 영어 → 한국어 → 적힌 것 중 아무거나. */
+export function pickText(v: LocText | undefined, locale?: string): string {
+  if (typeof v === "string") return v;
+  if (!v || typeof v !== "object") return "";
+  const l = locale ?? useI18n.getState().locale;
+  return v[l] || v.en || v.ko || Object.values(v)[0] || "";
+}
+
+/** 열쇠에 쓸 이름 — **언어와 무관하게 한 가지**여야 한다 (화면 표식 `data-plugin-button` 이 이것이다).
+ *  언어별 묶음이면 영어를 먼저 쓴다. 문자열 하나면 그대로다. */
+export function keyText(v: LocText | undefined): string {
+  if (typeof v === "string") return v;
+  if (!v || typeof v !== "object") return "";
+  return v.en || v.ko || Object.values(v)[0] || "";
+}
+
+/** 컴포넌트용 — 언어가 바뀌면 다시 그려진다 */
+export function usePickText(): (v: LocText | undefined) => string {
+  const locale = useI18n((s) => s.locale);
+  return (v) => pickText(v, locale);
+}
+
 export type PluginInfo = {
   id: string;
-  name: string;
+  name: LocText;
   version: string;
   /** 캔버스 주소 — 비면 캔버스가 없는 플러그인 (단추만 두는 것) */
   web: string;
@@ -52,7 +78,7 @@ export type PluginInfo = {
   origin: { source: "repo" | "zip"; repo?: string; zip?: string; official?: boolean } | null;
   /** 매니페스트의 `homepage` (선택) */
   homepage: string;
-  description: string;
+  description: LocText;
   /** 캔버스 프레임 규격 — 백엔드가 기본값을 채워 준다 (`plugins.py canvas_spec`) */
   canvas: { width: number; height: number; minWidth: number; minHeight: number; resize: boolean };
 };
@@ -67,16 +93,16 @@ export function isOn(id: string): boolean {
 /** `plugin.json` 의 `contributes.buttons[]` — JS 없이 단추 하나를 두는 길 */
 export type DeclaredButton = {
   slot: string;
-  label: string;
+  label: LocText;
   /** SVG 마크업 (선택) — 앱은 그대로 그린다 */
   icon?: string;
   /** `"openCanvas"` 또는 `{ action, args }` */
   do?: "openCanvas" | { action: string; args?: Record<string, unknown> };
 };
 
-export type PluginButton = { key: string; plugin: string; label: string; icon?: string; onClick: () => void };
+export type PluginButton = { key: string; plugin: string; label: LocText; icon?: string; onClick: () => void };
 export type PluginImage = { url: string; name: string };
-export type PluginMenuItem = { key: string; plugin: string; label: string; onClick: (img: PluginImage) => void };
+export type PluginMenuItem = { key: string; plugin: string; label: LocText; onClick: (img: PluginImage) => void };
 
 /** 자리 이름 — 여기 없는 이름으로 등록하면 아무 데도 안 그려진다 (오류는 아니다) */
 export const SLOTS = ["generate.footer", "nav.right"] as const;
@@ -137,7 +163,7 @@ export const usePlugins = create<S>((set) => ({
           await import(/* @vite-ignore */ `${base}${u}${fresh(u)}`);
         } catch (e) {
           console.error(`[plugins] ${p.id} ext`, e);
-          toast(t("plugins.extFail", { n: p.name, e: String((e as Error)?.message ?? e) }), "warn");
+          toast(t("plugins.extFail", { n: pickText(p.name), e: String((e as Error)?.message ?? e) }), "warn");
         } finally {
           current = null;
         }
@@ -157,11 +183,12 @@ export function hostApi(p: PluginInfo) {
   return {
     plugin: p,
     backend: st().base,
-    addButton(slot: string, b: { label: string; icon?: string; onClick: () => void }) {
-      usePlugins.setState({ buttons: push(st().buttons, slot, { key: `${p.id}:${b.label}`, plugin: p.id, label: b.label, icon: b.icon, onClick: b.onClick }) });
+    addButton(slot: string, b: { label: LocText; icon?: string; onClick: () => void }) {
+      // ★이름표는 **언어별 묶음일 수 있다** — 열쇠는 언어와 무관해야 하므로 `keyText` 가 한 가지로 정한다
+      usePlugins.setState({ buttons: push(st().buttons, slot, { key: `${p.id}:${keyText(b.label)}`, plugin: p.id, label: b.label, icon: b.icon, onClick: b.onClick }) });
     },
-    addMenuItem(menu: string, m: { label: string; onClick: (img: PluginImage) => void }) {
-      usePlugins.setState({ menus: push(st().menus, menu, { key: `${p.id}:${m.label}`, plugin: p.id, label: m.label, onClick: m.onClick }) });
+    addMenuItem(menu: string, m: { label: LocText; onClick: (img: PluginImage) => void }) {
+      usePlugins.setState({ menus: push(st().menus, menu, { key: `${p.id}:${keyText(m.label)}`, plugin: p.id, label: m.label, onClick: m.onClick }) });
     },
     openCanvas(id: string = p.id) {
       // ★캔버스(2026-09-09): 플러그인 모드로 가서 그 플러그인을 캔버스에 꺼내 놓고 맨 앞으로 (관리 화면을 보고 있었으면 캔버스로)
@@ -332,7 +359,7 @@ function installBridge() {
           case "theme": result = a.theme(String(d.name ?? "")); break;
           case "t": result = t(String(d.key ?? d.name ?? ""), d.args as Record<string, string | number> | undefined); break;
           case "locale": result = a.locale(); break;
-          case "plugin": result = { id: p.id, name: p.name, version: p.version, backend: base }; break;
+          case "plugin": result = { id: p.id, name: pickText(p.name), version: p.version, backend: base }; break;
           default: throw new Error(`모르는 호출: ${d.call}`);
         }
         reply({ ok: true, result });

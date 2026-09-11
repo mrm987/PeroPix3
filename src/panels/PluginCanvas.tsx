@@ -3,7 +3,7 @@ import { useUi, type PluginFrame } from "../store/ui";
 import { HEAD, PAN0, defaultFrame, raiseFrame, type Pan } from "../lib/pluginFrames";
 import { useI18n } from "../i18n";
 import { Icon } from "../components/Icon";
-import { fresh, useThemeName, type PluginInfo } from "../lib/pluginHost";
+import { fresh, useThemeName, usePickText, type PluginInfo } from "../lib/pluginHost";
 
 /** 플러그인 캔버스 — 설치된 플러그인을 **자유 배치 프레임**으로 띄운다 (사용자 결정 2026-09-09, 시안 `docs/design/plugins-canvas/`).
  *
@@ -39,6 +39,7 @@ type Drag =
   | { kind: "size"; id: string; sx: number; sy: number; f: PluginFrame; min: { w: number; h: number } };
 
 export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: string }) {
+  const pick = usePickText();   // 플러그인 이름이 언어별 묶음일 수 있다
   const t = useI18n((s) => s.t);
   const hide = useUi((u) => u.view.hide);
   const frames = useUi((u) => u.view.frame);
@@ -281,9 +282,9 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
                 style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", height: HEAD - 1, flexShrink: 0, padding: "0 var(--sp-3) 0 var(--sp-5)", borderBottom: f.fold ? "none" : "1px solid var(--line)", cursor: "grab" }}
               >
                 <span style={{ width: 18, height: 18, display: "grid", placeItems: "center", borderRadius: "var(--r-1)", background: official ? "var(--accent-bg)" : "var(--line-soft)", color: official ? "var(--accent-ink)" : "var(--ink-soft)", fontSize: "var(--text-3xs)", fontWeight: "var(--w-semi)" as never }}>
-                  {(p.name.trim()[0] ?? "?").toUpperCase()}
+                  {(pick(p.name).trim()[0] ?? "?").toUpperCase()}
                 </span>
-                <span style={{ fontSize: "var(--text-xs)", fontWeight: "var(--w-semi)", color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                <span style={{ fontSize: "var(--text-xs)", fontWeight: "var(--w-semi)", color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pick(p.name)}</span>
                 <span style={{ fontSize: "var(--text-3xs)", color: "var(--ink-faint)", fontFamily: "var(--font-mono)" }}>{p.version}</span>
                 {official && <span style={{ padding: "0 6px", fontSize: "var(--text-3xs)", lineHeight: "16px", borderRadius: "var(--r-2)", border: "1px solid var(--mode-plugins)", color: "var(--mode-plugins)" }}>{t("plugins.official")}</span>}
                 <span style={{ marginLeft: "auto", display: "inline-flex", gap: 2 }}>
@@ -315,7 +316,7 @@ export function PluginCanvas({ items, base }: { items: PluginInfo[]; base: strin
                 {base && (
                   <iframe
                     data-plugin-canvas={p.id}
-                    title={p.name}
+                    title={pick(p.name)}
                     // ★기동 표식(`fresh`)은 캐시된 옛 페이지를 막고, 새로고침 횟수는 그 자리에서 다시 읽게 한다
                     src={`${base}${p.web}${fresh(p.web)}${reloads[p.id] ? `&r=${reloads[p.id]}` : ""}`}
                     style={{
