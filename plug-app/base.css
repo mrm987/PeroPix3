@@ -1,3 +1,6 @@
+/* 앱이 번들한 글꼴 — 플러그인 오리진에도 같은 파일을 둔다 (`scripts/sync-plug-fonts.mjs` 가 만든다) */
+@import "./fonts.css";
+
 /* PeroPix 플러그인 공통 스타일 — 한 줄 넣으면 앱과 같은 모양이 된다.
  *
  *     <link rel="stylesheet" href="/plug/_app/base.css">
@@ -38,7 +41,12 @@
   --err: #a8433b;
 
   /* 글꼴 — 앱 번들 글꼴은 못 쓰므로 시스템 글꼴 (위 ★주) */
-  --font-sans: system-ui, "Pretendard Variable", Pretendard, "Segoe UI", "Malgun Gothic", sans-serif;
+  /* ★★**앱과 같은 글꼴이다** (사용자 지시 2026-09-11 *"모두 기본 폰트를 앱 설정에 적용된 폰트랑 동일하게"*).
+     앱이 번들한 것과 같은 파일을 플러그인 오리진에도 두고(`fonts.css`·`fonts/`), 앱 설정에서 고른 글꼴은
+     `peropix.js` 가 켤 때 이 값에 꽂는다 (앱에서 바꾸면 `font` 알림으로 따라온다).
+     여기 적힌 것은 **앱의 기본값(Pretendard)** 이라, JS 가 안 돌아도 같은 모양으로 뜬다.
+     ★`system-ui` 를 앞에 두지 않는다 — 윈도우에서 그것은 Segoe UI 라 한글이 Malgun Gothic 으로 떨어진다. */
+  --font-sans: "Pretendard Variable", Pretendard, "Segoe UI", "Malgun Gothic", sans-serif;
   --font-mono: ui-monospace, Consolas, "D2Coding", monospace;
 
   /* 글자 크기 — 앱과 같은 계단 */

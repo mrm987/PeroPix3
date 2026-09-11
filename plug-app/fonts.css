@@ -1,0 +1,116 @@
+/* 플러그인 페이지용 글꼴 — `scripts/sync-plug-fonts.mjs` 가 만든다. 손으로 고치지 말 것.
+ * 앱이 번들한 것과 **같은 파일**이고, 앱 설정에서 고른 글꼴을 `peropix.js` 가 `--font-sans` 에 꽂는다.
+ * 라이선스: Pretendard·Spoqa Han Sans·Gothic A1·Noto Sans KR 전부 SIL OFL 1.1 (`src/styles/fonts.css` 의 주 참조). */
+
+@font-face {
+  font-family: "Pretendard Variable";
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+  src: url("./fonts/PretendardVariable.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Spoqa Han Sans Neo";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/SpoqaHanSansNeo-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Spoqa Han Sans Neo";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/SpoqaHanSansNeo-Medium.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Spoqa Han Sans Neo";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/SpoqaHanSansNeo-Bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Gothic A1";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/gothic-a1-korean-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Gothic A1";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/gothic-a1-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Gothic A1";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/gothic-a1-korean-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Gothic A1";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/gothic-a1-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Gothic A1";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/gothic-a1-korean-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Gothic A1";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/gothic-a1-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans KR";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/noto-sans-kr-korean-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans KR";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/noto-sans-kr-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans KR";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/noto-sans-kr-korean-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans KR";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/noto-sans-kr-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans KR";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/noto-sans-kr-korean-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans KR";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/noto-sans-kr-latin-700-normal.woff2") format("woff2");
+}

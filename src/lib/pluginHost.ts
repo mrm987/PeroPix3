@@ -243,6 +243,25 @@ function watchTheme() {
   };
   new MutationObserver(tell).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", tell);
+
+  // ★글꼴도 같이 알린다 (사용자 지시 2026-09-11 「플러그인도 앱 설정 글꼴과 같게」). 설정에서 고르면
+  //   `applyFont` 가 `<html>` 의 인라인 스타일에 `--font-sans` 를 꽂으므로 그 변화를 본다.
+  //   캔버스 쪽에서는 `peropix.js` 가 받아 자기 문서의 `--font-sans` 를 갈아 끼운다.
+  let lastFont = fontStack();
+  const tellFont = () => {
+    const now = fontStack();
+    if (now === lastFont || !now) return;
+    lastFont = now;
+    for (const f of document.querySelectorAll<HTMLIFrameElement>("iframe[data-plugin-canvas]")) {
+      f.contentWindow?.postMessage({ type: "peropix", event: "font", font: now }, "*");
+    }
+  };
+  new MutationObserver(tellFont).observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
+}
+
+/** 지금 앱이 쓰는 글꼴 목록 (`--font-sans`) */
+function fontStack(): string {
+  return getComputedStyle(document.documentElement).getPropertyValue("--font-sans").trim();
 }
 
 /** 캔버스(iframe) → 앱: postMessage 창구. 한 번만 단다. */

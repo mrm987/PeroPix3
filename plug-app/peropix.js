@@ -30,6 +30,7 @@
       });
       return;
     }
+    if (d.event === "font") { applyFont(d.font); return; }   // 앱 설정에서 글꼴을 바꿨다
     var slot = pending.get(d.id);
     if (slot) {
       pending.delete(d.id);
@@ -81,4 +82,18 @@
       return function () { themeHandlers = themeHandlers.filter(function (x) { return x !== fn; }); };
     },
   };
+
+  // ── 글꼴을 앱과 같게 (사용자 지시 2026-09-11) ──────────────────────────────
+  // ★플러그인 화면은 다른 오리진의 문서라 앱이 대신 그려 줄 수 없다. 대신 **앱이 번들한 것과 같은 글꼴 파일**이
+  //   플러그인 오리진에도 있고(`base.css` 가 `fonts.css` 를 싣는다), 앱 **설정에서 고른 것**을 여기서 꽂는다.
+  //   앱에서 글꼴을 바꾸면 `font` 알림이 와서 따라온다. 앱 밖(그냥 브라우저)에서는 base.css 의 기본값 그대로다.
+  function applyFont(stack) {
+    if (!stack || typeof stack !== "string") return;
+    document.documentElement.style.setProperty("--font-sans", stack);
+  }
+  if (inApp) {
+    call({ call: "theme", name: "--font-sans" }).then(function (r) {
+      if (r && r.ok) applyFont(r.result);
+    });
+  }
 })();
