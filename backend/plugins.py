@@ -270,7 +270,10 @@ host = _Host()
 #  ★「공식」은 **목록이 말한다** (`official: true`). 목록 저장소가 우리 것이라 그 표식을 믿는다 — 남이 PR 로 넣는 것은
 #    그쪽 CI 가 막는다. 앱은 플러그인 코드를 안 갖고 있으니 「번들이면 공식」이던 옛 기준은 쓸 수 없다.
 #  ★설치·삭제는 **사용자가 누를 때만** 돈다. 자동 갱신은 없다 (`CLAUDE.md` 「상한은 ComfyUI」).
-#  ★★지우지 않는다: 갈아 끼우는 옛 폴더는 `_old-<id>-<시각>` 으로, 지운 것은 OS 휴지통(안 되면 `_removed-…`)으로.
+#  ★★**플러그인 폴더는 그냥 지운다** (사용자 지시 2026-09-12: *"휴지통은 생성 이미지용이지 플러그인은 그냥 날려도 됨.
+#    플러그인은 우리 정규 시스템에 편입하지 말고 격리할 수록 좋음"*). 코드는 언제든 다시 받을 수 있고, 받아 둔 색인도
+#    다시 받으면 된다 — 앱의 안전망(휴지통·백업)에 플러그인을 끼워 넣지 않는다.
+#    갈아 끼우는 동안만 `_old-<id>-<시각>` 으로 물러났다가, 받아 둔 자료를 새 폴더로 옮긴 뒤 지운다.
 #    `_` 접두 폴더는 `load_all` 이 건너뛴다.
 
 def _manifest_of(d: Path) -> dict | None:
@@ -483,17 +486,19 @@ async def install(root: Path, python: str, *, id: str = "", zip: str = "",
         target = root / pid
         old = None
         if target.exists():
-            # ★지우지 않는다 — 옛 것은 `_old-…` 로 물러나고, 사람이 되돌릴 수 있다
+            # ★갈아 끼우는 동안만 옆으로 물러난다 — 끝나면 지운다 (위 ★★주)
             old = root / f"_old-{pid}-{time.strftime('%Y%m%d-%H%M%S')}"
             target.rename(old)
         shutil.move(str(new), str(target))
         # ★★받아 둔 것(`_data/`)은 새 사본으로 옮긴다 — 위 `DATA_FOLDER` 의 ★주 참조.
-        #   옛 폴더는 그대로 남으므로(`_old-…`), 옮기다 실패해도 자료는 그 안에 있다.
         if old and (old / DATA_FOLDER).is_dir() and not (target / DATA_FOLDER).exists():
             try:
                 shutil.move(str(old / DATA_FOLDER), str(target / DATA_FOLDER))
             except OSError as e:  # 쓰고 있는 파일이 있으면 옮겨지지 않는다 — 설치 자체는 성공으로 둔다
-                print(f"[plugins] {pid}: {DATA_FOLDER} 를 옮기지 못했습니다 ({e}) — {old.name} 에 남아 있습니다", flush=True)
+                print(f"[plugins] {pid}: {DATA_FOLDER} 를 옮기지 못했습니다 ({e}) — 플러그인이 다시 받습니다", flush=True)
+        if old:
+            # 실패해도 설치는 성공으로 둔다 — 남으면 `_` 접두라 앱이 건너뛰고, 다음 설치 때 새 이름으로 다시 민다
+            shutil.rmtree(old, ignore_errors=True)
         # ★출처를 남긴다 — 업데이트는 같은 출처에서만 온다 (`registry` 의 `update`)
         (target / ORIGIN_FILE).write_text(json.dumps(origin, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -524,22 +529,19 @@ async def install(root: Path, python: str, *, id: str = "", zip: str = "",
 
 
 def remove(root: Path, pid: str) -> dict:
-    """OS 휴지통으로 보낸다 (안 되면 `_removed-…` 로 이름만 바꾼다). 이미 붙은 라우터는 다음에 켤 때 사라진다."""
-    import time
+    """폴더를 지운다. 이미 붙은 라우터는 다음에 켤 때 사라진다."""
+    import shutil
 
     if not ID_RE.match(pid):
         return {"ok": False, "error": f"id 「{pid}」 가 이상합니다"}
     target = root / pid
     if not target.is_dir():
         return {"ok": False, "error": f"「{pid}」 가 없습니다"}
-    import trash
-
     try:
-        if not trash.send_os([target]):
-            target.rename(root / f"_removed-{pid}-{time.strftime('%Y%m%d-%H%M%S')}")
+        shutil.rmtree(target)
     except PermissionError as e:
         # ★★예외를 던지면 안 된다 (실측 2026-09-08): 던진 500 은 CORS 머리가 없어 화면에 「Failed to fetch」 로만
-        #   보였다. 폴더가 탐색기 등에 열려 있으면 휴지통도 이름 바꾸기도 거부된다 — 까닭을 답으로 돌려준다.
+        #   보였다. 폴더가 탐색기 등에 열려 있으면 지우기가 거부된다 — 까닭을 답으로 돌려준다.
         return {"ok": False, "error": "폴더가 다른 프로그램(탐색기 등)에 열려 있어 지우지 못했습니다. 닫고 다시 시도하세요.",
                 "detail": str(e)}
     except OSError as e:
