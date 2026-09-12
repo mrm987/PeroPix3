@@ -525,9 +525,25 @@ function List({ q, setQ, sub, setSub, installedCount }: { q: string; setQ: (v: s
 
 const COLS = "36px minmax(0, 1fr) 90px 80px 96px 140px";
 
+/** 한 판의 내역 — GitHub 릴리즈를 그대로 옮긴 것 */
+type Rel = { tag: string; name: string; date: string; body: string };
+
 function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
   const pick = usePickText();   // 이름·설명이 언어별 묶음일 수 있다
   const t = useI18n((s) => s.t);
+  /* ★★**판을 누르면 그동안의 내역을 편다** (사용자 지시 2026-09-13). 받아 오는 것은 **누를 때뿐**이다 —
+     GitHub 은 인증 없이 시간당 60번만 받아 주므로, 목록을 그릴 때마다 부르면 금세 막힌다. */
+  const [open, setOpen] = useState(false);
+  const [rels, setRels] = useState<{ items?: Rel[]; error?: string } | null>(null);
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && !rels) {
+      void api<{ ok: boolean; items?: Rel[]; error?: string }>(`/api/plugins/${p.id}/releases`)
+        .then((d) => setRels(d.ok ? { items: d.items ?? [] } : { error: d.error || "" }))
+        .catch((e) => setRels({ error: String((e as Error)?.message ?? e) }));
+    }
+  };
   const busy = useMgr((m) => m.busy);
   const base = usePlugins((s) => s.base);
   const on = p.enabled !== false;
@@ -536,7 +552,8 @@ function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
   const link = linkOf({ id: p.id, homepage: p.homepage, origin: p.origin });
   const sub = p.error ? `${t("plugins.broken")} — ${p.error}` : pick(p.description) || (p.origin?.repo ?? "");
   return (
-    <div data-plugin-row={p.id} data-on={on ? "" : undefined} style={{ display: "grid", gridTemplateColumns: COLS, alignItems: "center", gap: "var(--sp-5)", padding: "var(--sp-5) var(--sp-6)", borderBottom: "1px solid var(--line-soft)", opacity: on ? 1 : 0.6 }}>
+    <div data-plugin-row={p.id} data-on={on ? "" : undefined} style={{ borderBottom: "1px solid var(--line-soft)", opacity: on ? 1 : 0.6 }}>
+    <div style={{ display: "grid", gridTemplateColumns: COLS, alignItems: "center", gap: "var(--sp-5)", padding: "var(--sp-5) var(--sp-6)" }}>
       <Monogram name={pick(p.name)} official={kind === "official"} />
       <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
         <span style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", minWidth: 0 }}>
@@ -547,10 +564,16 @@ function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
         <span style={{ fontSize: "var(--text-2xs)", color: p.error ? "var(--err-ink)" : "var(--ink-dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>
       </div>
       <span style={{ width: "max-content" }}><Badge kind={kind} /></span>
-      <span style={{ display: "inline-flex", flexDirection: "column", gap: 1, ...mono, color: "var(--ink-soft)" }}>
+      <button
+        data-plugin-version={p.id}
+        data-tip={t("plugins.history")}
+        onClick={toggle}
+        style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 1, ...mono,
+                 color: open ? "var(--accent-ink)" : "var(--ink-soft)", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+      >
         {p.version}
         {r?.update && <span data-plugin-next={r.version} style={{ fontSize: "var(--text-3xs)", color: "var(--accent-ink)" }}>→ {r.version}</span>}
-      </span>
+      </button>
       <button
         data-plugin-toggle={p.id}
         data-on={on ? "" : undefined}
@@ -576,6 +599,32 @@ function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
           <span style={{ display: "grid", placeItems: "center", width: 14, height: 14 }}>{Icon.trash}</span>
         </button>
       </span>
+    </div>
+    {open && (
+      <div data-plugin-history={p.id} style={{ padding: "0 var(--sp-6) var(--sp-5)", display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+        {rels === null ? (
+          <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}><Spin />{t("plugins.historyLoading")}</span>
+        ) : rels.error ? (
+          <span style={{ fontSize: "var(--text-2xs)", color: "var(--err-ink)" }}>{rels.error}</span>
+        ) : !rels.items?.length ? (
+          <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{t("plugins.historyNone")}</span>
+        ) : (
+          rels.items.map((x) => (
+            <div key={x.tag} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ display: "flex", alignItems: "baseline", gap: "var(--sp-3)" }}>
+                <b style={{ fontSize: "var(--text-xs)", color: "var(--ink)" }}>{x.name || x.tag}</b>
+                <span style={{ ...mono, color: "var(--ink-faint)" }}>{x.tag}</span>
+                <span style={{ fontSize: "var(--text-3xs)", color: "var(--ink-faint)" }}>{x.date}</span>
+              </span>
+              {/* ★적어 둔 그대로 보여 준다 — 줄바꿈만 살리고 꾸미지 않는다 (형식은 제작자 자유다) */}
+              {x.body && (
+                <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-soft)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{x.body}</span>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    )}
     </div>
   );
 }

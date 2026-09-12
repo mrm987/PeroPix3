@@ -3400,6 +3400,12 @@ async def plugins_install(body: PluginInstall):
     return r
 
 
+@app.get("/api/plugins/{pid}/releases")
+async def plugins_releases(pid: str):
+    """버전별 내역 — 관리 화면에서 판을 눌렀을 때만 부른다 (GitHub 레이트 리밋을 아낀다)."""
+    return await plugins_mod.releases(PLUGINS_DIR, pid)
+
+
 @app.delete("/api/plugins/{pid}")
 async def plugins_remove(pid: str):
     r = plugins_mod.remove(PLUGINS_DIR, pid)
