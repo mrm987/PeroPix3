@@ -260,6 +260,8 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
         justifyContent: "center",
         gap: "var(--sp-2)",
         width: "100%",
+        flex: 1,          /* ★플러그인이 옆자리를 쓰면 둘이 폭을 나눈다 (`generate.primary`) */
+        minWidth: 0,
       }}
     >
       {/* ★★아이콘을 안 붙인다 (사용자 지시 2026-08-19) — 이름이 이미 적혀 있고, 접었을 때는
@@ -296,11 +298,21 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
     </button>
   );
 
+  /** 생성 버튼 줄 — 왼쪽은 플러그인 자리다 (`generate.primary`).
+   *  ★★비어 있으면 아무것도 안 그리므로 생성 버튼이 줄을 다 쓴다 — 플러그인이 없을 때 화면이 달라지지 않는다.
+   *  ★접힌 레일은 폭이 좁아 나눠 쓰면 둘 다 못 읽는다 — 거기서는 위아래로 쌓는다. */
+  const genRow = (
+    <div style={{ display: "flex", flexDirection: compact ? "column" : "row", gap: "var(--sp-2)", alignItems: "stretch" }}>
+      <PluginSlot slot="generate.primary" compact={compact} primary />
+      {genBtn}
+    </div>
+  );
+
   // 접힌 레일 — 버튼만 남긴다. 여기서도 누를 수 있어야 접어 둔 채 계속 만든다
   if (compact) {
     return (
       <div style={{ padding: "var(--sp-2)", borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 4 }}>
-        {genBtn}
+        {genRow}
         {/* ★플러그인이 둔 단추 — 없으면 아무것도 안 그린다 (`lib/pluginHost`, 자리 이름 generate.footer) */}
         <PluginSlot slot="generate.footer" compact={compact} />
         {/* ★★`CQ` 는 **늘 있다** (사용자 지시 2026-08-19, v2 `collapsedClearQBtn`) —
@@ -509,7 +521,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
         </div>
       </div>
 
-      {genBtn}
+      {genRow}
         {/* ★플러그인이 둔 단추 — 없으면 아무것도 안 그린다 (`lib/pluginHost`, 자리 이름 generate.footer) */}
         <PluginSlot slot="generate.footer" compact={compact} />
 
