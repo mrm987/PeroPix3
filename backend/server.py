@@ -307,6 +307,8 @@ async def _log_errors(request, call_next):
 APP_KEY = os.environ.get("PEROPIX_KEY", "").strip()
 #: 잠겼을 때 모든 주소 앞에 붙는 머리. 화면은 `backend_url` 에서 이 값을 통째로 받는다.
 KEY_PREFIX = f"/k/{APP_KEY}" if APP_KEY else ""
+#: 열쇠 없이 여는 단 하나의 자리 — 플러그인 공통 자산 (`KeyGate` 의 ★★주 참조)
+SHARED_OPEN = "/plug/_app/"
 
 
 class KeyGate:
@@ -346,6 +348,15 @@ class KeyGate:
             return await self.app(scope, receive, send)
 
         path = scope.get("path", "")
+        # ★★**공통 자산은 열쇠 없이 연다** (사용자 결정 2026-09-12). 플러그인 화면이 `/plug/_app/base.css`
+        #   로 적는 것은 누가 봐도 자연스러운 표기인데, 배포본에서는 열쇠 앞머리를 건너뛰어 403 이 되고
+        #   **스타일이 통째로 안 실린다** — 개발 중에는 문이 안 잠겨 있어 제작자가 밟기 전에는 모른다.
+        #   ★여는 것은 우리가 플러그인에게 주려고 만든 **정적 파일**뿐이다 (base.css·peropix.js·글꼴).
+        #     비밀이 없고 저장소에도 공개되어 있으며, `peropix.js` 는 부모 창에 postMessage 를 보낼 뿐
+        #     백엔드를 부르지 않는다. 플러그인 자기 파일(`/plug/<id>/…`)과 모든 API 는 그대로 잠긴다 —
+        #     열쇠가 막으려던 것(웹페이지가 127.0.0.1 을 두드려 앱을 조작하는 것)은 그대로다.
+        if scope["type"] == "http" and path.startswith(SHARED_OPEN):
+            return await self.app(scope, receive, send)
         for i, pref in enumerate(self._prefixes()):
             if path == pref or path.startswith(pref + "/"):
                 rest = path[len(pref):] or "/"
