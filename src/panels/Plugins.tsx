@@ -39,6 +39,8 @@ type RegItem = {
   installed: string | null;
   /** 목록이 「공식」이라고 말한 것인가 (`index.json` 의 `official: true`). 목록 저장소만 붙일 수 있는 표식이다 */
   official: boolean;
+  /** 판마다 한 줄 — 목록이 적어 준 것 (`index.json` 의 `changes`). 판을 누르면 이것이 펼쳐진다 */
+  changes?: { tag: string; date: string; note: LocText }[];
   /** 깔린 것보다 높은 판이 같은 출처에 있다 */
   update: boolean;
 };
@@ -525,25 +527,17 @@ function List({ q, setQ, sub, setSub, installedCount }: { q: string; setQ: (v: s
 
 const COLS = "36px minmax(0, 1fr) 90px 80px 96px 140px";
 
-/** 한 판의 내역 — GitHub 릴리즈를 그대로 옮긴 것 */
-type Rel = { tag: string; name: string; date: string; body: string };
-
 function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
-  const pick = usePickText();   // 이름·설명이 언어별 묶음일 수 있다
+  const pick = usePickText();   // 이름·설명·내역 한 줄이 언어별 묶음일 수 있다
   const t = useI18n((s) => s.t);
-  /* ★★**판을 누르면 그동안의 내역을 편다** (사용자 지시 2026-09-13). 받아 오는 것은 **누를 때뿐**이다 —
-     GitHub 은 인증 없이 시간당 60번만 받아 주므로, 목록을 그릴 때마다 부르면 금세 막힌다. */
+  /* ★★**판을 누르면 그동안의 내역을 편다** (사용자 지시 2026-09-13). 내역은 **목록이 적어 준 것**이다
+     (`index.json` 의 `changes`) — 제작자가 판을 올리는 PR 에서 줄 하나를 함께 적는다. 그래서 여기서
+     GitHub 을 따로 부르지 않고, 이미 받아 둔 목록을 그대로 편다. 목록에 없는 플러그인은 비어 있다. */
   const [open, setOpen] = useState(false);
-  const [rels, setRels] = useState<{ items?: Rel[]; error?: string } | null>(null);
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    if (next && !rels) {
-      void api<{ ok: boolean; items?: Rel[]; error?: string }>(`/api/plugins/${p.id}/releases`)
-        .then((d) => setRels(d.ok ? { items: d.items ?? [] } : { error: d.error || "" }))
-        .catch((e) => setRels({ error: String((e as Error)?.message ?? e) }));
-    }
-  };
+  const toggle = () => setOpen((v) => !v);
+  // ★목록이 **아직 안 온 것**과 「적어 둔 내역이 없다」를 가른다 — 관리 화면을 열자마자 누르면 전자다
+  const regLoaded = useMgr((m) => m.reg) !== null;
+  const changes = r?.changes ?? [];
   const busy = useMgr((m) => m.busy);
   const base = usePlugins((s) => s.base);
   const on = p.enabled !== false;
@@ -601,26 +595,18 @@ function Row({ p, r }: { p: PluginInfo; r: RegItem | undefined }) {
       </span>
     </div>
     {open && (
-      <div data-plugin-history={p.id} style={{ padding: "0 var(--sp-6) var(--sp-5)", display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
-        {rels === null ? (
+      <div data-plugin-history={p.id} style={{ padding: "0 var(--sp-6) var(--sp-5)", display: "flex", flexDirection: "column", gap: "var(--sp-3)" }}>
+        {!regLoaded ? (
           <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}><Spin />{t("plugins.historyLoading")}</span>
-        ) : rels.error ? (
-          <span style={{ fontSize: "var(--text-2xs)", color: "var(--err-ink)" }}>{rels.error}</span>
-        ) : !rels.items?.length ? (
+        ) : !changes.length ? (
           <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{t("plugins.historyNone")}</span>
         ) : (
-          rels.items.map((x) => (
-            <div key={x.tag} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <span style={{ display: "flex", alignItems: "baseline", gap: "var(--sp-3)" }}>
-                <b style={{ fontSize: "var(--text-xs)", color: "var(--ink)" }}>{x.name || x.tag}</b>
-                <span style={{ ...mono, color: "var(--ink-faint)" }}>{x.tag}</span>
-                <span style={{ fontSize: "var(--text-3xs)", color: "var(--ink-faint)" }}>{x.date}</span>
-              </span>
-              {/* ★적어 둔 그대로 보여 준다 — 줄바꿈만 살리고 꾸미지 않는다 (형식은 제작자 자유다) */}
-              {x.body && (
-                <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-soft)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{x.body}</span>
-              )}
-            </div>
+          changes.map((x) => (
+            <span key={x.tag} style={{ display: "flex", alignItems: "baseline", gap: "var(--sp-3)", minWidth: 0 }}>
+              <span style={{ ...mono, color: p.version && x.tag.replace(/^v/, "") === p.version ? "var(--accent-ink)" : "var(--ink-faint)", whiteSpace: "nowrap" }}>{x.tag}</span>
+              {x.date && <span style={{ fontSize: "var(--text-3xs)", color: "var(--ink-faint)", whiteSpace: "nowrap" }}>{x.date}</span>}
+              <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-soft)", minWidth: 0 }}>{pick(x.note)}</span>
+            </span>
           ))
         )}
       </div>

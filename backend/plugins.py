@@ -361,10 +361,41 @@ def _manifest_of(d: Path) -> dict | None:
         return None
 
 
+#: 버전별 한 줄의 길이 상한 — 한 언어당. 목록 화면 한 줄에 담기는 만큼이다 (릴리즈 노트를 옮겨 적는 자리가 아니다)
+NOTE_MAX = 120
+#: 한 플러그인이 담을 수 있는 판 수 — 목록 파일이 끝없이 불어나지 않게
+CHANGES_MAX = 30
+
+
+def _changes(v) -> list[dict]:
+    """목록이 적어 준 버전별 한 줄 — `[{tag, date?, note}]`.
+
+    ★★**제작자가 PR 로 함께 적는다** (사용자 결정 2026-09-13). 판을 올릴 때 `tag` 를 바꾸는 김에 줄 하나를
+      더하는 것이라 부담이 적고, 앱은 이미 받아 온 목록에서 읽으므로 GitHub 을 다시 부르지 않는다.
+    ★`note` 는 문자열 하나이거나 **언어별 묶음**이다 (`name`·`description` 과 같다). 안 적은 언어는
+      화면이 적힌 다른 언어로 보여 준다 (`pickText`).
+    ★긴 것은 자른다 — 막는 대신 담기는 만큼만 쓴다. 형식 오류로 목록이 통째로 안 읽히면 더 나쁘다."""
+    out: list[dict] = []
+    for x in (v if isinstance(v, list) else [])[:CHANGES_MAX]:
+        if not isinstance(x, dict):
+            continue
+        tag = str(x.get("tag") or "")
+        if not tag or not TAG_RE.match(tag):
+            continue
+        note = x.get("note") or ""
+        if isinstance(note, dict):
+            note = {str(k): str(val)[:NOTE_MAX] for k, val in note.items() if val}
+        else:
+            note = str(note)[:NOTE_MAX]
+        out.append({"tag": tag, "date": str(x.get("date") or "")[:10], "note": note})
+    return out
+
+
 def _entry(m: dict, pid: str, source: str, **extra) -> dict:
     return {
         "id": pid, "name": m.get("name") or pid, "version": str(m.get("version") or ""),
-        "description": m.get("description") or "", "homepage": str(m.get("homepage") or ""), "source": source, **extra,
+        "description": m.get("description") or "", "homepage": str(m.get("homepage") or ""), "source": source,
+        "changes": _changes(m.get("changes")), **extra,
     }
 
 
@@ -435,8 +466,6 @@ def _vt(v: str) -> tuple[int, ...]:
 #  폴더에 직접 넣은 것은 출처가 없으니 업데이트 제안이 없다. 목록 안의 id 중복은 목록 저장소의 CI 가 거른다.
 #  ★`_origin.json` 에는 대조용 열쇠(`source`·`repo`·`zip`) 말고 `official` 표식도 함께 적는다 — 인터넷이 없어도
 #    「공식」 딱지가 남게. 대조는 `_origin_key()` 로 열쇠 부분만 본다.
-#: GitHub API 는 User-Agent 를 요구한다 (없으면 403 이 온다)
-UA = {"Accept": "application/vnd.github+json", "User-Agent": "PeroPix3-App"}
 ORIGIN_FILE = "_origin.json"
 #: ★★**우리가 깔아 준 파일 목록** — 업데이트는 이 목록만 기준으로 돈다 (사용자 결정 2026-09-12).
 #  `{"files": {상대경로: sha256}}` 꼴이다. 새 판과 견주어 **바뀐 것만 덮고**, 옛 목록에 있었는데 새 판에
@@ -495,52 +524,6 @@ async def registry(root: Path, url: str) -> dict:
         #: 깔린 것보다 높은 판이 **같은 출처**에 있다 — 화면은 「설치된 플러그인」 줄의 업데이트 단추로 보여 준다
         it["update"] = bool(it["installed"]) and origin == _origin_of(it) and _vt(it["version"]) > _vt(it["installed"] or "")
     return {"items": sorted(items, key=lambda x: x["id"]), "remoteError": remote_error}
-
-
-#: 어느 저장소의 릴리즈를 볼까 — 설치할 때 적어 둔 출처가 먼저고, 없으면 매니페스트의 homepage 로 짐작한다
-def _repo_of(d: Path) -> str:
-    o = _installed_origin(d) or {}
-    if o.get("repo"):
-        return str(o["repo"])
-    m = _manifest_of(d) or {}
-    home = str(m.get("homepage") or "")
-    hit = re.search(r"github\.com/([^/]+/[^/#?]+)", home)
-    return hit.group(1).removesuffix(".git") if hit else ""
-
-
-async def releases(root: Path, pid: str) -> dict:
-    """그 플러그인의 **버전별 내역** — GitHub 릴리즈를 그대로 옮긴다.
-
-    ★★**제작자에게 규칙을 요구하지 않는다** (사용자 결정 2026-09-13). 릴리즈는 GitHub 이 원래 주는
-      자리이고, 배포에 쓰는 태그에 설명을 붙여 둔 것뿐이다 — 안 적었으면 그냥 비어 있다.
-      (배포는 태그 압축본으로 도므로 릴리즈가 없어도 설치·업데이트는 멀쩡하다.)
-    ★못 받아도 예외를 올리지 않는다. 화면이 까닭을 그 자리에 적는다."""
-    import httpx
-
-    if not ID_RE.match(pid):
-        return {"ok": False, "error": f"id 「{pid}」 가 이상합니다"}
-    d = root / pid
-    if not d.is_dir():
-        return {"ok": False, "error": f"「{pid}」 가 없습니다"}
-    repo = _repo_of(d)
-    if not repo:
-        return {"ok": True, "repo": "", "items": []}
-    try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as c:
-            r = await c.get(f"https://api.github.com/repos/{repo}/releases",
-                            headers=UA, params={"per_page": 30})
-            if r.status_code != 200:
-                return {"ok": False, "repo": repo, "error": f"GitHub {r.status_code}"}
-            data = r.json()
-    except Exception as e:  # noqa: BLE001 — 인터넷이 없어도 관리 화면은 떠 있어야 한다
-        return {"ok": False, "repo": repo, "error": f"{type(e).__name__}: {e}"}
-    items = [{
-        "tag": str(x.get("tag_name") or ""),
-        "name": str(x.get("name") or ""),
-        "date": str(x.get("published_at") or x.get("created_at") or "")[:10],
-        "body": str(x.get("body") or ""),
-    } for x in (data if isinstance(data, list) else []) if not x.get("draft")]
-    return {"ok": True, "repo": repo, "items": items}
 
 
 async def install(root: Path, python: str, *, id: str = "", zip: str = "",
