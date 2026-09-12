@@ -21,6 +21,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import re
@@ -232,8 +233,7 @@ def load_all(app: FastAPI, root: Path, disabled: set[str] | None = None) -> list
         if d.is_dir() and d.name.startswith("_old-"):
             # ★★갈아 끼울 때 못 지운 잔재를 여기서 치운다 (2026-09-12 실측: 색인 npy 를 mmap 으로 열고 있으면
             #   그 파일만 지워지지 않아 폴더가 남는다). 업데이트 뒤에는 앱을 다시 켜야 하므로, 그때는 잠금이 풀려 있다.
-            import shutil as _sh
-            _sh.rmtree(d, ignore_errors=True)
+            shutil.rmtree(d, ignore_errors=True)
             continue
         if not d.is_dir() or d.name.startswith((".", "_")):
             continue
@@ -281,6 +281,77 @@ host = _Host()
 #    다시 받으면 된다 — 앱의 안전망(휴지통·백업)에 플러그인을 끼워 넣지 않는다.
 #    갈아 끼우는 동안만 `_old-<id>-<시각>` 으로 물러났다가, 받아 둔 자료를 새 폴더로 옮긴 뒤 지운다.
 #    `_` 접두 폴더는 `load_all` 이 건너뛴다.
+
+def _sha(p: Path) -> str:
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+def _tree(root: Path) -> dict[str, str]:
+    """폴더 안 모든 파일 → {상대경로: sha256}"""
+    return {p.relative_to(root).as_posix(): _sha(p) for p in root.rglob("*") if p.is_file()}
+
+
+def _installed_files(d: Path) -> dict[str, str]:
+    """우리가 깔아 준 파일 목록 — 없으면 빈 표 (목록이 없던 판에서 올라온 경우)"""
+    try:
+        return dict(json.loads((d / FILES_LIST).read_text(encoding="utf-8")).get("files") or {})
+    except Exception:
+        return {}
+
+
+def _sync_tree(target: Path, new: Path, known: dict[str, str]) -> dict:
+    """`target` 을 `new` 에 맞춘다 — 우리가 깔아 준 것(`known`)만 손댄다.
+
+    두 번 돌려도 결과가 같다 (실측 2026-09-12). 그래서 중간에 막혀도 다시 부르면 이어서 맞춘다."""
+    want = _tree(new)
+    wrote: list[str] = []
+    removed: list[str] = []
+    failed: list[dict] = []
+
+    for rel, h in sorted(want.items()):
+        dst = target / rel
+        if dst.is_file() and known.get(rel) == h and _sha(dst) == h:
+            continue                                  # 안 바뀐 것은 건드리지 않는다 (잠긴 파일을 건드릴 일도 준다)
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(new / rel, dst)
+            wrote.append(rel)
+        except OSError as e:
+            failed.append({"path": rel, "why": f"{type(e).__name__}: {e}"})
+
+    for rel in sorted(known):
+        if rel in want or rel in (FILES_LIST, ORIGIN_FILE):
+            continue
+        dst = target / rel
+        if not dst.exists():
+            continue
+        try:
+            dst.unlink()
+            removed.append(rel)
+        except OSError as e:
+            failed.append({"path": rel, "why": f"{type(e).__name__}: {e}"})
+
+    # 비어 버린 폴더는 치운다 (깊은 것부터)
+    for p in sorted((q for q in target.rglob("*") if q.is_dir()), key=lambda q: -len(q.parts)):
+        if p.name in ("_lib",):
+            continue
+        try:
+            next(p.iterdir())
+        except StopIteration:
+            try:
+                p.rmdir()
+            except OSError:
+                pass
+
+    # 목록은 **지금 자리에 있는 실제 해시**로 적는다 — 일부가 막혀도 다음 시도가 정확해진다
+    now = {rel: _sha(target / rel) for rel in sorted(set(want) | set(known)) if (target / rel).is_file()}
+    (target / FILES_LIST).write_text(json.dumps({"files": now}, ensure_ascii=False), encoding="utf-8")
+    return {"wrote": wrote, "removed": removed, "failed": failed}
+
 
 def _manifest_of(d: Path) -> dict | None:
     try:
@@ -365,14 +436,13 @@ def _vt(v: str) -> tuple[int, ...]:
 #  ★`_origin.json` 에는 대조용 열쇠(`source`·`repo`·`zip`) 말고 `official` 표식도 함께 적는다 — 인터넷이 없어도
 #    「공식」 딱지가 남게. 대조는 `_origin_key()` 로 열쇠 부분만 본다.
 ORIGIN_FILE = "_origin.json"
-#: ★★**업데이트해도 남는 자리** — 플러그인이 받아 둔 것(색인·모델·캐시)을 여기 둔다 (사용자 결정 2026-09-10:
-#  *"플러그인 폴더에 업데이트를 해도 보존할것을 담는 폴더를 따로 만들고 표준 규격으로 안내"*).
-#  판을 갈아 끼울 때 `install` 이 옛 사본의 이 폴더만 새 사본으로 옮긴다 — 그래서 플러그인은 **자기 폴더를
-#  벗어나지 않으면서** 큰 자료를 다시 받지 않는다 (태그 굴리기의 색인이 960MB 다).
-#  ★`_lib`(pip 이 깐 의존성)은 옮기지 않는다 — 새 판의 `requirements.txt` 로 다시 깔아야 맞다.
-#  ★안을 들여다보지 않는다. 구조는 플러그인 몫이고, 배포 꾸러미에는 담기지 않는다 (`_` 접두).
-#  규격 안내의 기준은 목록 저장소 README 다.
-DATA_FOLDER = "_data"
+#: ★★**우리가 깔아 준 파일 목록** — 업데이트는 이 목록만 기준으로 돈다 (사용자 결정 2026-09-12).
+#  `{"files": {상대경로: sha256}}` 꼴이다. 새 판과 견주어 **바뀐 것만 덮고**, 옛 목록에 있었는데 새 판에
+#  없는 것은 지운다. **목록에 없는 파일은 건드리지 않는다** — 플러그인이 받아 둔 색인·모델·캐시가 그것이다.
+#  ★그래서 「받아 둘 것은 여기 두라」는 폴더 규격이 필요 없다. 이름이 무엇이든 우리가 안 깔았으면 안 건드린다
+#    (옛 `_data` 규격을 이것으로 갈음했다. ComfyUI 가 `.gitignore` 로 하는 일과 같은 자리다).
+#  ★`_lib`(pip 이 깐 의존성)만 예외다 — 그건 우리가 깐 것이라 우리가 갈아 끼운다 (`requirements.txt` 가 바뀔 때만).
+FILES_LIST = "_files.json"
 
 
 def _origin_of(entry: dict) -> dict:
@@ -430,7 +500,6 @@ async def install(root: Path, python: str, *, id: str = "", zip: str = "",
     """zip 을 받아 `plugins/<id>/` 에 놓고, `requirements.txt` 가 있으면 `_lib/` 에 pip 으로 넣는다.
     붙는 것은 다음에 켤 때다 (라우터는 켤 때 mount 한다)."""
     import asyncio
-    import hashlib
     import shutil
     import subprocess
     import time
@@ -490,32 +559,36 @@ async def install(root: Path, python: str, *, id: str = "", zip: str = "",
         if id and pid != id:
             return {"ok": False, "error": f"꾸러미의 id 「{pid}」 가 「{id}」 와 다릅니다"}
         target = root / pid
-        old = None
-        if target.exists():
-            # ★갈아 끼우는 동안만 옆으로 물러난다 — 끝나면 지운다 (위 ★★주)
-            old = root / f"_old-{pid}-{time.strftime('%Y%m%d-%H%M%S')}"
-            target.rename(old)
-        shutil.move(str(new), str(target))
-        # ★★받아 둔 것(`_data/`)은 새 사본으로 옮긴다 — 위 `DATA_FOLDER` 의 ★주 참조.
-        if old and (old / DATA_FOLDER).is_dir() and not (target / DATA_FOLDER).exists():
-            try:
-                shutil.move(str(old / DATA_FOLDER), str(target / DATA_FOLDER))
-            except OSError as e:
-                # ★★**복사는 끝나 있을 수 있다** (2026-09-12 실측: 색인 npy 를 mmap 으로 열고 있으면 폴더째
-                #   이름 바꾸기가 막혀 `shutil.move` 가 복사로 돌아가는데, 복사를 마치고 **옛 자리를 지우는
-                #   단계**에서 걸린다). 그러니 예외만 보고 「못 옮겼다」고 적으면 사실과 다르다 — 새 자리를 본다.
-                moved = (target / DATA_FOLDER).is_dir() and any((target / DATA_FOLDER).iterdir())
-                print(f"[plugins] {pid}: {DATA_FOLDER} — " + ("새 사본으로 옮겼습니다 (옛 자리를 다 지우지 못했습니다: "
-                      f"{e})" if moved else f"옮기지 못했습니다 ({e}) — 플러그인이 다시 받습니다"), flush=True)
-        if old:
-            # 실패해도 설치는 성공으로 둔다 — 남으면 `_` 접두라 앱이 건너뛰고, 다음 설치 때 새 이름으로 다시 민다
-            shutil.rmtree(old, ignore_errors=True)
+        # ★★**폴더를 갈아 끼우지 않고 파일만 맞춘다** (사용자 결정 2026-09-12). 전에는 옛 폴더를 통째로 밀어내고
+        #   새 것을 놓았는데, 그러면 플러그인이 받아 둔 색인까지 딸려 나가 되옮겨야 했고 — 그 색인은 mmap 으로
+        #   열려 있어 옮기다 걸렸다. 이제 **우리가 깔아 준 파일만** 손대므로 받아 둔 것은 제자리에 그대로 있다.
+        known = _installed_files(target) if target.exists() else {}
+        prev_req = known.get("requirements.txt")
+        if not target.exists():
+            shutil.move(str(new), str(target))
+            (target / FILES_LIST).write_text(json.dumps({"files": _tree(target)}, ensure_ascii=False), encoding="utf-8")
+        else:
+            r0 = _sync_tree(target, new, known)
+            if r0["failed"]:
+                # ★두 번 돌려도 같은 결과라(실측) 다시 부르면 이어서 맞춘다 — 그래서 「다시 켜고 한 번 더」가 답이 된다
+                return {"ok": False, "id": pid, "error": "일부 파일을 바꾸지 못했습니다 (앱을 다시 켜고 한 번 더 해 보세요)",
+                        "files": r0["failed"][:20]}
+            print(f"[plugins] {pid}: 바꾼 파일 {len(r0['wrote'])} · 지운 파일 {len(r0['removed'])}", flush=True)
         # ★출처를 남긴다 — 업데이트는 같은 출처에서만 온다 (`registry` 의 `update`)
         (target / ORIGIN_FILE).write_text(json.dumps(origin, ensure_ascii=False, indent=2), encoding="utf-8")
 
         pip_log = ""
         req = target / "requirements.txt"
-        if req.is_file():
+        lib = target / "_lib"
+        # ★★`_lib` 는 **바뀔 때만** 갈아 끼운다. 쓰는 중인 확장 모듈(.pyd)은 덮지도 지우지도 못하지만
+        #   **폴더 이름 바꾸기는 된다** (2026-09-12 실측) — 그래서 옆으로 밀고 새로 깐다. 민 것은 다음에 앱을
+        #   켤 때 `load_all` 이 치운다.
+        if req.is_file() and (prev_req != _sha(req) or not lib.is_dir()):
+            if lib.is_dir():
+                try:
+                    lib.rename(root / f"_old-{pid}-lib-{time.strftime('%Y%m%d-%H%M%S')}")
+                except OSError as e:
+                    print(f"[plugins] {pid}: _lib 를 밀지 못해 그 자리에 덮습니다 ({e})", flush=True)
             # ★★pip 은 **스레드에서** 띄운다 (`to_thread` + `subprocess.run`). 예전에는 `create_subprocess_exec` 였는데,
             #   uvicorn 은 윈도우에서 **리로드가 켜지면** SelectorEventLoop 를 쓰고(`uvicorn/loops/asyncio.py` 의
             #   `use_subprocess`) 그 루프에는 자식 프로세스 지원이 없어 `NotImplementedError` 로 떨어졌다 —
@@ -540,8 +613,9 @@ async def install(root: Path, python: str, *, id: str = "", zip: str = "",
 
 
 def remove(root: Path, pid: str) -> dict:
-    """폴더를 지운다. 이미 붙은 라우터는 다음에 켤 때 사라진다."""
-    import shutil
+    """플러그인 폴더를 **통째로** 지운다 — 받아 둔 색인도 함께다 (사용자 결정 2026-09-12: 남는 것 없게).
+    이미 붙은 라우터는 다음에 켤 때 사라진다."""
+    import time
 
     if not ID_RE.match(pid):
         return {"ok": False, "error": f"id 「{pid}」 가 이상합니다"}
@@ -550,11 +624,15 @@ def remove(root: Path, pid: str) -> dict:
         return {"ok": False, "error": f"「{pid}」 가 없습니다"}
     try:
         shutil.rmtree(target)
-    except PermissionError as e:
-        # ★★예외를 던지면 안 된다 (실측 2026-09-08): 던진 500 은 CORS 머리가 없어 화면에 「Failed to fetch」 로만
-        #   보였다. 폴더가 탐색기 등에 열려 있으면 지우기가 거부된다 — 까닭을 답으로 돌려준다.
-        return {"ok": False, "error": "폴더가 다른 프로그램(탐색기 등)에 열려 있어 지우지 못했습니다. 닫고 다시 시도하세요.",
-                "detail": str(e)}
-    except OSError as e:
-        return {"ok": False, "error": f"지우지 못했습니다: {type(e).__name__}: {e}"}
+    except OSError as first:
+        # ★★쓰는 중인 파일이 있으면 지워지지 않는다 (색인은 mmap 으로, 의존성은 .pyd 로 열려 있다).
+        #   그래도 **폴더 이름 바꾸기는 된다** (2026-09-12 실측) — 옆으로 밀어 두면 다음에 앱을 켤 때
+        #   `load_all` 이 치운다. 사용자에게는 지운 것으로 보이고, 실제로도 남지 않는다.
+        try:
+            target.rename(root / f"_old-{pid}-{time.strftime('%Y%m%d-%H%M%S')}")
+        except OSError as e:
+            # ★★예외를 던지면 안 된다 (실측 2026-09-08): 던진 500 은 CORS 머리가 없어 화면에 「Failed to fetch」 로만
+            #   보였다. 폴더가 탐색기 등에 열려 있으면 이름 바꾸기도 거부된다 — 까닭을 답으로 돌려준다.
+            return {"ok": False, "error": "폴더가 다른 프로그램(탐색기 등)에 열려 있어 지우지 못했습니다. 닫고 다시 시도하세요.",
+                    "detail": f"{first} / {e}"}
     return {"ok": True, "id": pid, "restart": True}
