@@ -229,6 +229,12 @@ def load_all(app: FastAPI, root: Path, disabled: set[str] | None = None) -> list
         return []
     out: list[Plugin] = []
     for d in sorted(root.iterdir()):
+        if d.is_dir() and d.name.startswith("_old-"):
+            # ★★갈아 끼울 때 못 지운 잔재를 여기서 치운다 (2026-09-12 실측: 색인 npy 를 mmap 으로 열고 있으면
+            #   그 파일만 지워지지 않아 폴더가 남는다). 업데이트 뒤에는 앱을 다시 켜야 하므로, 그때는 잠금이 풀려 있다.
+            import shutil as _sh
+            _sh.rmtree(d, ignore_errors=True)
+            continue
         if not d.is_dir() or d.name.startswith((".", "_")):
             continue
         if not (d / "plugin.json").is_file():
@@ -494,8 +500,13 @@ async def install(root: Path, python: str, *, id: str = "", zip: str = "",
         if old and (old / DATA_FOLDER).is_dir() and not (target / DATA_FOLDER).exists():
             try:
                 shutil.move(str(old / DATA_FOLDER), str(target / DATA_FOLDER))
-            except OSError as e:  # 쓰고 있는 파일이 있으면 옮겨지지 않는다 — 설치 자체는 성공으로 둔다
-                print(f"[plugins] {pid}: {DATA_FOLDER} 를 옮기지 못했습니다 ({e}) — 플러그인이 다시 받습니다", flush=True)
+            except OSError as e:
+                # ★★**복사는 끝나 있을 수 있다** (2026-09-12 실측: 색인 npy 를 mmap 으로 열고 있으면 폴더째
+                #   이름 바꾸기가 막혀 `shutil.move` 가 복사로 돌아가는데, 복사를 마치고 **옛 자리를 지우는
+                #   단계**에서 걸린다). 그러니 예외만 보고 「못 옮겼다」고 적으면 사실과 다르다 — 새 자리를 본다.
+                moved = (target / DATA_FOLDER).is_dir() and any((target / DATA_FOLDER).iterdir())
+                print(f"[plugins] {pid}: {DATA_FOLDER} — " + ("새 사본으로 옮겼습니다 (옛 자리를 다 지우지 못했습니다: "
+                      f"{e})" if moved else f"옮기지 못했습니다 ({e}) — 플러그인이 다시 받습니다"), flush=True)
         if old:
             # 실패해도 설치는 성공으로 둔다 — 남으면 `_` 접두라 앱이 건너뛰고, 다음 설치 때 새 이름으로 다시 민다
             shutil.rmtree(old, ignore_errors=True)
