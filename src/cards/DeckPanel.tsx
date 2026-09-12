@@ -200,6 +200,14 @@ function Section({
     const saved = await useCards.getState().save(kind, { ...blank, folder: here }).catch(() => null);
     if (saved) onEdit(saved);
   };
+  /** 카드 복제 — 내용은 그대로 베끼고 **이름만** 새로 짓는다 (사용자 지시 2026-09-12).
+   *  ★이름 규칙은 새 카드와 **같은 것**을 쓴다 (`uniqueName`) — 겹치면 뒤에 번호가 붙는다.
+   *  ★`id` 는 넘기지 않는다. 저장이 새로 발급해야 원본과 별개 카드가 된다. */
+  const duplicate = async (card: AnyCard) => {
+    const { id: _id, ...rest } = card as AnyCard & { id?: string };
+    const name = uniqueName(card.name, (useCards.getState()[kind] ?? []).map((c) => c.name));
+    await useCards.getState().save(kind, { ...rest, name, folder: card.folder ?? here }).catch(() => null);
+  };
   // ★저장 — 손패가 하던 것을 그대로 옮겼다 (그쪽 주석): 같은 id 가 이미 있으면 **묻는다**.
   //   조용히 덮으면 그 카드를 쓰는 다른 워크스페이스까지 바뀌고, 언제나 새로 추가만 하면
   //   같은 이름이 끝없이 쌓인다.
@@ -320,6 +328,7 @@ function Section({
               card={c}
               view={view}
               onDelete={() => remove(kind, c.id)}
+              onDuplicate={() => duplicate(c)}
               onImageDrop={onImageDrop}
               onEdit={onEdit}
             />
@@ -438,12 +447,15 @@ function PanelCard({
   card,
   view,
   onDelete,
+  onDuplicate,
   onImageDrop,
 }: {
   kind: CardKind;
   card: AnyCard;
   view: React.RefObject<HTMLDivElement | null>;
   onDelete: () => void;
+  /** 이 카드를 그대로 한 장 더 — 이름만 다르게 */
+  onDuplicate: () => void;
   onImageDrop: (kind: CardKind, card: AnyCard, img: DragImage) => void;
   /** 연필 — **카드 편집기**를 연다 (`CardEditor`) */
   onEdit: (card: AnyCard) => void;
@@ -559,6 +571,31 @@ function PanelCard({
       {/* ★★끌기 손잡이 아이콘을 걷고 그 자리에 **지우기**를 뒀다 (사용자 지시 2026-08-19).
           카드는 통째로 잡아 끄는 것이라 손잡이가 없어도 끌리는 줄 알고, 지우는 방법은
           **우클릭뿐이라 보이지 않았다.** 보이는 단추가 하나 필요한 자리였다. */}
+      {hover && (
+        <button
+          data-card-dup={card.id}
+          data-tip={t("cards.duplicate")}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDuplicate();
+          }}
+          style={{
+            position: "absolute",
+            top: 3,
+            right: 47,
+            display: "grid",
+            placeItems: "center",
+            width: 18,
+            height: 18,
+            borderRadius: "var(--r-1)",
+            background: "rgba(10,14,20,0.55)",
+            color: "#fff",
+          }}
+        >
+          {Icon.duplicate}
+        </button>
+      )}
       {hover && (
         <button
           data-card-rename={card.id}

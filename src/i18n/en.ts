@@ -200,6 +200,7 @@ export const en = {
     emptyHint: "Drag a section banner onto this card in the hand to save it.",
     cardHint: "Drag to apply · Right click to delete",
     deleteConfirm: 'Delete the card "{name}"?',
+    duplicate: "Duplicate",
     info: { blocks: "{n} blocks", cells: "{n} scenes" },
     saveTitle: "Save to deck",
     saveExists: "“{name}” is already in the deck.",

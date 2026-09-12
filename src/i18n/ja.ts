@@ -200,6 +200,7 @@ export const ja: Dict = {
     emptyHint: "セクションのバナーを右下の手札のこのカードへドラッグすると保存されます。",
     cardHint: "ドラッグで適用 · 右クリックで削除",
     deleteConfirm: "カード「{name}」を削除しますか？",
+    duplicate: "複製",
     info: { blocks: "ブロック {n} 個", cells: "シーン {n} 種" },
     saveTitle: "デッキに保存",
     saveExists: "「{name}」はすでにデッキにあります。",

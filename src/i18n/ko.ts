@@ -203,6 +203,7 @@ export const ko: Dict = {
     emptyHint: "섹션 배너를 우하단 핸드의 이 카드로 끌면 저장됩니다.",
     cardHint: "드래그 = 적용 · 우클릭 = 삭제",
     deleteConfirm: '"{name}" 카드를 삭제할까요?',
+    duplicate: "복제",
     info: { blocks: "블록 {n}개", cells: "씬 {n}종" },
     saveTitle: "덱에 저장",
     saveExists: "「{name}」은(는) 이미 덱에 있습니다.",
