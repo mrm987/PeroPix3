@@ -3411,15 +3411,30 @@ def main():
     os.environ["PEROPIX_SERVING"] = "1"
     # ★개발 중에는 **파이썬을 고치면 알아서 다시 뜬다** (사용자 지시 2026-08-08).
     #   예전엔 사이드카가 앱과 함께만 떠서, 백엔드를 고치면 앱을 통째로 재실행해야 했다.
-    #   ★보는 곳은 `backend/` **하나뿐**이다 — 작업 폴더를 보게 두면 그림이 한 장 생길
-    #     때마다 서버가 다시 뜬다.
+    #   ★보는 곳은 `backend/` 와 `plugins/` 뿐이다 — 작업 폴더를 보게 두면 그림이 한 장 생길
+    #     때마다 서버가 다시 뜬다. 감시는 `*.py` 만 보므로 색인·`_data` 는 건드려도 안 뜬다.
+    #   ★★플러그인을 넣은 까닭 (사용자 지시 2026-09-12): 플러그인의 `engine.py`·`server.py` 를 고쳐도
+    #     백엔드가 옛 판을 물고 있어, 화면만 새로 읽으면 **서버가 내려주는 값이 옛것 그대로**였다
+    #     (굴리기의 신체·복장 스위치가 꺼진 채 눌러도 안 바뀌었다 — 슬롯 응답에 구역이 없었다).
     #   ★켜지는 것은 `PEROPIX_DEV_RELOAD` 가 있을 때뿐이다 (dev.bat · qa\host.cmd 가 넣는다).
     if os.environ.get("PEROPIX_DEV_RELOAD"):
         here = str(Path(__file__).resolve().parent)
+        watch = [here]
+        if PLUGINS_DIR.is_dir():
+            watch.append(str(PLUGINS_DIR))
+            # ★★**정션으로 붙인 플러그인은 실제 자리도 넣는다** (2026-09-12 실측: watchfiles 1.1.1 은
+            #   링크 너머의 변경을 못 본다 — 링크를 지나는 경로로 건드려도 이벤트가 없고, 실제 폴더는 잡힌다).
+            #   개발 중에는 `plugins/<id>` 를 제작자 저장소로 잇는 일이 흔하므로, 이게 없으면 감시가 절반만 돈다.
+            for sub in PLUGINS_DIR.iterdir():
+                if not sub.is_dir():
+                    continue
+                real = sub.resolve()
+                if real != sub.absolute() and real.is_dir():
+                    watch.append(str(real))
         os.environ["PEROPIX_BACKEND_PORT"] = str(args.port)  # 워커가 읽는다
-        print(f"[backend] dev reload on - watching {here}")
+        print(f"[backend] dev reload on - watching {' · '.join(watch)}")
         uvicorn.run("server:app", host="127.0.0.1", port=args.port, log_level="info",
-                    reload=True, reload_dirs=[here], app_dir=here)
+                    reload=True, reload_dirs=watch, app_dir=here)
     else:
         # ★★접근 로그는 끈다 — 주소 앞머리에 **이번 실행의 열쇠**가 들어 있어 매 요청마다
         #   로그에 남고(제보로 오가는 파일이다), 썸네일 요청까지 전부 찍혀 정작 봐야 할

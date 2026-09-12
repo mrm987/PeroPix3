@@ -120,6 +120,19 @@ body {
      ★그래서 아무것도 지정하지 않는다. 「선명하게 하려고」 다시 넣지 말 것 — 반대로 간다. */
 }
 
+/* ── 스크롤바 — 앱과 같은 모양으로 (사용자 지시 2026-09-12).
+ *   값은 앱의 `src/styles/globals.css` 에서 옮겨 온 것이다. 그쪽을 고치면 여기도 맞춘다. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 5px;
+  border: 2px solid transparent;   /* 바탕이 비치는 페이지라 앱의 `var(--bg)` 대신 투명으로 둔다 */
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+
 /* ── 창 골격 — **문서가 아니라 작은 앱**이 되게 (사용자 지시 2026-09-10: *"박스 자체가 앱인 느낌"*) ──
  *
  *     <header>도구줄</header>  <main>본문</main>  <footer>상태줄</footer>
