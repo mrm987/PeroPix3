@@ -177,18 +177,29 @@ function push<T extends { key: string }>(map: Record<string, T[]>, k: string, it
   return { ...map, [k]: [...list, item] };
 }
 
+function drop<T extends { key: string }>(map: Record<string, T[]>, k: string, key: string): Record<string, T[]> {
+  return { ...map, [k]: (map[k] ?? []).filter((x) => x.key !== key) };
+}
+
 /** 플러그인 하나에게 주는 공개 API */
 export function hostApi(p: PluginInfo) {
   const st = () => usePlugins.getState();
   return {
     plugin: p,
     backend: st().base,
+    /** 단추를 세운다. **되돌리는 함수를 돌려준다** — 플러그인이 켜고 끄는 것을 화면에서 바꾸면
+     *  앱을 다시 켜지 않고도 그 자리에서 뗄 수 있다 (사용자 지적 2026-09-13: 옵션을 켠 뒤 새로고침해야
+     *  단추가 보였다). 쓰지 않으면 그냥 두어도 된다. */
     addButton(slot: string, b: { label: LocText; icon?: string; onClick: () => void }) {
       // ★이름표는 **언어별 묶음일 수 있다** — 열쇠는 언어와 무관해야 하므로 `keyText` 가 한 가지로 정한다
-      usePlugins.setState({ buttons: push(st().buttons, slot, { key: `${p.id}:${keyText(b.label)}`, plugin: p.id, label: b.label, icon: b.icon, onClick: b.onClick }) });
+      const key = `${p.id}:${keyText(b.label)}`;
+      usePlugins.setState({ buttons: push(st().buttons, slot, { key, plugin: p.id, label: b.label, icon: b.icon, onClick: b.onClick }) });
+      return () => usePlugins.setState({ buttons: drop(st().buttons, slot, key) });
     },
     addMenuItem(menu: string, m: { label: LocText; onClick: (img: PluginImage) => void }) {
-      usePlugins.setState({ menus: push(st().menus, menu, { key: `${p.id}:${keyText(m.label)}`, plugin: p.id, label: m.label, onClick: m.onClick }) });
+      const key = `${p.id}:${keyText(m.label)}`;
+      usePlugins.setState({ menus: push(st().menus, menu, { key, plugin: p.id, label: m.label, onClick: m.onClick }) });
+      return () => usePlugins.setState({ menus: drop(st().menus, menu, key) });
     },
     openCanvas(id: string = p.id) {
       // ★캔버스(2026-09-09): 플러그인 모드로 가서 그 플러그인을 캔버스에 꺼내 놓고 맨 앞으로 (관리 화면을 보고 있었으면 캔버스로)
