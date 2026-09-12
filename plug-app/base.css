@@ -19,15 +19,16 @@
   color-scheme: dark light;
 
   /* 면 */
-  --bg: #eef1f4;
+  /* ★색은 앱의 `src/styles/tokens.css` 에서 옮겨 온다 — 2026-09-12 에 라이트 바탕·글자와 다크 강조를 함께 고쳤다 */
+  --bg: #f5f7f9;
   --panel: #ffffff;
   --code-bg: #f4f6f8;
   /* 선 */
-  --line: #dde2e8;
+  --line: #e3e8ee;
   --line-soft: #e8ecf1;
   /* 글자 */
-  --ink: #1e2630;
-  --ink-soft: #55616e;
+  --ink: #333d49;
+  --ink-soft: #626d79;
   --ink-dim: #78838f;
   --ink-faint: #98a2ad;
   /* 강조 */
@@ -90,9 +91,9 @@
     --ink-soft: rgba(236, 236, 241, 0.72);
     --ink-dim: rgba(236, 236, 241, 0.55);
     --ink-faint: rgba(236, 236, 241, 0.42);
-    --accent: #7c6cf0;
-    --accent-ink: #b3a8ff;
-    --accent-bg: #2a2640;
+    --accent: #4587c7;
+    --accent-ink: #8ec0e9;
+    --accent-bg: #1c2a38;
     --accent-on: #ffffff;
     --ok: #22c55e;
     --warn: #fbbf24;

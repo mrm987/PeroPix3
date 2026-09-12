@@ -34,8 +34,12 @@
      그림 영역까지 같은 면). 겹이 다섯이면(bg-deep/bg/panel/surface/surface2) 화면이
      칸칸이 나뉘어 답답해진다. 이름은 남기되 **값을 접어** 컴포넌트를 안 건드린다.
      ★올라온 면과 바탕을 가르는 것은 **1px 선**이지 색 차이가 아니다. */
-  --bg-deep: #eef1f4;     /* = --bg. 창 바탕과 무대를 더 가르지 않는다 */
-  --bg: #eef1f4;          /* 바탕 */
+  /* ★★2026-09-12: 바탕을 #eef1f4 에서 올리고 글자를 #1e2630 에서 눅였다 (사용자 지적:
+     *"배경이 완전 화이트라 대비가 너무 세다"* · *"두 패널 배경색의 대비가 너무 강하다"*).
+     바탕과 판(#ffffff)의 **명도차가 5.0 → 2.9** 로 줄고, 본문 대비는 15.3:1 → 11.0:1 이 된다.
+     ★대비비로 재면 1.13:1 이라 「약하다」고 읽히지만 밝은 색끼리는 그 수치가 체감과 어긋난다 — 명도(L*)로 잰다. */
+  --bg-deep: #f5f7f9;     /* = --bg. 창 바탕과 무대를 더 가르지 않는다 */
+  --bg: #f5f7f9;          /* 바탕 */
   --panel: #ffffff;       /* 올라온 것 전부 */
   --surface: #ffffff;
   --surface2: #ffffff;
@@ -46,13 +50,13 @@
   --code-bg: #f4f6f8;     /* 코드만 아주 옅게 눕힌다 */
 
   /* ── 선 ── */
-  --line: #dde2e8;
+  --line: #e3e8ee;
   --line-strong: #c3cbd4;
   --line-soft: #e8ecf1;
 
   /* ── 글자 ── */
-  --ink: #1e2630;
-  --ink-soft: #55616e;
+  --ink: #333d49;
+  --ink-soft: #626d79;
   --ink-dim: #78838f;
   --ink-faint: #98a2ad;
   --ink-ghost: #b4bcc5;
@@ -233,10 +237,14 @@
     --ink-faint: rgba(236, 236, 241, 0.42);
     --ink-ghost: rgba(236, 236, 241, 0.3);
 
-    --accent: #7c6cf0;
-    --accent-ink: #b3a8ff;
-    --accent-bg: #2a2640;
-    --accent-line: #7c6cf055;
+    /* ★★2026-09-12: 강조를 보라에서 **파랑**으로 (사용자 지적: *"검은 바탕에 보라색으로 강조하는 게 눈이 아프다"*).
+       라이트가 쓰는 #2f6fa8 을 어두운 바탕에 맞게 올린 값이다 — 색상은 같고 밝기만 다르다.
+       대비비 실측: 흰 글자 3.8:1 · 바탕(#16161a) 위 4.8:1 (옛 보라 #7c6cf0 은 4.0 / 4.5).
+       ★모드 색(`--mode-single` 등)은 서로 구분하려는 별개 체계라 그대로 두었다. */
+    --accent: #4587c7;
+    --accent-ink: #8ec0e9;
+    --accent-bg: #1c2a38;
+    --accent-line: #4587c755;
     --accent-on: #ffffff;
 
     --tip-bg: #33333d;
@@ -307,10 +315,10 @@
   --ink-faint: rgba(236, 236, 241, 0.42);
   --ink-ghost: rgba(236, 236, 241, 0.3);
 
-  --accent: #7c6cf0;
-  --accent-ink: #b3a8ff;
-  --accent-bg: #2a2640;
-  --accent-line: #7c6cf055;
+  --accent: #4587c7;
+  --accent-ink: #8ec0e9;
+  --accent-bg: #1c2a38;
+  --accent-line: #4587c755;
   --accent-on: #ffffff;
 
   --tip-bg: #33333d;
