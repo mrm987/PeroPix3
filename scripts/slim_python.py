@@ -33,7 +33,10 @@ import zipfile
 from pathlib import Path
 
 #: 우리 실행 경로에 없는 곁가지 (2026-08-27 확인)
-DROP = ["sympy", "mpmath", "pip", "setuptools", "pkg_resources", "_distutils_hack", "wheel"]
+#: ★★**pip 계열은 빼지 않는다** (2026-09-12 실측). 플러그인이 `requirements.txt` 를 가지고 있으면
+#:   앱이 **번들 파이썬의 pip 으로** 그 의존성을 깐다 (`plugins.install`). pip 을 걷어낸 배포본에서는
+#:   그 설치가 「의존성 설치에 실패했습니다」로 끝났다 — 태그 굴리기(duckdb)가 아예 안 깔렸다.
+DROP = ["sympy", "mpmath", "pkg_resources", "_distutils_hack"]
 #: 이것만 들어 있으면 「순수」하다
 PURE_SUFFIX = {".py", ".pyc", ".pyi"}
 PURE_NAME = {"py.typed"}

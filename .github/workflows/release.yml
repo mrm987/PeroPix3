@@ -116,6 +116,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$p/app" | Out-Null
           Copy-Item "_dist/PeroPix/PeroPix.exe" $p
           Copy-Item "_dist/PeroPix/app/backend" "$p/app" -Recurse
+          # ★★**공통 자산도 담는다** (2026-09-12). 빠뜨린 3.2.0 을 패치로 받은 사람은 플러그인 화면이
+          #   `/plug/_app/base.css` 를 404 로 받아 **흰 바탕에 글자만** 나왔다 — 전체 꾸러미에는 있었고
+          #   패치에만 없어서, 전체로 받은 쪽에서는 멀쩡해 보였다. 앱 판과 짝이 맞아야 하는 파일이라
+          #   backend 와 같은 자격으로 간다.
+          Copy-Item "_dist/PeroPix/app/plug-app" "$p/app" -Recurse
           Copy-Item "_dist/PeroPix/app/version.json" "$p/app"
           Compress-Archive -Path "$p/*" -DestinationPath "_dist/patch-${{ env.VERSION }}.zip"
 

@@ -122,6 +122,10 @@ Get-ChildItem (Join-Path $inner "backend") -Filter "test_*.py" | Remove-Item -Fo
 #   (`plug-app/` → `/plug/_app/`, `base.css`·`peropix.js`) — 플러그인이 아니라 앱이 플러그인에게 주는 창구라
 #   앱 판과 짝이 맞아야 하고 인터넷 없이도 있어야 한다.
 Copy-Item (Join-Path $root "plug-app") -Destination $inner -Recurse
+# ★★**담겼는지 확인하고 넘어간다** (2026-09-12): 3.2.0 배포본에 이 폴더가 통째로 빠져 있었고,
+#   그러면 플러그인 화면이 `/plug/_app/base.css` 를 404 로 받아 **흰 바탕에 글자만** 나온다.
+#   조용히 빠지면 실행해 보기 전에는 모르므로, 여기서 끊는다.
+if (-not (Test-Path (Join-Path $inner "plug-app/base.css"))) { throw "plug-app 이 담기지 않았습니다" }
 
 # ★★검열은 **기본 모델만** 담는다 (사용자 지시 2026-08-26). 무거운 XL(251MB)을 빼면
 #   `censor.models()` 가 폴더를 훑어 가벼운 것부터 내므로, 남은 하나가 그대로 기본이 된다
