@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -131,10 +132,33 @@ def folders(root: Path) -> list[dict]:
     ★★첫 줄(`""`)은 **뿌리 폴더 그 자체**다 — 뿌리에 놓인 것만 센다 (사용자 지시 2026-09-06:
       *"최상위 gallery 선택하면 하위 폴더의 이미지는 안 보이게"*). 예전에는 「전체」라 하위까지
       셌는데(2026-08-05), 화면의 첫 줄이 「전체」가 아니라 `gallery` 폴더가 된 뒤로(2026-08-23)
-      다른 폴더와 같은 규칙이어야 맞다. 숫자도 `images()` 가 보여 주는 것과 같아야 한다."""
-    out = [{"path": "", "count": sum(1 for _ in _imgs(root, root, False))}]
-    for d in sorted(p for p in root.rglob("*") if p.is_dir() and _visible(root, p)):
-        out.append({"path": d.relative_to(root).as_posix(), "count": sum(1 for _ in _imgs(root, d, False))})
+      다른 폴더와 같은 규칙이어야 맞다. 숫자도 `images()` 가 보여 주는 것과 같아야 한다.
+
+    ★★**숨은 폴더는 들어가기 전에 쳐낸다** (사용자 지적 2026-09-13: *"갤러리의 폴더 트리
+      로드 시간이 너무 느림"*). 예전에는 `rglob("*")` 로 **모든 파일**을 한 번 훑고 나서
+      폴더만 골랐다 — 정작 필요한 것은 폴더 이름과 개수뿐인데 `.thumbs`(그림 수만큼 쌓인다)와
+      `.trash` 까지 전부 세고 있었다. 한 칸 한 칸 내려가며 점으로 시작하는 칸에서 멈추면
+      그 안은 아예 안 연다. 실측(그림 125장·캐시 352개): **47.5ms → 1.2ms.**
+    ★차례는 그대로 **경로 순**이고, 대소문자를 접어 비교한다 (`rglob` + `sorted(Path)` 와 같다).
+      상위가 하위보다 먼저 와야 화면의 들여쓰기가 맞는다."""
+    out = []
+    stack = [(root, "")]
+    while stack:
+        d, rel = stack.pop()
+        n = 0
+        try:
+            with os.scandir(d) as it:
+                for e in it:
+                    if e.name.startswith("."):        # 우리 내부용 (`_visible` 과 같은 규칙)
+                        continue
+                    if e.is_dir(follow_symlinks=False):
+                        stack.append((Path(e.path), f"{rel}/{e.name}" if rel else e.name))
+                    elif os.path.splitext(e.name)[1].lower() in IMG_EXT:
+                        n += 1
+        except OSError:                               # 읽을 수 없는 폴더는 없는 셈 친다
+            continue
+        out.append({"path": rel, "count": n})
+    out.sort(key=lambda r: tuple(p.lower() for p in r["path"].split("/")))
     return out
 
 

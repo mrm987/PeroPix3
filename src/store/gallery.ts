@@ -156,8 +156,15 @@ export const useGallery = create<S>((set, get) => ({
     if (!ws) return;
     set({ loading: true });
     const f = get().folder;
+    /* ★★**폴더 목록은 먼저 화면에 올린다** (사용자 지적 2026-09-13: *"폴더 트리 로드 시간이
+       너무 느림 … 특히 폴더는 바로 뜨게"*). 셋을 한꺼번에 기다렸다가 한 번에 올리고 있어서,
+       폴더 트리가 **그림 목록·별표까지 다 와야** 그려졌다. 세 요청은 그대로 나란히 나가고,
+       폴더만 도착하는 즉시 올린다 (서로 다른 칸이라 따로 올려도 어긋날 것이 없다). */
     const [folders, r, s] = await Promise.all([
-      api<{ folders: GalleryFolder[] }>(`/api/keep/folders`),
+      api<{ folders: GalleryFolder[] }>(`/api/keep/folders`).then((v) => {
+        set({ folders: v.folders });
+        return v;
+      }),
       api<Page<GalleryImage>>(`/api/keep/images?page=1${f ? `&folder=${q(f)}` : ""}`),
       api<{ starred: string[] }>(`/api/keep/stars`),
     ]);
