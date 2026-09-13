@@ -2832,8 +2832,13 @@ def files_pick_dir(body: PickDir):
 
     ★`def` 다 (async 아님) — 창이 닫힐 때까지 기다리는 호출이라 스레드풀에서 돌아야
       그동안 서버가 다른 요청을 받는다.
-    ★취소하면 `dir: null` — 그때는 부르는 쪽이 아무것도 안 바꾼다."""
-    return {"dir": files.pick_dir(body.start)}
+    ★취소하면 `dir: null` — 그때는 부르는 쪽이 아무것도 안 바꾼다.
+    ★★**못 띄운 것은 취소가 아니다** — 까닭을 실어 거절한다 (`files.pick_dir` 의 ★★주).
+      둘을 `null` 하나로 뭉뚱그리는 바람에, 창이 아예 안 뜨는 동안 화면이 아무 말도 못 했다."""
+    try:
+        return {"dir": files.pick_dir(body.start)}
+    except OSError as e:
+        raise HTTPException(500, str(e))
 
 
 @app.post("/api/tools/read")
