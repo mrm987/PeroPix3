@@ -24,6 +24,7 @@ from pathlib import Path
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
+import thumbs
 import trash
 
 IMG_EXT = {".png", ".jpg", ".jpeg", ".webp"}
@@ -295,6 +296,27 @@ def images(root: Path, folder: str = "", page: int = 1, limit: int = 0) -> dict:
     }
 
 
+def thumb_path(root: Path, rel: str) -> Path:
+    """그 그림의 **썸네일 캐시 자리**. ★규칙은 여기 하나다 — 굽는 자리가 둘(보관할 때 ·
+    화면이 달라고 할 때)이라, 경로를 각자 셈하면 한쪽이 다른 이름으로 굽고 캐시가 두 벌이 된다."""
+    return root / THUMB_DIR / thumbs.flat_name(rel)
+
+
+def bake_thumb(root: Path, rel: str) -> None:
+    """보관하자마자 썸네일을 **미리 굽는다** (사용자 결정 2026-09-13, 1안).
+
+    ★★왜 여기냐: 예전에는 격자에 처음 뜰 때 구웠다(`/api/keep/thumb`). 한 번에 여러 장을
+      보관한 직후 갤러리를 열면 그 장수만큼의 굽기가 한꺼번에 몰려 목록까지 밀렸다
+      (실측 2026-09-13: 1.5MB PNG 한 장에 180ms). 보관하는 자리는 이미 파일을 복사하며
+      기다리는 자리라, 비용을 그쪽으로 옮긴다.
+    ★**실패해도 보관은 성공이다.** 썸네일은 다시 구우면 되지만 그림은 하나뿐이다 —
+      못 구우면 화면이 달라고 할 때 그때 굽는다 (그 경로는 그대로 남아 있다)."""
+    try:
+        thumbs.derive(safe_folder(root, rel), thumb_path(root, rel))
+    except Exception as e:                            # 굽기는 곁다리다 — 보관을 막지 않는다
+        print(f"[보관] 썸네일을 미리 굽지 못했습니다 ({rel}): {e}", flush=True)
+
+
 def _slice(items: list, page: int, limit: int):
     """정렬된 목록에서 한 쪽을 떼어 준다. ★`limit<=0` 이면 자르지 않는다."""
     if limit <= 0:
@@ -347,6 +369,7 @@ def save(root: Path, src: Path, folder: str, meta: dict | None, key: str = "") -
             im.convert("RGBA" if im.mode in ("RGBA", "LA") else "RGB").save(dst, format="PNG", pnginfo=png)
 
     rel = dst.relative_to(root.resolve()).as_posix()
+    bake_thumb(root, rel)                 # ★격자에서 기다리지 않게 여기서 굽는다 (그 함수의 ★★주)
     if key:
         st["sources"][key] = rel
         _put_state(root, st)
@@ -381,7 +404,9 @@ def import_bytes(root: Path, data: bytes, name: str, folder: str = "") -> dict:
     tmp = dst.with_suffix(dst.suffix + ".part")
     tmp.write_bytes(data)
     tmp.replace(dst)      # ★다 쓴 뒤에 이름을 준다 — 반쯤 쓰인 파일이 목록에 안 뜨게
-    return {"file": dst.relative_to(root.resolve()).as_posix()}
+    rel = dst.relative_to(root.resolve()).as_posix()
+    bake_thumb(root, rel)                 # 밖에서 들인 그림도 같다
+    return {"file": rel}
 
 
 def origin_of(root: Path, rel: str) -> dict | None:

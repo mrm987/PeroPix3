@@ -2626,8 +2626,12 @@ async def keep_images(folder: str = "", page: int = 1, limit: int = PAGE):
 
 
 @app.post("/api/keep/save")
-async def keep_save(body: KeepSave):
+def keep_save(body: KeepSave):
     """작업 폴더의 그림을 보관함으로 **복사**한다 (원본은 그대로).
+
+    ★★`def` 다 (`async def` 아님) — 보관할 때 **썸네일을 미리 굽는다**(`keep.bake_thumb`).
+      LANCZOS 축소는 CPU 일이라 async 안에서 하면 굽는 동안 **서버 전체가 멈춘다**
+      (썸네일 엔드포인트가 `def` 인 것과 같은 까닭). FastAPI 는 `def` 를 스레드풀로 돌린다.
 
     ★이미 보관돼 있으면 **무른다** (`removed: true`). 같은 그림에 보관을 두 번 누르면
       사본이 둘 생기던 것을 고친 것이다 (keep.save 주석).
@@ -2654,7 +2658,9 @@ class KeepImport(BaseModel):
 
 
 @app.post("/api/keep/import")
-async def keep_import(body: KeepImport):
+def keep_import(body: KeepImport):
+    """밖에서 온 그림을 보관함에 들인다.
+    ★`def` 인 까닭은 위 `keep_save` 와 같다 — 여기서도 썸네일을 미리 굽는다."""
     import base64
 
     try:
@@ -2709,7 +2715,9 @@ def keep_thumb(rel: str):
         raise HTTPException(404, "not found")
     # ★여기는 `immutable` 을 안 붙인다 — 보관함은 이름을 바꿀 수 있어서 같은 주소가
     #   다른 그림을 가리킬 수 있다 (생성물은 매번 새 파일명이라 붙여도 됐다).
-    t = thumbs.derive(p, KEEP_DIR / keep.THUMB_DIR / thumbs.flat_name(rel))
+    # ★캐시 자리는 `keep.thumb_path` 하나가 정한다 — 보관할 때 미리 굽는 쪽(`keep.bake_thumb`)과
+    #   같은 이름이어야 한다. 여기서 따로 셈하면 캐시가 두 벌이 된다.
+    t = thumbs.derive(p, keep.thumb_path(KEEP_DIR, rel))
     return FileResponse(t or p)
 
 
