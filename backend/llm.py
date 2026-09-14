@@ -286,6 +286,9 @@ VERTEX_THINKING: dict[str, dict] = {
     # ★3.6 Flash 는 뺐다 (사용자 지시 2026-08-30: 필요 없음) — 3.7 Flash 가 그 자리다
     # ★이름이 `gemini-3.1-pro` 가 아니다 — 그건 404 다 (실측 2026-08-08)
     "gemini-3.1-pro-preview": {"efforts": ["high", "medium", "low"], "default": "high"},
+    # ★3.5 Flash (사용자 요청 2026-09-15) — 실측: minimal·low·medium·high 는 200, xhigh 는 400.
+    #   기본 단계는 문서에서 확인하지 못해 비워 둔다 (화면에는 「모델 기본값」만 뜬다).
+    "gemini-3.5-flash": {"efforts": ["high", "medium", "low", "minimal"], "default": ""},
 }
 
 # ★★**고를 수 있는 것 전부** — 위 표는 「추론 단계를 아는 것」일 뿐이다 (2026-08-25).
@@ -302,6 +305,8 @@ VERTEX_MODELS = [
     #   그래서 여기서는 단계를 안 보낸다 (위 ★★주). ★**2026-10-16 은퇴 예정**이므로
     #   그 뒤로는 404 가 된다 (구글 문서: 2.5 Pro·Flash·Flash-Lite 은퇴일).
     "gemini-2.5-pro",
+    # ★2.5 Flash (사용자 요청 2026-09-15, 실측 200). 2.5 Pro 와 같은 규격·같은 은퇴일이다.
+    "gemini-2.5-flash",
 ]
 # OpenAI 목록에는 대화용이 아닌 것도 섞여 온다 — 이름으로 걸러 낸다
 NOT_CHAT = ("embedding", "tts", "whisper", "dall-e", "moderation", "audio", "realtime", "image", "search")
