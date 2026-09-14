@@ -24,6 +24,8 @@ let vFitBack: { y: number; h: number } | null = null;
  *  가장자리를 끌 때마다 창·모니터를 조회하면(왕복 셋) 크기 조절이 그만큼 늦게 시작한다.
  *  늘려 둔 상태가 아니면 되돌릴 것도 없으므로, 그때는 아무것도 묻지 않고 지나간다. */
 let vFitted = false;
+/** 최대화가 아니었을 때의 마지막 크기·자리 — 껐다 켤 때 되살릴 값이다 (`noteHeight` 의 ★★주) */
+let lastNormal: { x: number; y: number; w: number; h: number } | null = null;
 
 async function win() {
   try {
@@ -200,6 +202,22 @@ export const appWindow = {
         Math.abs(pos.y - wa.position.y) <= 2 && Math.abs(size.height - wa.size.height) <= 2;
       vFitted = full;
       if (!full) vFitBack = { y: pos.y, h: size.height };
+      /* ★★**껐다 켜도 이 크기로 뜨게 한다** (사용자 지시 2026-09-14: *"재실행할 때마다 창 크기가
+         고정 같은데, 마지막에 조정했던 크기로 복원해 줘"*). 적는 것은 껍데기가 `data/window.json`
+         에 하고(`src-tauri/src/winstate.rs`), 켤 때 거기서 되살린다.
+         ★**여기서 부르는 까닭**: 크기가 멎었는지 아는 자리가 여기다 (300ms 디바운스를 이미 거쳤다).
+           따로 들으면 디바운스가 두 벌이 된다.
+         ★★**최대화일 때는 그 크기를 적지 않는다** — 적으면 다음에 켜서 최대화를 풀었을 때
+           화면만 한 창이 그대로 남는다. 최대화는 깃발로만 적고, 크기는 **최대화 전에 쓰던
+           것**을 그대로 보낸다 (`lastNormal`). */
+      const max = await w.isMaximized();
+      if (!max) lastNormal = { x: pos.x, y: pos.y, w: size.width, h: size.height };
+      /* ★★되돌릴 크기를 아직 모르면 **아무것도 안 적는다** (실측 2026-09-14: 앱을 켜자마자
+         최대화하면 그 화면만 한 크기가 적혔다). 그때는 파일에 있는 옛 값이 옳다 —
+         화면을 켤 때 `WindowFrame` 이 한 번 불러 주므로 이 자리는 거의 오지 않는다. */
+      if (max && !lastNormal) return;
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("note_window", { ...(lastNormal as NonNullable<typeof lastNormal>), maximized: max });
     } catch {
       /* 자리를 못 적어도 하던 일에는 지장이 없다 */
     }

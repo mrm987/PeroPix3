@@ -1,6 +1,7 @@
 mod backend;
 mod window_edge;
 mod update;
+mod winstate;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -48,6 +49,16 @@ fn drag_restore(window: tauri::WebviewWindow, ratio_x: f64, offset_y: f64) -> Re
     {
         let _ = (window, ratio_x, offset_y);
         Err("윈도우에서만".into())
+    }
+}
+
+/// 창 크기·자리를 적어 둔다 — **화면이 부른다** (`WindowFrame` 의 크기 사건, 300ms 디바운스).
+/// 켤 때 그대로 되살린다 (`winstate` 머리 주석 · `run` 의 setup).
+#[tauri::command]
+fn note_window(x: i32, y: i32, w: u32, h: u32, maximized: bool) {
+    let s = winstate::WinState { x, y, w, h, maximized };
+    if let Err(e) = winstate::save(&backend::root(), &s) {
+        backend::log_line(&format!("[window] 창 자리를 못 적었습니다: {e}"));
     }
 }
 
@@ -234,7 +245,7 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![backend_url, app_root, update_staged, apply_update, restart_app, restart_backend, uptime_ms, drag_restore])
+        .invoke_handler(tauri::generate_handler![backend_url, app_root, update_staged, apply_update, restart_app, restart_backend, uptime_ms, drag_restore, note_window])
         .setup(move |app| {
             // ★`apply_update` 가 새 판을 띄우기 전에 자물쇠를 놓을 수 있게 맡겨 둔다
             app.manage(InstanceLock(lock));
@@ -248,6 +259,27 @@ pub fn run() {
                ★설정 파일로는 못 준다 — `tauri.conf.json` 의 창 스키마에 그 열쇠가 없다. */
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_background_color(Some(tauri::window::Color(0x16, 0x16, 0x1a, 0xff)));
+                /* ★★**마지막에 맞춰 둔 크기·자리로 띄운다** (사용자 지시 2026-09-14: *"재실행할 때마다
+                     창 크기가 고정 같은데, 마지막에 조정했던 크기로 복원해 줘"*). 설정의 1440×900 은
+                     **처음 켤 때의 값**이 된다.
+                   ★★**보이기 전에** 맞춘다 — `tauri.conf.json` 에서 `visible: false` 로 만들어 두고 여기서
+                     맞춘 뒤 띄운다. 뜬 뒤에 맞추면 기본 크기가 한 번 번쩍이고 줄어든다.
+                   ★★**어떤 길로 가도 창은 뜬다** — 아래 `show()` 는 되살리기가 실패하든 말든 돈다.
+                     여기서 일찍 돌아가면 창이 영영 안 보이는 앱이 된다.
+                   ★적어 둔 자리가 지금 화면 밖이면 **자리만** 버리고 크기는 쓴다 (`on_screen`). */
+                if let Some(st) = winstate::load(&backend::root()) {
+                    let _ = w.set_size(tauri::PhysicalSize::new(st.w, st.h));
+                    if winstate::on_screen(&w, &st) {
+                        let _ = w.set_position(tauri::PhysicalPosition::new(st.x, st.y));
+                    } else {
+                        backend::log_line("[window] 적어 둔 자리가 화면 밖이라 가운데로 띄웁니다");
+                        let _ = w.center();
+                    }
+                    if st.maximized {
+                        let _ = w.maximize();
+                    }
+                }
+                let _ = w.show();
             }
             match backend::spawn() {
                 Ok(child) => {

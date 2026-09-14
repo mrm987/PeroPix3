@@ -32,6 +32,10 @@ export function WindowFrame({ children }: { children: ReactNode }) {
     let t: ReturnType<typeof setTimeout> | undefined;
     (async () => {
       setMaxed(await appWindow.isMaximized());
+      /* ★★**켤 때 한 번 적어 둔다** (2026-09-14). 크기 사건이 오기 전까지는 「최대화 전 크기」를
+         모르는데, 앱을 켜자마자 최대화하면 그 판에서는 **되돌릴 크기가 없는 채로** 지나간다.
+         부팅 직후의 창 크기가 곧 그 값이므로 여기서 한 번 재어 둔다 (`lib/window` 의 `lastNormal`). */
+      void appWindow.noteHeight();
       const off = await appWindow.onResized(async () => {
         setMaxed(await appWindow.isMaximized());
         /* ★★**크기가 멎으면 그 자리를 적어 둔다** (`lib/window` 의 `noteHeight`).
