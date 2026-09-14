@@ -179,6 +179,17 @@ export const appWindow = {
     try {
       const w = await win();
       if (!w) return;
+      /* ★★★**최소화된 동안에는 적지 않는다** (사용자 제보 2026-09-14: *"상하 최대화를 해놓고
+         다른 작업을 한참 하다가 다시 돌아가서 상단부를 줄여서 원래 크기로 되돌리려고 하면,
+         헤드 타이틀바만 보이는 크기로 극단적으로 줄어든다"*).
+         게스트 실측: **최소화하면 크기 사건이 한 번 오고, 그때 창은 `{y: -32000, h: 28}` 을
+         보고한다.** 작업 영역 위와 다르므로 `full` 이 거짓이 되어 그 값이 그대로 「되돌릴
+         자리」로 적혔다. 그 뒤에 되돌리면 높이가 **28px** 이 되고(제목줄 끌기,
+         `dragFromMaximized`), 테두리 더블클릭으로 되돌릴 때는 y 가 -32000 이라 **창이 화면
+         밖으로** 간다 (`fitVertical`). 재현·회귀는 `qa/test-winsize-real.mjs`.
+         ★좌표가 얼마나 이상한지로 거르지 않는다 — **상태로** 가른다. 「얼마나 작으면 가짜인가」를
+           새로 정하는 순간 기준이 하나 더 생기고, 진짜로 작게 줄인 창까지 안 적히게 된다. */
+      if (await w.isMinimized()) return;
       const { currentMonitor } = await import("@tauri-apps/api/window");
       const m = await currentMonitor();
       if (!m) return;
