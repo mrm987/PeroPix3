@@ -16,6 +16,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -132,6 +133,9 @@ class Store:
         #  (`locked` 의 ★주). 스레드(`move_tab`)와 루프(`PUT`)가 같은 파일을 동시에 만졌다.
         self._locks: dict[str, threading.RLock] = {}
         self._locks_guard = threading.Lock()
+        #: 이 실행에서 **지운 워크스페이스의 id** (`save` 의 ★★주). 뒤늦게 온 저장이 지운
+        #  워크스페이스를 도로 만드는 것을 막는다.
+        self._buried: dict[str, str] = {}
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
 
@@ -260,6 +264,20 @@ class Store:
             have, got = (cur or {}).get("id"), spec.get("id")
             if have and got and have != got:
                 raise SpecMismatch(f"다른 워크스페이스의 내용입니다 ({got} → {ws}:{have})")
+            # ★★**지운 워크스페이스를 저장이 도로 만들지 못하게 한다** (사용자 지적 2026-09-15:
+            #   *"재실행하면 폴더가 남아서 계속 되살아남"*). 화면이 밀린 편집을 들고 있다가 삭제
+            #   **뒤에** 보내면, 이 함수는 폴더를 만들어 주는 것이 정상 동작이라(새 워크스페이스도
+            #   같은 길로 태어난다) 지운 자리에 `workspace.json` 하나짜리 폴더가 도로 선다 —
+            #   그러면 목록에 다시 뜨고 사용자는 삭제가 안 먹혔다고 본다.
+            #   (실측 2026-09-15: `test2` 를 16:27:33 에 지웠는데 16:28:00 에 `workspace.json` 이
+            #    다시 생겼다. 화면 쪽 방어(`store/workspace.ts` 의 `dropPendingSave`)는 **보고 있던
+            #    워크스페이스**만 막아 다른 탭·조수·플러그인에서 온 것은 그대로 통과했다.)
+            #   ★판정은 **기계적으로 확실한 것만** 쓴다: 폴더가 없고, 들어온 spec 의 id 가 이 실행에서
+            #     지운 그 id 와 같으면 **철 지난 저장**이다. 새 워크스페이스는 id 가 새로 찍히므로
+            #     같은 이름을 다시 만드는 것은 막히지 않고, 되돌리기로 폴더가 살아나도 통과한다.
+            if got and not d.exists() and self._buried.get(str(got)) == ws:
+                print(f"[워크스페이스] 지운 '{ws}' 에 뒤늦은 저장이 왔습니다 — 무시합니다")
+                return spec
             d.mkdir(parents=True, exist_ok=True)
             spec["updatedAt"] = datetime.now().isoformat(timespec="seconds")
             # 임시 파일에 쓴 뒤 교체 — 쓰는 중 앱이 죽어도 기존 파일이 남는다
@@ -307,8 +325,22 @@ class Store:
         d = self.dir_of(ws)
         if not d.exists():
             return {"deleted": [], "trashed": []}
+        # ★지운 워크스페이스의 id 를 적어 둔다 — 뒤늦은 저장을 가려내는 열쇠다 (`save` 의 ★★주)
+        wid = (self.load(ws) or {}).get("id")
+        if wid:
+            if len(self._buried) > 200:
+                self._buried.clear()
+            self._buried[str(wid)] = ws
         r = trash.send_at(self.root, [d.name])
-        return {"deleted": [m["file"] for m in r["moved"]], "trashed": r["moved"]}
+        # ★★**자리가 남으면 지운 것이 되살아난다** (사용자 지시 2026-09-15: *"그냥 삭제를 하면
+        #   확실하게 해당 폴더가 사라지게 만들어"*). 목록은 폴더를 보고 만들어지므로, 껍데기가
+        #   남으면 앱을 다시 켤 때 워크스페이스가 그대로 다시 선다. `trash.send_at` 이 이미
+        #   비우려고 애쓰지만(`_hard_move`), **여기서 한 번 더 확인하고** 그래도 남으면
+        #   사용자에게 알린다 — 조용히 성공한 척하지 않는다.
+        if d.exists():
+            shutil.rmtree(d, ignore_errors=True)
+        return {"deleted": [m["file"] for m in r["moved"]], "trashed": r["moved"],
+                "left": d.exists()}
 
     def restore_ws(self, entries: list[dict]) -> dict:
         return trash.restore_at(self.root, entries)

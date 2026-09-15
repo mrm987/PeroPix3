@@ -971,6 +971,7 @@ export const en = {
     close: "Close",
     toTrash: "Goes to the trash. It is gone for good after 24 hours.",
     trashed: "Moved {n} item(s) to the trash.",
+    trashedButLeft: "Moved to the trash, but the original folder could not be emptied. Close whatever has the files open and delete it again.",
     removed: "Deleted.",
     restored: "Restored.",
     undo: "Undo",

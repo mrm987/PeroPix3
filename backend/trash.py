@@ -63,6 +63,14 @@ def _inside(base: Path, rel: str) -> Path | None:
     return p
 
 
+#: 잠긴 파일은 대개 곧 풀린다 — 이 간격(초)으로 다시 해 본다 (`_hard_move` 의 ★★주).
+#: ★예산을 넉넉히 잡으면 **안 풀리는 잠금**에서 삭제가 몇 초씩 멈춘다 (실측: 1.55초짜리
+#:   예산이 재귀와 겹쳐 9.4초가 됐다). 앱이 쥔 손잡이는 밀리초 단위로 풀리므로 이 정도면 된다.
+RETRY = (0.05, 0.1, 0.2)
+#: 지우기 확인은 더 짧게 — 옮기기가 이미 한 차례 기다린 뒤다
+RETRY_RM = (0.05, 0.1)
+
+
 def _free(dst: Path) -> Path:
     """같은 이름이 있으면 **덮지 않고** 번호를 붙인다 — 생성물은 Anlas 가 든 원본이다.
     ★폴더에도 그대로 먹는다 (`suffix` 가 빈 문자열일 뿐이다)."""
@@ -100,13 +108,68 @@ def _write_index(root: Path, rows: list[dict]) -> None:
     tmp.replace(root / INDEX)
 
 
+def _gone(p: Path) -> bool:
+    """지우고 **정말 없어졌는지** 돌려준다 (`_hard_move` 의 ★★주)."""
+    for wait in RETRY_RM:
+        if not p.exists():
+            return True
+        try:
+            if p.is_dir():
+                shutil.rmtree(p, ignore_errors=True)
+            else:
+                p.unlink(missing_ok=True)
+        except OSError:
+            pass
+        if not p.exists():
+            return True
+        time.sleep(wait)
+    return not p.exists()
+
+
+def _hard_move(src: Path, dst: Path) -> bool:
+    """휴지통으로 옮기고 **원래 자리를 비운다.** 비웠으면 True.
+
+    ★★**`shutil.move` 를 그대로 쓰면 안 된다** (사용자 지적 2026-09-15: *"삭제해도 워크스페이스가
+      그자리에 있고 그 안에 트래시 폴더가 생김 · 재실행하면 폴더가 남아서 계속 되살아남"*).
+      윈도우에서는 폴더 안의 파일 **하나만 열려 있어도** 이름 바꾸기가 거부된다 — 앱이 그림을
+      읽거나 썸네일을 굽는 중이면 늘 그렇다. 그러면 `shutil.move` 는 **복사한 뒤 지우기**로
+      물러나는데, 복사는 되고 지우기가 `PermissionError` 로 터진다. 그 예외가 그대로 올라가
+      **워크스페이스가 휴지통과 원래 자리 양쪽에 남는다** — 목록은 폴더를 보고 만들어지므로
+      지운 것이 앱을 다시 켤 때마다 되살아난다.
+      (재현: 워크스페이스 안의 그림 하나를 연 채 `Store.delete` → 예외, 양쪽에 그대로.)
+    ★잠금은 대개 몇백 밀리초짜리다. 그래서 **먼저 몇 번 더 해 본다** (`RETRY`).
+    ★그래도 막히면 **내용을 하나씩** 옮긴다 — 막힌 파일 하나가 나머지 전부를 붙잡지 않게.
+    ★마지막까지 못 비우면 **거짓을 돌려준다.** 조용히 성공한 척하지 않는다 —
+      부르는 쪽이 사용자에게 알린다.
+    """
+    for wait in RETRY:
+        try:
+            src.rename(dst)
+            return True
+        except OSError:
+            time.sleep(wait)
+    if src.is_dir():
+        # 내용을 한 겹씩 내려가며 옮기고, 끝에 껍데기를 지운다
+        dst.mkdir(parents=True, exist_ok=True)
+        for item in list(src.iterdir()):
+            _hard_move(item, _free(dst / item.name))
+        return _gone(src)
+    try:
+        shutil.copy2(src, dst)
+    except OSError:
+        return False
+    return _gone(src)
+
+
 def send_at(base: Path, rels: list[str]) -> dict:
     """고른 것을 휴지통으로 **옮긴다**. 되돌릴 수 있게 (원래 경로, 휴지통 안 이름)을 돌려준다.
 
     ★파일도 폴더도 받는다. ★휴지통 자신은 못 지운다 — 지우면 되돌릴 자리가 사라진다.
-    ★★평평하게 둔다 (머리 주석) — 원래 자리는 `index.jsonl` 이 기억한다."""
+    ★★평평하게 둔다 (머리 주석) — 원래 자리는 `index.jsonl` 이 기억한다.
+    ★★`left` 는 **휴지통에는 담겼는데 원래 자리를 못 비운 것**이다 (`_hard_move` 의 ★★주).
+      빈 목록이면 전부 깨끗이 옮겨진 것이다 — 부르는 쪽은 이것을 보고 사용자에게 알린다."""
     root = trash_root(base)
-    moved, missing, rows = [], [], []
+    moved, missing, rows, left = [], [], [], []
     now = datetime.now().isoformat(timespec="seconds")
     for rel in rels:
         src = _inside(base, rel)
@@ -117,12 +180,18 @@ def send_at(base: Path, rels: list[str]) -> dict:
         # ★장부와 이름이 겹치면 장부를 덮어쓴다 — 그 한 이름만 비켜 간다
         name = src.name if src.name != INDEX else f"_{src.name}"
         dst = _free(root / name)
-        shutil.move(str(src), str(dst))
+        # ★★원래 자리를 반드시 비운다 (`_hard_move` 의 ★★주)
+        if not _hard_move(src, dst):
+            left.append(rel)
+        if not dst.exists():
+            missing.append(rel)
+            continue
         rows.append({"file": rel, "at": dst.name, "ts": now})
         moved.append({"file": rel, "at": dst.name})
     if rows:
         _write_index(root, read_index(root) + rows)
-    return {"moved": moved, "missing": missing}
+    # ★`left` 는 **옮기기는 했는데 원래 자리가 안 비워진 것**이다 — 부르는 쪽이 알려 준다
+    return {"moved": moved, "missing": missing, "left": left}
 
 
 def restore_at(base: Path, entries: list[dict]) -> dict:
@@ -305,6 +374,15 @@ def sweep(ws_root: Path, hours: int = KEEP_HOURS) -> list[str]:
         if not ws_dir.is_dir() or ws_dir.name == TRASH:
             continue
         gone += [f"{ws_dir.name}/{b}" for b in sweep_at(ws_dir, hours)]
+        # ★**빈 휴지통만 남은 껍데기**도 치운다 (사용자 지적 2026-09-15). `rmdir` 은 완전히 빈
+        #   폴더만 지우므로, 안이 다 비워진 뒤에도 `.trash` 한 겹 때문에 지운 워크스페이스가
+        #   목록에 계속 섰다. ★내용이 조금이라도 남은 휴지통은 건드리지 않는다 — 되살릴 것이 있다.
+        t = trash_root(ws_dir)
+        if t.is_dir() and not any(t.iterdir()) and [x for x in ws_dir.iterdir()] == [t]:
+            try:
+                t.rmdir()
+            except OSError:
+                pass
         try:
             ws_dir.rmdir()  # 통째로 비었으면 껍데기도 치운다
         except OSError:

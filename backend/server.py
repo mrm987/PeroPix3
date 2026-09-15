@@ -169,6 +169,23 @@ def _tidy_ws_root() -> None:
 
     old_trash = WS_ROOT / ".trash"
     if old_trash.is_dir():
+        # ★★**지운 워크스페이스는 여기 그대로 둔다** (사용자 지적 2026-09-15: *"삭제해도 trash로
+        #   워크스페이스가 가지 않음 · 워크스페이스는 그자리에 있고 그 안에 트래시 폴더가 생김 ·
+        #   다음에 켰을때 폴더가 남아있으니까 워크스페이스가 복구되잖아"*).
+        #
+        #   이 이전은 2026-08-08 에 「휴지통을 워크스페이스 안으로」 옮기려고 쓴 것인데, 열흘 뒤
+        #   2026-08-18 에 **워크스페이스 삭제**가 같은 자리(`workspaces/.trash/<이름>`)를 쓰기
+        #   시작했다. 이름 모양이 똑같아서 이전이 둘을 구별하지 못했고, 지운 워크스페이스를
+        #   **앱을 켤 때마다 `workspaces/<이름>/.trash/` 로 도로 끄집어냈다** — 폴더가 되살아나고
+        #   내용은 자기 휴지통 속에 파묻혔다. `workspaces/.trash` 에 지운 **그림만** 남아 있던
+        #   까닭이 이것이다 (그림은 파일이라 이 고리를 타지 않는다).
+        #   (실측 2026-09-15: 워크스페이스 8개를 지운 뒤 로그에 `[휴지통] 1 을 워크스페이스 안으로
+        #    옮김`, `workspaces/.trash` 의 폴더는 0개, 껍데기 6개가 한 시각에 되살아나 있었다.)
+        #
+        #   ★가려내는 법: 옛 자리의 한 칸 아래는 **묶음 폴더뿐**이었다 (`20260818_101500` 꼴).
+        #     지운 워크스페이스에는 `workspace.json`·`output` 같은 것이 들어 있다. 그리고 장부에
+        #     적힌 이름은 지금 코드가 일부러 담은 것이므로 무조건 둔다.
+        trashed_names = {str(r.get("at") or "") for r in trash.read_index(old_trash)}
         for ws_dir in list(old_trash.iterdir()):
             # ★★묶음 폴더(`20260818_101500`)는 **지금 쓰는 휴지통**이다 — 파일 관리와
             #   워크스페이스 삭제가 여기에 담는다 (2026-08-18). 옛 자리는 한 칸 아래가
@@ -176,6 +193,11 @@ def _tidy_ws_root() -> None:
             #   `workspaces/20260818_101500/` 이라는 없는 워크스페이스가 생긴다.
             if not ws_dir.is_dir() or trash.STAMP.match(ws_dir.name):
                 continue
+            if ws_dir.name in trashed_names:
+                continue                      # 장부에 적힌 것 = 지운 워크스페이스
+            kids = list(ws_dir.iterdir())
+            if not kids or not all(k.is_dir() and trash.STAMP.match(k.name) for k in kids):
+                continue                      # 옛 자리 모양이 아니다 — 손대지 않는다
             dst = WS_ROOT / ws_dir.name / ".trash"
             try:
                 dst.parent.mkdir(parents=True, exist_ok=True)

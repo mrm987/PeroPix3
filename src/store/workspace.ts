@@ -1030,13 +1030,18 @@ export const useWs = create<S>((set, get) => ({
     // ★열려 있던 탭 줄을 **지우기 전에** 적어 둔다 — 되돌릴 때 폴더만 살아나고 탭이
     //   안 돌아오면 "되돌렸다"고 말해 놓고 화면은 그대로인 상태가 된다
     const hadTabs = get().openWs;
-    const r = await api<{ trashed: TrashEntry[] }>(
+    const r = await api<{ trashed: TrashEntry[]; left?: boolean }>(
       `/api/workspaces/${encodeURIComponent(name)}`,
       { method: "DELETE" },
     );
     const { items } = await api<{ items: WsInfo[] }>("/api/workspaces");
     set({ list: items });
-    if (r.trashed?.length)
+    /* ★★**못 비웠으면 말해 준다** (사용자 지시 2026-09-15: *"그냥 삭제를 하면 확실하게 해당
+       폴더가 사라지게 만들어"*). 내용은 휴지통으로 갔는데 다른 프로그램이 파일을 쥐고 있어
+       원래 폴더가 남는 수가 있다 — 그때 조용히 넘어가면 지운 워크스페이스가 목록에 그대로
+       서 있고, 사용자는 삭제가 먹히지 않았다고만 본다. 되돌리기 안내와 겹치지 않게 이쪽만 띄운다. */
+    if (r.left) toast(t("common.trashedButLeft"));
+    else if (r.trashed?.length)
       undoToast(t("common.trashed", { n: 1 }), t("common.undo"), async () => {
         await api("/api/workspaces/restore", {
           method: "POST",
