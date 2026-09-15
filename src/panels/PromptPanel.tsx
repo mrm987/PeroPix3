@@ -194,8 +194,10 @@ function Pre({ label, text, accent }: { label: string; text: string; accent?: st
  *    카드 하나가 아니라 **묶음 전체**에 걸리기 때문이다.
  *  ★감싸기는 **강조색 테두리 + 옅은 강조색 배경**이다 (사용자 선택) — 갤러리에서 고른 그림을
  *    표시하는 방식과 같다. 앱 안에서 「고른 것·켠 것」의 표현을 하나로 둔다.
- *  ★상태는 **아이콘으로** 말한다 — 프롬프트 옵션 띠의 켬/끔 칩과 같은 규칙이다 (`PromptOpts`
- *    의 `Toggle`). 「켬」·「끔」 글자를 따로 붙이지 않는다. */
+ *  ★★꺼진 상태는 **빈 네모**다 (사용자 지적 2026-09-15: *"x를 넣으니까 닫는 버튼같음"*).
+ *    프롬프트 옵션 띠의 칩은 꺼지면 `✕` 를 넣지만(`PromptOpts` 의 `Toggle`), 그쪽은 글 칸 옆에
+ *    여러 칩이 늘어서는 자리라 사정이 다르다. 여기는 **한 줄에 하나뿐인 네모**라 `✕` 가
+ *    「이 줄을 닫는 단추」로 읽힌다. 켬은 체크, 끔은 빈 칸 — 체크박스와 같다. */
 function SeqCharsFrame({ children }: { children: React.ReactNode }) {
   const t = useI18n((s) => s.t);
   const on = usePrompt((s) => s.seqChars);
@@ -224,7 +226,6 @@ function SeqCharsFrame({ children }: { children: React.ReactNode }) {
           width: "100%",
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
           gap: "var(--sp-2)",
           padding: on ? "var(--sp-2) var(--sp-3)" : "0 var(--sp-1) var(--sp-2)",
           borderBottom: on ? "1px solid var(--accent-line)" : undefined,
@@ -234,20 +235,24 @@ function SeqCharsFrame({ children }: { children: React.ReactNode }) {
           background: "transparent",
         }}
       >
-        {t("prompt.seqChars")}
+        {/* ★★체크 칸은 **이름 왼쪽**이다 (사용자 지적 2026-09-15: *"순차생성이랑 텍스트랑
+            버튼이 너무 먼데"*). 줄 양끝으로 갈라 두니 둘이 한 짝으로 안 읽혔다 — 체크박스처럼
+            붙여 둔다. 누르는 자리는 그대로 줄 전체다. */}
         <span
           style={{
             display: "grid",
             placeItems: "center",
             width: 16,
             height: 16,
+            flexShrink: 0,
             borderRadius: "var(--r-1)",
             border: `1px solid ${on ? "var(--accent)" : "var(--line)"}`,
             color: on ? "var(--accent-ink)" : "var(--ink-faint)",
           }}
         >
-          {on ? Icon.check : Icon.close12}
+          {on ? Icon.check : null}
         </span>
+        {t("prompt.seqChars")}
       </button>
       <div style={on ? { padding: "var(--sp-3)" } : undefined}>{children}</div>
     </div>

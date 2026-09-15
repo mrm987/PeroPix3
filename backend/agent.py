@@ -832,19 +832,24 @@ class Tools:
                     "base": _view(p.get("base")) if on else [],
                     "baseUc": _view(p.get("baseUc")) if on else [],
                     # ★「캐릭터 프롬프트」다 — 덱의 **캐릭터 카드**와 다른 것이다 (낱말표)
-                    #  ★★`id`·`on`·`center`·`stack` 을 함께 준다 (선결 조건 3-6): 꺼진 캐릭터를
+                    #  ★★`id`·`on`·`center` 를 함께 준다 (선결 조건 3-6): 꺼진 캐릭터를
                     #    켜거나 자리를 옮기려면 조수가 그 값을 **먼저 볼 수 있어야** 한다.
                     #  ★`center` 는 화면에서 설 자리(0~1)이고 **언제나 값이 있다**
                     #    (`store/prompt.ts` 의 `Char.center`) — 좌표를 안 쓰는 상태는
                     #    이 값을 비우는 것이 아니라 `use_coords` 를 끄는 것이다.
-                    #  ★`stack` 은 순차 생성 대기줄이라 **수만** 준다 (본문은 카드가 들고 있다).
+                    #  ★한때 `stack`(순차 생성 대기줄)을 함께 실었다. 2026-09-15 에 스택이
+                    #    **모드**로 바뀌어 (아래 `seqChars`) 그 값 자체가 없어졌다.
                     "characters": [
                         {"id": c.get("id"), "name": c.get("name"),
                          "on": c.get("on", True), "center": c.get("center"),
-                         "stack": len(c.get("stack") or []),
                          "prompt": _view(c.get("prompt")), "uc": _view(c.get("uc"))}
                         for c in (p.get("chars") or [])
                     ],
+                    # ★★**순차 생성 모드** — 켜면 켜 둔 캐릭터를 **한 명씩** 뽑아 장 수가 그만큼
+                    #   곱해진다 (`src/lib/costNow.ts` 의 `seqTimesNow`). 쓰기(`set_seq_chars`)를
+                    #   만들기 전에 읽기부터 채운다 — 못 읽는 값은 못 고친다.
+                    #   ★값은 **탭의 것**이다 (`TabPrompt.seqChars`) — 없으면 꺼진 것이다.
+                    "seqChars": p.get("seqChars") is True,
                 }
             scene_groups.append(row)
         out: dict[str, Any] = {
@@ -1318,13 +1323,16 @@ The user makes art with NovelAI (NAI); a prompt is **Danbooru tags** joined by c
      (the default; "change X" means this). `edit_style_card` creates the style card when there
      is none; `edit_character` creates the card when the name is new.
   2. **Add an empty card on screen** - `add_style_card` / `add_character` / `create_scene`.
-  3. **Put a saved deck card on screen** - `apply_card`, `stack_character`.
+  3. **Put a saved deck card on screen** - `apply_card`.
   4. **Remove from screen** - `remove_style_card` / `remove_character` / `delete_scene`.
   5. **Save to the deck** - `save_card` (what is on screen) when they want to keep it.
   6. **Make or overwrite a deck card directly** - `create_card` / `update_card` - when they
      want a deck card that is not on screen.
   `get_workspace` shows `prompt.styleCard` - `null` means there is no style card on that tab
   yet, and then `base` is empty because there is nowhere for it to live.
+  `prompt.seqChars` is the tab's **one-by-one mode**: when true, each enabled character is
+  generated in its own image instead of all of them sharing one, so the number of images is
+  multiplied by the number of enabled characters. `set_seq_chars` turns it on and off.
 
 Principles:
 - When you need to know what the user is doing, call **get_workspace** first.

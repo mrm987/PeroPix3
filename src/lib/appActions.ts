@@ -287,6 +287,51 @@ defineAction({
   },
 });
 
+/* ── 순차 생성 모드 ──────────────────────────────────────────
+   ★★바로 위 `슬롯당 장수`와 **같은 이유로** 조수가 쥐어야 하는 값이다: 한 바퀴가 만드는 장 수에
+     켜진 캐릭터 수가 곱해지므로 (`lib/costNow` 의 `seqTimesNow`), 못 읽고 못 바꾸면
+     «세 명 각각 뽑아 줘» 를 사용자가 손으로 켜야 한다.
+   ★★값은 **탭의 것**이라 주소를 받는다 — `openAddress` 가 필요하면 탭을 옮겨 준다.
+     읽는 자리는 `get_workspace` 의 `prompt.seqChars` 다 (`backend/agent.py`) — 못 읽는 값은 못 고친다. */
+
+defineAction({
+  id: "set_seq_chars",
+  desc: "★**순차 생성 모드를 켜고 끈다** — 켜면 켜 둔 캐릭터를 한 장에 모으지 않고 **한 명씩** "
+    + "차례로 뽑는다. «인물마다 따로 뽑아 줘»·«한 장에 다 넣지 말고 하나씩» 이 이것이다. "
+    + "★장 수가 **켜진 캐릭터 수만큼 곱해진다**. 한 장에 한 명이라 모델의 캐릭터 수 상한도 안 걸린다. "
+    + "지금 값은 `get_workspace` 의 `prompt.seqChars` 다. 끄면 예전처럼 한 장에 모인다.",
+  args: {
+    on: { type: "boolean", desc: "켤지(true) 끌지(false)", required: true },
+    workspace: { type: "string", desc: "어느 워크스페이스 — 비우면 지금 열린 것 (다르면 거절한다)" },
+    tab: { type: "string", desc: "어느 탭 — id 가 정확하다 (이름도 받는다). 비우면 말을 건 때의 탭" },
+    sceneGroup: { type: "string", desc: "어느 씬 그룹 — **id 로** 줘라 (이름은 탭마다 겹친다). 비우면 말을 건 때의 씬 그룹" },
+  },
+  confirm: "none",
+  run: async (a) => {
+    if (typeof a.on !== "boolean")
+      return err("unknown_field", "on 은 true 또는 false 여야 합니다.", { given: String(a.on), retry: "safe" });
+    const { openAddress } = await import("./promptEdit.ts");
+    const o = openAddress(a);
+    if ("error" in o) return o;
+    const was = usePrompt.getState().seqChars;
+    usePrompt.getState().setSeqChars(a.on);
+    const n = usePrompt.getState().chars.filter((c) => c.on).length;
+    return {
+      ok: true,
+      did: a.on
+        ? `${o.where}의 순차 생성을 켬 — 켜 둔 캐릭터 ${n}명을 한 명씩 뽑는다`
+        : `${o.where}의 순차 생성을 끔 — 캐릭터를 한 장에 모은다`,
+      at: {
+        kind: "prompt",
+        workspace: useWs.getState().current ?? undefined,
+        tab: useWs.getState().spec?.activeTab,
+        sceneGroup: o.set.id,
+      },
+      before: { action: "set_seq_chars", args: { on: was } },
+    };
+  },
+});
+
 /* ── 생성 옵션 ────────────────────────────────────────────────
    ★값 하나하나에 액션을 만들지 않는다 — **범용 창구 하나**다 (목표 ①: 예외를 열거하면
      반드시 빠뜨린다). 대신 **허용 목록**으로 아무 이름이나 들어오는 것을 막는다. */
