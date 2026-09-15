@@ -12,7 +12,8 @@ import { useImageInput } from "../store/imageInput";
 import { useUi } from "../store/ui";
 import { toast } from "../store/toast";
 import { MAX_PER_IMAGE } from "../lib/anlas";
-import { costNow } from "../lib/costNow";
+import { costNow, countNow } from "../lib/costNow";
+import { usePrompt } from "../store/prompt";
 import { usageDuration, usageFullInSeconds, usageLow, usagePercent, usageRefillPerHour } from "../lib/opusUsage";
 import { useCurrentSub, useSub } from "../store/sub";
 import { currentAccountId, useAccounts, useCurrentAccount } from "../store/accounts";
@@ -78,7 +79,10 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
   const slots = sceneSet
     ? allScenes(sceneSet).filter((x) => !x.cell.locked && !x.card.locked).length
     : 1;
-  const count = slots * perSlot;
+  /** ★★**세는 자리는 `countNow` 하나다** — 순차 생성 모드의 인물 수까지 거기서 곱한다
+   *  (`lib/costNow`). 여기서 따로 셈하면 푸터와 비용·조수가 갈린다. */
+  const seqTimes = usePrompt((s) => (s.seqChars ? Math.max(1, s.chars.filter((c) => c.on).length) : 1));
+  const count = countNow();
   /** ★★**생성할 씬이 없으면 그 자리에서 말해 준다** (사용자 지시 2026-08-22:
    *  *"씬카드 없어서 생성불가능할때 생성 버튼쪽에도 경고 띄워줘"*).
    *
@@ -437,7 +441,10 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
             }}
           />
           <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-ghost)" }}>
-            {t("gen.slotsTimes", { s: slots, p: perSlot, t: count })}
+            {/* ★순차 생성 모드면 **인물 수**가 한 칸 더 붙는다 — 곱셈이 눈에 맞아야 한다 */}
+            {seqTimes > 1
+              ? t("gen.slotsTimesSeq", { s: slots, p: perSlot, c: seqTimes, t: count })
+              : t("gen.slotsTimes", { s: slots, p: perSlot, t: count })}
           </span>
       </div>
 
@@ -594,7 +601,9 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
             총액은 버튼에 있으므로 여기서는 분해만 보인다 (같은 값을 두 번 두지 않는다) */}
         {!cost.free && count > 1 && (
           <span data-cost-break style={{ fontVariantNumeric: "tabular-nums" }}>
-            {t("gen.costPerSlots", { p: cost.perImage, s: slots, r: perSlot })}
+            {seqTimes > 1
+              ? t("gen.costPerSlotsSeq", { p: cost.perImage, s: slots, r: perSlot, c: seqTimes })
+              : t("gen.costPerSlots", { p: cost.perImage, s: slots, r: perSlot })}
           </span>
         )}
         {cost.encoding > 0 && <span>{t("gen.vibeEncode", { a: cost.encoding })}</span>}

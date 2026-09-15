@@ -145,6 +145,8 @@ export const ko: Dict = {
 
   prompt: {
     baseBox: "베이스 프롬프트",
+    seqChars: "순차 생성",
+    seqCharsTip: "켜면 켜 둔 인물을 한 장에 모으지 않고 한 명씩 차례로 뽑습니다.",
     charBox: "캐릭터 프롬프트",
     tabPrompt: "Prompt",
     tabUc: "Undesired Content",
@@ -175,7 +177,6 @@ export const ko: Dict = {
     /** ★드롭 자리의 알약 문구 — **놓으면 무슨 일이 일어나는가** (`cards/DropVeil`) */
     dropStyle: "이 스타일로 바꾸기",
     dropStyleNew: "스타일 카드 넣기",
-    dropStack: "스택에 쌓기",
     dropSwap: "교체",
     dropJoin: "새 인원으로 추가",
     dropDeck: "덱에 저장",
@@ -221,8 +222,6 @@ export const ko: Dict = {
     moveCharDown: "아래로",
     renameChar: "캐릭터 이름 변경",
     nextUp: "다음",
-    stackFront: "맨 앞으로",
-    stackDrop: "스택에서 빼기",
     saved: "덱에 저장: {name}",
   },
 
@@ -391,12 +390,15 @@ export const ko: Dict = {
     accountHint: "이 워크스페이스가 쓰는 NAI 계정. 잔액과 요금이 이 계정 기준이고, 이미 큐에 넣은 것은 바꿔도 안 옮겨집니다.",
     perSlot: "씬당",
     slotsTimes: "씬 {s} × {p} = {t}장",
+    /** 순차 생성 모드 — 인물 수가 한 칸 더 곱해진다 */
+    slotsTimesSeq: "씬 {s} × {p} × 인물 {c} = {t}장",
     countCost: "{n}장 · {a} Anlas",
     count: "{n}장",
     costAnlas: "{a} Anlas",
     vibeEncode: "바이브 인코딩 {a} Anlas",
     /** 비용이 어떻게 나왔나 (v2 `총액 (장당 × N슬롯 × M회)`) */
     costPerSlots: "장당 {p} × 씬 {s} × {r}회",
+    costPerSlotsSeq: "장당 {p} × 씬 {s} × {r}회 × 인물 {c}",
     /** ★넘긴 채로 두지 않는다 — **켜는 순간** 막고, 상한이 줄면 그 자리에서 끈다.
      *  「초과분은 무시됩니다」로 알리고 말면 그대로 생성했을 때 뒤쪽이 조용히 빠진다. */
     charLimitHit: "이 모델은 캐릭터 {max}명까지 켤 수 있습니다.",

@@ -145,6 +145,8 @@ export const en = {
 
   prompt: {
     baseBox: "Base prompt",
+    seqChars: "One by one",
+    seqCharsTip: "Generate each enabled character in its own image, in order.",
     charBox: "Character prompts",
     tabPrompt: "Prompt",
     tabUc: "Undesired Content",
@@ -172,7 +174,6 @@ export const en = {
     editNoCells: "This card has no scenes.",
     dropStyle: "Replace the style",
     dropStyleNew: "Add as the style card",
-    dropStack: "Add to the stack",
     dropSwap: "Replace",
     dropJoin: "Add as a new character",
     dropDeck: "Save to the deck",
@@ -218,8 +219,6 @@ export const en = {
     moveCharDown: "Move down",
     renameChar: "Rename character",
     nextUp: "next",
-    stackFront: "Bring to front",
-    stackDrop: "Remove from stack",
     saved: "Saved to deck: {name}",
   },
 
@@ -385,12 +384,14 @@ export const en = {
     accountHint: "The NAI account this workspace uses. Balance and cost follow it; items already queued keep their account.",
     perSlot: "Per scene",
     slotsTimes: "{s} slots × {p} = {t}",
+    slotsTimesSeq: "{s} slots × {p} × {c} characters = {t}",
     countCost: "{n} × {a} Anlas",
     count: "{n} ×",
     costAnlas: "{a} Anlas",
     vibeEncode: "Vibe encoding {a} Anlas",
     /** How the cost adds up (v2 `total (per image × N slots × M rounds)`) */
     costPerSlots: "{p} each × {s} scenes × {r}",
+    costPerSlotsSeq: "{p} each × {s} scenes × {r} × {c} characters",
     charLimitHit: "This model allows up to {max} characters.",
     charLimitClamped: "This model allows up to {max} characters. The last {n} were turned off.",
     opusUsage: "Opus",

@@ -73,23 +73,6 @@ export type Char = {
    *  `center` 를 비우는 것이 아니라 `params.use_coords` 를 끄는 것이다 (공홈과 같다).
    *  ★들어올 때 `charPos.nextCenter` 가 빈 자리를 골라 준다. */
   center: Center;
-  /** 순차 생성 더미. **맨 앞이 다음 차례**이고, 생성이 끝나면 현재 인물이 맨 뒤로 간다. */
-  stack: StackItem[];
-};
-
-/** 스택에 든 인물 — 앞 카드와 **자리를 맞바꾸는 값**이라 앞 카드가 들고 다니는 것과 짝이 맞아야 한다.
- *
- *  ★★`thumb` 이 여기 있어야 하는 이유 둘 (사용자 지시 2026-08-24):
- *    1. 스택 카드에도 **그림이 보여야** 누가 다음 차례인지 눈으로 안다.
- *    2. 그것이 없던 동안 `frontStack`·`rotateStack` 이 `ref`·`name`·`color` 만 맞바꿔서,
- *       **앞 카드의 그림이 그 자리에 남아** 이름은 새 인물인데 그림은 옛 인물이 됐고,
- *       옛 인물의 그림은 스택으로 따라가지 못해 그대로 사라졌다.
- *  ★블록(프롬프트·UC)은 여전히 안 담는다 — 그건 카드가 아니라 **그 자리**의 것이다. */
-export type StackItem = {
-  ref: string | null;
-  name: string;
-  color: [string, string];
-  thumb?: Thumb | null;
 };
 
 /** 편집 대상 지정 — "base" 는 공통, 그 외는 캐릭터 id */
@@ -106,6 +89,14 @@ type S = {
    *  ★값이 없으면(옛 워크스페이스) **켜진 것**이다. */
   styleOn: boolean;
   chars: Char[];
+  /** ★★**순차 생성 모드** (사용자 결정 2026-09-15). 켜면 캐릭터 칸을 한 장에 모아 넣지 않고
+   *  **켜 둔 인물을 한 명씩** 차례로 뽑는다 — 「슬롯을 하나씩만 켠 것처럼」이 규칙이다.
+   *  ★★탭의 것이다 (사용자 지시: *"탭 안에서는 프롬프트를 공유하기 때문에 그게 자연스러움"*) —
+   *    그래서 프롬프트와 같은 자리에 담겨 `TabPrompt` 로 오간다.
+   *  ★이 모드에서는 한 장에 한 명이라 **모델의 캐릭터 수 상한이 안 걸린다** (`store/gen` 의 `charLimit`).
+   *  ★없으면 꺼진 것이다 (옛 워크스페이스). */
+  seqChars: boolean;
+  setSeqChars: (v: boolean) => void;
   /* ★★섹션 접힘과 `Prompt`/`UC` 탭은 **여기 없다** — `useUi.view` 로 옮겼다
      (사용자 지시 2026-08-22). 여기 있으면 `load()` 가 탭을 옮길 때마다 통째로 비워서
      「펴 둔 대로」가 자꾸 풀렸다. 문서가 아니라 **보는 방식**이라 화면 쪽에 산다. */
@@ -121,12 +112,8 @@ type S = {
    *  ★★한 번 걷었다가 되돌린 자리다. 걷은 근거였던 *"새로 추가하고 옛 카드를 지우는 것과
    *    결과가 같다"* 는 **틀렸다**: 새로 추가하면 차례가 맨 뒤로 가고 자리 좌표도 새로 잡히는데,
    *    교체는 **그 자리 그대로** 사람만 갈린다 (차례는 `characterPrompts[]` 의 차례라 그림에 남는다).
-   *  ★스택·자리·켜짐은 **자리의 것**이라 그대로 둔다 — 갈리는 것은 카드에서 온 값뿐이다. */
+   *  ★자리·켜짐은 **자리의 것**이라 그대로 둔다 — 갈리는 것은 카드에서 온 값뿐이다. */
   swapChar: (id: string, c: Partial<Char>) => void;
-  stackChar: (id: string, c: StackItem) => void;
-  /** 스택에서 한 장 빼기 · 한 장을 맨 앞으로 (사용자 지시 2026-08-19) */
-  dropStack: (id: string, at: number) => void;
-  frontStack: (id: string, at: number) => void;
   removeChar: (id: string) => void;
   /** 인물 차례 바꾸기 — ★차례가 곧 `characterPrompts[]` 의 차례다 (`use_order: true`).
    *  NAI 는 앞에 온 인물을 먼저 잡으므로 **누가 몇 번째인가가 그림에 남는다.** */
@@ -135,8 +122,6 @@ type S = {
   toggleChar: (id: string) => void;
   /** 배치 판에서 인물을 옮긴다 */
   setCenter: (id: string, center: Center) => void;
-  /** 생성 한 장이 끝났을 때 스택을 한 칸 돌린다 — 현재 인물이 맨 뒤로 */
-  rotateStack: (id: string) => void;
 
   /** 저장된 spec 을 그대로 받는다 — 구버전 세션에는 style·chars·thumb 이 없다 */
   load: (p: {
@@ -145,9 +130,10 @@ type S = {
     style?: { ref: string | null; name: string; color: [string, string]; thumb?: Thumb | null };
     styleOn?: boolean;
     chars?: Char[];
+    seqChars?: boolean;
   }) => void;
   setStyleOn: (v: boolean) => void;
-  snapshot: () => Pick<S, "base" | "baseUc" | "style" | "styleOn" | "chars">;
+  snapshot: () => Pick<S, "base" | "baseUc" | "style" | "styleOn" | "chars" | "seqChars">;
   compiled: () => {
     prompt: string;
     uc: string;
@@ -193,6 +179,12 @@ export const usePrompt = create<S>((set, get) => ({
   style: { ref: null, name: t("prompt.defaultStyleName"), color: DEFAULT_STYLE_COLOR, thumb: null },
   styleOn: true,
   chars: [],
+  seqChars: false,
+
+  setSeqChars: (v) => {
+    set({ seqChars: v });
+    onEdit();
+  },
 
   update: (area, fn) => {
     set({ [area]: fn(get()[area]) } as Pick<S, AreaId>);
@@ -235,10 +227,9 @@ export const usePrompt = create<S>((set, get) => ({
         {
           id,
           ref: c.ref ?? null,
-          /* ★★**이름을 실제로 준다** (사용자 지적 2026-08-20: 스택에 넣었더니 「캐릭터 1」의
+          /* ★★**이름을 실제로 준다** (사용자 지적 2026-08-20: 다른 자리로 옮겼더니 「캐릭터 1」의
              이름이 사라졌다). 「캐릭터 N」은 화면이 빈 이름에 붙여 주던 **표시용 폴백**이라,
-             그 인물이 스택으로 들어가는 순간(`frontStack`) 빈 문자열만 남았다.
-             이름은 **저장되는 값**이어야 어디로 옮겨도 따라간다. */
+             값 자체는 빈 문자열이었다. 이름은 **저장되는 값**이어야 어디로 옮겨도 따라간다. */
           name: c.name || t("cards.charN", { n: chars.length + 1 }),
           color: CHAR_COLOR,
           thumb: c.thumb ?? null,
@@ -248,7 +239,6 @@ export const usePrompt = create<S>((set, get) => ({
           /* ★새로 들어오는 인물은 **빈 자리**에 세운다 (공홈 `sw` 사다리 — `lib/charPos`).
              전원을 한가운데 겹쳐 놓으면 좌표를 켜는 순간 셋이 한 칸에 서 있다. */
           center: c.center ?? nextCenter(chars.map((x) => x.center), freeformNow()),
-          stack: c.stack ?? [],
         },
       ],
     });
@@ -278,13 +268,6 @@ export const usePrompt = create<S>((set, get) => ({
     onEdit();
   },
 
-  stackChar(id, c) {
-    set({
-      chars: get().chars.map((x) => (x.id === id ? { ...x, stack: [...x.stack, c] } : x)),
-    });
-    onEdit();
-  },
-
   removeChar(id) {
     set({ chars: get().chars.filter((c) => c.id !== id) });
     onEdit();
@@ -293,8 +276,7 @@ export const usePrompt = create<S>((set, get) => ({
   /** ★★인물의 차례를 **한 칸** 올리거나 내린다 (사용자 지시 2026-08-21).
    *  차례가 곧 `characterPrompts[]`·`char_captions[]` 의 차례이고 NAI 가 `use_order: true`
    *  로 그 차례를 쓰므로(`backend/nai.py`), 그림에 실제로 남는 값이다.
-   *  ★자리 좌표(`center`)도 스택(`stack`)도 **인물이 들고 다니는 값**이라 같이 따라간다 —
-   *    따로 옮기는 코드를 두지 말 것.
+   *  ★자리 좌표(`center`)는 **인물이 들고 다니는 값**이라 같이 따라간다 — 따로 옮기는 코드를 두지 말 것.
    *  ★끌기로 만들지 않는다: 배너를 끄는 몸짓은 이미 **덱에 저장**이다 (사용자 지적).
    *  ★셈은 `moveTo` 하나뿐이다 — `to` 는 칸이 아니라 **틈** 번호라 아래로 갈 때 `i + 2` 다. */
   stepChar(id, dir) {
@@ -321,69 +303,6 @@ export const usePrompt = create<S>((set, get) => ({
     onEdit();
   },
 
-  /** 스택에서 한 장을 뺀다 (사용자 지시 2026-08-19) */
-  dropStack(id, at) {
-    set({
-      chars: get().chars.map((c) =>
-        c.id === id ? { ...c, stack: c.stack.filter((_, k) => k !== at) } : c,
-      ),
-    });
-    onEdit();
-  },
-
-  /** 스택의 한 장을 **맨 앞(지금 인물)으로**.
-   *
-   *  ★★**자리를 맞바꾼다** (사용자 지시 2026-08-19) — 지금 인물이 그 카드가 있던 자리로 간다.
-   *    한 칸씩 밀어 돌리면(`rotateStack`) 나머지 순서가 통째로 흔들려, 「이 카드를 앞으로」가
-   *    아니라 「한 바퀴 돌리기」가 된다. */
-  frontStack(id, at) {
-    set({
-      chars: get().chars.map((c, i) => {
-        const pick = c.id === id ? c.stack[at] : undefined;
-        if (!pick) return c;
-        return {
-          ...c,
-          ref: pick.ref,
-          name: pick.name,
-          color: pick.color,
-          // ★그림도 함께 맞바꾼다 — 안 그러면 이름만 갈리고 얼굴은 앞 인물 그대로다 (`StackItem` 의 ★주)
-          thumb: pick.thumb ?? null,
-          /* ★빈 이름(옛 인물)은 **표시 이름으로 굳혀서** 넣는다 — 그대로 넣으면 스택에서
-             이름 없는 카드가 된다 (`addChar` 의 ★주) */
-          stack: c.stack.map((x, k) =>
-            k === at
-              ? { ref: c.ref, name: c.name || t("cards.charN", { n: i + 1 }), color: c.color, thumb: c.thumb }
-              : x,
-          ),
-        };
-      }),
-    });
-    onEdit();
-  },
-
-  rotateStack(id) {
-    set({
-      chars: get().chars.map((c, i) => {
-        if (c.id !== id || !c.stack.length) return c;
-        const [next, ...rest] = c.stack;
-        // 지금 인물은 맨 뒤로 — 블록은 스택에 담지 않으므로 이름·색·그림만 순환한다
-        return {
-          ...c,
-          ref: next.ref,
-          name: next.name,
-          color: next.color,
-          // ★그림도 함께 돈다 — 안 돌면 순차 생성 내내 첫 인물의 얼굴이 붙어 있다 (`StackItem` 의 ★주)
-          thumb: next.thumb ?? null,
-          stack: [
-            ...rest,
-            { ref: c.ref, name: c.name || t("cards.charN", { n: i + 1 }), color: c.color, thumb: c.thumb },
-          ],
-        };
-      }),
-    });
-    onEdit();
-  },
-
   load: (p) => {
     /* ★좌표가 없던 시절의 워크스페이스는 **사다리로 자리를 나눠 준다** (`lib/charPos`).
        전원을 한가운데 두면 배치 판을 처음 여는 순간 마커 셋이 한 점에 겹쳐 있다 —
@@ -399,8 +318,6 @@ export const usePrompt = create<S>((set, get) => ({
         color: CHAR_COLOR,
         thumb: normThumb(c.thumb),
         center,
-        // ★그림은 앞 카드와 **같은 손질**을 거친다 — 스택과 앞자리는 서로 오가는 값이다
-        stack: (c.stack ?? []).map((x) => ({ ...x, color: CHAR_COLOR, thumb: normThumb(x.thumb) })),
       };
     });
     set({
@@ -413,9 +330,11 @@ export const usePrompt = create<S>((set, get) => ({
         : { ref: null, name: t("prompt.defaultStyleName"), color: DEFAULT_STYLE_COLOR, thumb: null },
       // ★값이 없으면 켜진 것이다 — 옛 워크스페이스가 스타일 카드를 잃으면 안 된다
       styleOn: p.styleOn !== false,
-      /* ★옛 인물·스택에는 **이름 해시로 뽑힌 색**이 박혀 있다 — 위에서 종류 색으로
-         맞춰 뒀다. 안 맞추면 같은 종류인데 카드마다 색이 다른 화면이 남는다 */
+      /* ★옛 인물에는 **이름 해시로 뽑힌 색**이 박혀 있다 — 위에서 종류 색으로 맞춰 뒀다.
+         안 맞추면 같은 종류인데 카드마다 색이 다른 화면이 남는다 */
       chars,
+      // ★없으면 꺼진 것이다 — 옛 워크스페이스는 지금까지와 같이 한 장에 모아 뽑는다
+      seqChars: p.seqChars === true,
     });
   },
 
@@ -425,6 +344,7 @@ export const usePrompt = create<S>((set, get) => ({
     style: get().style,
     styleOn: get().styleOn,
     chars: get().chars,
+    seqChars: get().seqChars,
   }),
 
   /** 스타일 카드를 빼거나 새로 넣는다 (사용자 지시 2026-08-19).

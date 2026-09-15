@@ -64,7 +64,12 @@ export function PromptPanel({ onThumb }: SectionProps) {
           spot={dragKind === "characters" || dragImg}
           /* ★좌표 2택은 **여기** 선다 (사용자 지시 2026-08-21) — 공홈도 캐릭터 프롬프트
              패널에 둔다 (`dg()`). 판 자체는 큰 그림 위에 겹친다 (`Canvas` 의 `ScenePreview`). */
-          right={<CharPositionToggle />}
+          right={
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--sp-2)" }}>
+              <SeqCharsToggle />
+              <CharPositionToggle />
+            </span>
+          }
         >
           <CharStackedWarning />
           {/* ★★인물의 **차례**가 곧 `characterPrompts[]`·`char_captions[]` 의 차례이고
@@ -173,5 +178,35 @@ function Pre({ label, text, accent }: { label: string; text: string; accent?: st
         {text || t("prompt.empty")}
       </pre>
     </div>
+  );
+}
+
+/** ★★**순차 생성 모드** (사용자 결정 2026-09-15: *"순차생성 모드를 켜면 … 첫 캐릭터부터
+ *  순차적으로 생성"*). 켜면 켜 둔 인물을 한 장에 모으지 않고 **한 명씩** 차례로 뽑는다 —
+ *  규칙은 「슬롯을 하나씩만 켠 것처럼」 하나이고, 펴는 자리는 `store/gen` 의 `parties` 다.
+ *  ★★값은 **탭의 것**이다 (사용자 지시: 탭 안에서 프롬프트를 공유한다) — 프롬프트와 함께
+ *    `TabPrompt` 로 오간다 (`usePrompt.seqChars`).
+ *  ★자리는 캐릭터 묶음 머리, 좌표 2택 **왼쪽**이다. 둘 다 「이 인물들을 어떻게 쓸까」의 값이다. */
+function SeqCharsToggle() {
+  const t = useI18n((s) => s.t);
+  const on = usePrompt((s) => s.seqChars);
+  const setSeqChars = usePrompt((s) => s.setSeqChars);
+  return (
+    <button
+      data-seq-chars={on ? "on" : "off"}
+      onClick={() => setSeqChars(!on)}
+      data-tip={t("prompt.seqCharsTip")}
+      style={{
+        borderRadius: "var(--r-2)",
+        border: `1px solid ${on ? "var(--accent)" : "var(--line)"}`,
+        background: on ? "var(--accent)" : "transparent",
+        color: on ? "var(--accent-on)" : "var(--ink-soft)",
+        padding: "3px var(--sp-3)",
+        fontSize: "var(--text-2xs)",
+        fontWeight: "var(--w-normal)",
+      }}
+    >
+      {t("prompt.seqChars")}
+    </button>
   );
 }

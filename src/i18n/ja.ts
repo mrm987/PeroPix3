@@ -145,6 +145,8 @@ export const ja: Dict = {
 
   prompt: {
     baseBox: "ベースプロンプト",
+    seqChars: "順次生成",
+    seqCharsTip: "オンのキャラを1枚にまとめず、1人ずつ順番に生成します。",
     charBox: "キャラクタープロンプト",
     tabPrompt: "Prompt",
     tabUc: "Undesired Content",
@@ -172,7 +174,6 @@ export const ja: Dict = {
     editNoCells: "シーンのないカードです。",
     dropStyle: "このスタイルに変える",
     dropStyleNew: "スタイルカードを入れる",
-    dropStack: "スタックに重ねる",
     dropSwap: "差し替え",
     dropJoin: "新しい人物として追加",
     dropDeck: "デッキに保存",
@@ -218,8 +219,6 @@ export const ja: Dict = {
     moveCharDown: "下へ",
     renameChar: "キャラクター名を変更",
     nextUp: "次",
-    stackFront: "先頭へ",
-    stackDrop: "スタックから外す",
     saved: "デッキに保存: {name}",
   },
 
@@ -384,12 +383,14 @@ export const ja: Dict = {
     accountHint: "このワークスペースが使う NAI アカウント。残高と料金はこのアカウント基準で、キュー投入済みのものは変えても移りません。",
     perSlot: "スロットごと",
     slotsTimes: "{s}スロット × {p} = {t}枚",
+    slotsTimesSeq: "{s}スロット × {p} × キャラ{c}人 = {t}枚",
     countCost: "{n}枚 · {a} Anlas",
     count: "{n}枚",
     costAnlas: "{a} Anlas",
     vibeEncode: "バイブエンコード {a} Anlas",
     /** 費用の内訳（v2 の `合計（1枚あたり × Nスロット × M回）`） */
     costPerSlots: "1枚 {p} × シーン {s} × {r}回",
+    costPerSlotsSeq: "1枚 {p} × シーン {s} × {r}回 × キャラ{c}人",
     charLimitHit: "このモデルで有効にできるキャラクターは {max} 体までです。",
     charLimitClamped: "このモデルは {max} 体までです。末尾の {n} 体をオフにしました。",
     opusUsage: "Opus",

@@ -176,22 +176,6 @@
       }
     },
     {
-      "id": "stack_character",
-      "desc": "★**덱의 캐릭터 카드를 어느 캐릭터 칸의 스택(순차 생성 대기줄)에 얹는다.** 화면에서 카드를 칸 위에 끌어다 놓는 것과 같다 — 생성 한 장이 끝날 때마다 다음 카드로 돌아간다. «키키 다음에 미나도 번갈아» 가 이것이다. ★새 칸을 만드는 것이 아니다 — 새 칸은 `apply_card`(덱에서) 또는 `add_character`(빈 카드) 다.",
-      "args": {
-        "character": {
-          "type": "string",
-          "desc": "얹을 캐릭터 칸 — **id** (`get_workspace` 의 `characters[].id`)",
-          "required": true
-        },
-        "card": {
-          "type": "string",
-          "desc": "덱의 캐릭터 카드 — 이름 또는 id (`list_cards`)",
-          "required": true
-        }
-      }
-    },
-    {
       "id": "delete_scene_card",
       "desc": "★**씬 카드(씬 칸 묶음)를 통째로 지운다** — 그 안의 씬과 **그림도 함께 휴지통으로** 간다. 씬 하나만 지우는 것은 `delete_scene` 이다. 카드 id 는 `get_workspace` 의 `cards[].id` 다.",
       "args": {

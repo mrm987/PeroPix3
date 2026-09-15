@@ -15,6 +15,7 @@ import { useImageInput } from "../store/imageInput";
 import { useSub } from "../store/sub";
 import { allScenes, useWs } from "../store/workspace";
 import { useUi } from "../store/ui";
+import { usePrompt } from "../store/prompt";
 
 /** 지금 세트에서 **한 바퀴에 나가는 장 수** — 잠긴 씬·잠긴 카드는 빠진다.
  *
@@ -26,10 +27,19 @@ export function slotsNow(): number {
   return allScenes(tab).filter((x) => !x.cell.locked && !x.card.locked).length;
 }
 
-/** 한 바퀴가 실제로 만드는 장 수 = 잠기지 않은 씬 × 슬롯당 장수.
- *  ★★`perSlot` 을 빼먹으면 조수가 "10장"이라고 해 놓고 30장이 나간다 (시뮬레이션 구멍 B). */
+/** ★★**순차 생성 모드면 켜 둔 인물 수만큼 장이 는다** (2026-09-15). 그 모드는 인물을 한 장에
+ *  모으지 않고 **한 명씩** 뽑는다 (`store/gen` 의 `parties`). 꺼져 있거나 켜진 인물이 없으면 1 이다. */
+export const seqTimesNow = (): number => {
+  const p = usePrompt.getState();
+  return p.seqChars ? Math.max(1, p.chars.filter((c) => c.on).length) : 1;
+};
+
+/** 한 바퀴가 실제로 만드는 장 수 = 잠기지 않은 씬 × 슬롯당 장수 × (순차 모드면) 인물 수.
+ *  ★★`perSlot` 을 빼먹으면 조수가 "10장"이라고 해 놓고 30장이 나간다 (시뮬레이션 구멍 B).
+ *  ★★세는 자리는 **여기 하나**다 — 푸터도 조수도 이것을 부른다. 화면이 따로 곱하면
+ *    「예상 > 실제」가 조용히 생긴다 (카드 잠금에서 한 번 밟은 자리다). */
 export const countNow = (rounds = 1): number =>
-  slotsNow() * useUi.getState().perSlot * Math.max(1, rounds);
+  slotsNow() * useUi.getState().perSlot * seqTimesNow() * Math.max(1, rounds);
 
 /** 지금 설정으로 `rounds` 바퀴 돌 때의 값. ★`free` 가 참이면 **돈이 안 나간다**. */
 export function costNow(rounds = 1): Cost {

@@ -23,7 +23,7 @@ import { useQueue } from "../store/queue";
 import { useUi } from "../store/ui";
 import { useGen } from "../store/gen";
 import { useLlm } from "../store/llm";
-import { usePrompt, thumbFromCard } from "../store/prompt";
+import { usePrompt } from "../store/prompt";
 import { costNow, countNow } from "./costNow.ts";
 import { t } from "../i18n";
 
@@ -562,44 +562,6 @@ defineAction({
   },
 });
 
-defineAction({
-  id: "stack_character",
-  title: "캐릭터 카드를 스택에 얹습니다",
-  desc: "★**덱의 캐릭터 카드를 어느 캐릭터 칸의 스택(순차 생성 대기줄)에 얹는다.** "
-    + "화면에서 카드를 칸 위에 끌어다 놓는 것과 같다 — 생성 한 장이 끝날 때마다 다음 카드로 "
-    + "돌아간다. «키키 다음에 미나도 번갈아» 가 이것이다. "
-    + "★새 칸을 만드는 것이 아니다 — 새 칸은 `apply_card`(덱에서) 또는 `add_character`(빈 카드) 다.",
-  args: {
-    character: { type: "string", desc: "얹을 캐릭터 칸 — **id** (`get_workspace` 의 `characters[].id`)", required: true },
-    card: { type: "string", desc: "덱의 캐릭터 카드 — 이름 또는 id (`list_cards`)", required: true },
-  },
-  confirm: "none",
-  run: async (a) => {
-    const f = pickChar(String(a.character ?? "").trim());
-    if ("error" in f) return f;
-    const { useCards } = await import("../store/cards");
-    const list = useCards.getState().characters as
-      { id: string; name: string; color: [string, string]; thumb?: unknown }[];
-    const key = String(a.card ?? "").trim();
-    const same = list.filter((c) => c.name === key);
-    if (!list.some((c) => c.id === key) && same.length > 1)
-      return err("ambiguous", `「${key}」 이름의 카드가 여럿입니다. id 로 골라 주세요.`, {
-        what: "characters", given: key, candidates: same.map((c) => `${c.name}#${c.id}`),
-      });
-    const card = list.find((c) => c.id === key) ?? same[0];
-    if (!card)
-      return err("not_found", `그런 캐릭터 카드가 없습니다: ${key}`, {
-        what: "characters", given: key, candidates: nearBy(key, list.map((c) => c.name)),
-      });
-    usePrompt.getState().stackChar(f.hit.id, { ref: card.id, name: card.name, color: card.color, thumb: thumbFromCard(card.thumb) });
-    return {
-      ok: true, did: `캐릭터 칸 「${f.hit.name}」 의 스택에 「${card.name}」 을 얹음`,
-      at: { kind: "prompt", workspace: useWs.getState().current ?? undefined },
-    };
-  },
-});
-
-/* ── 씬 카드 지우기 (사용자 지적 2026-08-30: 씬 칸은 지워도 카드는 못 지웠다) ────── */
 defineAction({
   id: "delete_scene_card",
   title: "씬 카드를 지웁니다",

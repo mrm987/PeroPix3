@@ -254,6 +254,14 @@ export const useGen = create<S>((set, get) => ({
     /** 씬 번호(1부터) — ★카드를 가로질러 **탭 안에서** 센다. 파일 이름 앞에 붙는 번호라
      *  카드마다 1로 되돌아가면 탐색기에서 같은 번호가 여럿이 된다. */
     const order = allCells(tab);
+    /* ★★**순차 생성 모드** (사용자 결정 2026-09-15). 켜면 켜 둔 인물을 한 장에 모으지 않고
+       **한 명씩** 뽑는다 — 규칙은 「슬롯을 하나씩만 켠 것처럼」 하나다.
+       ★인물이 **가장 바깥**이다: A 의 씬·바퀴를 다 돌고 나서 B 로 넘어간다 (사용자 설명).
+       ★시드는 인물마다 `rounds` 를 새로 태우므로 **첫 바퀴가 서로 같은 시드**다 —
+         같은 조건에서 사람만 갈아 끼워 견줄 수 있다.
+       ★인물이 없으면(캐릭터 칸이 없거나 전부 꺼짐) 켜져 있어도 평소와 같이 한 판이다. */
+    const seq = usePrompt.getState().seqChars && raw.chars.length > 0;
+    const parties = seq ? raw.chars.map((c) => [c]) : [raw.chars];
     // ★큐로 보낸다 — 한 장씩 await 하면 중간에 앱을 닫거나 새로고침하면 나머지가 사라진다.
     //   큐는 백엔드가 들고 있어 재연결로 복원된다 (store/queue.ts).
     await useQueue.getState().enqueue(
@@ -272,6 +280,7 @@ export const useGen = create<S>((set, get) => ({
       // ★**바퀴를 여기서 편다** (2026-08-11). 예전에는 씬 목록만 보내고 장 수는 서버가
       //   펼쳤는데(`qb.count`), 그러면 "한 바퀴에 시드 하나"를 표현할 수가 없다.
       //   여기서 펴면 순서와 시드가 둘 다 정확해진다.
+      parties.flatMap((party) =>
       rounds(Math.max(1, useUi.getState().perSlot), get().params, live, ({ cell: c }, seed) => {
         // ★씬 프롬프트가 **payload 의 어디로** 들어가나 — 탭의 선택 하나가 정한다.
         //   `base` 면 top-level prompt 에, 캐릭터 id 면 그 사람의 `characterPrompts[]` 에 붙는다.
@@ -282,10 +291,11 @@ export const useGen = create<S>((set, get) => ({
         //   씬 태그를 **켜진 캐릭터 전부**의 프롬프트에 이어 붙였다.
         //   ★켜진 캐릭터가 **둘 이상일 때만** 뜻이 있다 (한 명이면 그 사람을 고르는 것과 같다) —
         //     화면도 그때만 선택지를 낸다(`SceneLane`). 조건이 깨지면 base 로 떨어진다.
+        //   ★순차 모드에서는 그 장에 **한 명뿐**이라 「전원」이 곧 그 사람이다.
         const dest =
-          tab.sceneDest === "all" && raw.chars.length > 1
+          tab.sceneDest === "all" && (party.length > 1 || seq)
             ? "all"
-            : raw.chars.some((ch) => ch.id === tab.sceneDest)
+            : party.some((ch) => ch.id === tab.sceneDest)
               ? tab.sceneDest
               : "base";
         const toChar = dest !== "base";
@@ -300,12 +310,12 @@ export const useGen = create<S>((set, get) => ({
           prompt: [raw.prompt, toChar ? "" : scene].filter(Boolean).join(", "),
           uc: raw.uc,
           chars: toChar
-            ? raw.chars.map((ch) =>
+            ? party.map((ch) =>
                 (dest === "all" || ch.id === dest) && scene
                   ? { ...ch, prompt: [ch.prompt, scene].filter(Boolean).join(", ") }
                   : ch,
               )
-            : raw.chars,
+            : party,
         });
         return {
           cell: c.name,
@@ -330,6 +340,7 @@ export const useGen = create<S>((set, get) => ({
           },
         };
       }),
+      ),
       1,
     );
     if (get().params.seed_mode !== "fixed") get().set("seed", randomSeed());
@@ -348,9 +359,14 @@ export const useGen = create<S>((set, get) => ({
  */
 export const charLimit = () => capsOf(useGen.getState().params.model).max_characters;
 
+/** ★★**순차 생성 모드에서는 상한이 안 걸린다** (2026-09-15). 그 모드는 한 장에 한 명만
+ *  실으므로 (`generateAll` 의 `parties`), 켜 둔 인물이 몇이든 NAI 가 받는 수를 안 넘는다.
+ *  ★모델 상한은 **한 장에 몇 명인가**의 값이지 「칸이 몇 개인가」가 아니다. */
+const capped = () => !usePrompt.getState().seqChars;
+
 /** 지금 하나 더 켤 수 있나 */
 export const canEnableChar = () =>
-  usePrompt.getState().chars.filter((c) => c.on).length < charLimit();
+  !capped() || usePrompt.getState().chars.filter((c) => c.on).length < charLimit();
 
 /** 켜기 — 상한에 닿으면 켜지 않고 알린다. 끄기는 언제나 된다. */
 export function toggleCharCapped(id: string) {
@@ -366,6 +382,8 @@ export function toggleCharCapped(id: string) {
 /** ★상한이 **줄어드는 순간**(모델 전환)에 넘은 것을 뒤에서부터 끈다.
  *  넘은 상태 자체를 두지 않으므로 「초과분은 무시됩니다」 같은 경고가 필요 없다. */
 export function clampCharsToModel() {
+  // ★순차 모드에서는 넘을 일이 없다 (한 장에 한 명) — 모델을 바꿔도 끄지 않는다
+  if (!capped()) return 0;
   const limit = charLimit();
   const over = usePrompt.getState().chars.filter((c) => c.on).slice(limit);
   if (!over.length) return 0;

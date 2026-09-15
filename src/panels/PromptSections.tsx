@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useI18n } from "../i18n";
 import { Icon } from "../components/Icon";
 import { BlockList } from "../blocks/BlockList";
@@ -20,8 +20,6 @@ import { TYPE } from "../styles/type";
 import { applyCard } from "../lib/applyCard";
 import { zoneIcon } from "../cards/CardArt";
 import { DropVeil } from "../cards/DropVeil";
-import { FittedImg } from "../cards/FittedImg";
-import { BANNER_BG, BANNER_CUT, BANNER_IMG_W, BANNER_STEP, bannerEmptyFill } from "../cards/banner";
 import type { Block } from "../lib/blocks";
 import type { CharCard, StyleCard } from "../store/cards";
 import { pickStyleOpts } from "../lib/styleOpts";
@@ -200,28 +198,19 @@ export function CharSection({
   onThumb,
 }: { ch: Char; index: number; /** 맨 아래 카드인가 — 아래 단추를 흐리게 한다 */ last: boolean } & SectionProps) {
   const t = useI18n((s) => s.t);
-  const { updateChar, swapChar, stackChar, removeChar, renameChar, stepChar } = usePrompt();
+  const { updateChar, swapChar, removeChar, renameChar, stepChar } = usePrompt();
   const folded = useUi((u) => u.view.fold);
   const toggleFold = (id: string) => useUi.getState().setView("fold", id, !useUi.getState().view.fold[id]);
   const startDrag = useDragSource();
   const active = useDrag((s) => s.drag?.kind === "characters" && s.drag.dir === "apply");
 
-  /* ★★**받는 자리는 셋이다: 스택 · 교체 · 새로 추가** (사용자 지시 2026-08-24로 교체가 돌아왔다).
+  /* ★★**받는 자리는 둘이다: 교체 · 새로 추가** (2026-09-15 에 스택이 빠졌다).
      2026-08-20 에 교체를 걷으면서 든 근거 *"새로 추가하고 옛 카드를 지우는 것과 결과가 같다"* 는
      틀렸다 — 새로 추가하면 차례가 맨 뒤로 가고 자리 좌표도 새로 잡히는데, 교체는 **그 자리
      그대로** 사람만 갈린다 (`swapChar` 의 ★주).
-     ★가르는 비율은 **위 1/3 이 스택, 아래 2/3 가 교체**다 (사용자 지시). 반씩 나눴던 때와 달리
-       두 자리의 크기가 달라서, 어느 쪽에 놓는지가 손에 먼저 잡힌다. 흔한 쪽(교체)이 넓다. */
-  const stack = useDropZone({
-    id: `sec-char-${ch.id}-stack`,
-    kind: "characters",
-    prio: 3,
-    onDrop: (d) => {
-      const c = d.card as CharCard;
-      // ★그림도 함께 담는다 — 스택 카드에도 얼굴이 보여야 다음 차례가 누구인지 안다
-      stackChar(ch.id, { ref: c.id, name: c.name, color: c.color, thumb: thumbFromCard(c.thumb) });
-    },
-  });
+     ★★한때 카드 위 1/3 이 **스택**(순차 생성 대기줄)이었다. 순차 생성이 모드로 바뀌면서
+       (`usePrompt.seqChars`) 그 자리가 필요 없어졌고, 카드 전체가 교체를 받는다 —
+       반쪽만 받던 때보다 겨냥하기 쉽다. */
   const swap = useDropZone({
     id: `sec-char-${ch.id}-swap`,
     kind: "characters",
@@ -258,7 +247,6 @@ export function CharSection({
   const name = ch.name || t("cards.charN", { n: index + 1 });
   return (
     <>
-      {ch.stack.length > 0 && <StackPeek ch={ch} />}
       {/* ★조수가 이 인물을 고쳤으면 여기를 강조한다 (`lib/agentAt` 의 `prompt:<id>`) */}
       <div ref={char_.ref} style={flashStyle(char_.on)}>
       <SectionCard
@@ -289,8 +277,7 @@ export function CharSection({
            (사용자 지시 2026-08-21).
            끌기로 만들었다가 걷었다: 배너를 끄는 것은 이미 **덱에 저장**이라
            (`onBannerPointerDown`) 같은 몸짓이 두 가지 뜻을 갖게 된다.
-           ★스택된 인물은 카드 하나에 얹혀 있으므로(`ch.stack`) 자동으로 함께 간다 —
-             따로 옮기는 코드를 두지 말 것. */
+           ★자리 좌표는 인물이 들고 다니므로 따로 옮기는 코드를 두지 말 것. */
         bannerLead={
           <>
             <BannerBtn
@@ -328,27 +315,9 @@ export function CharSection({
         }
         hoverLift
         overlay={
-          // ★카드를 **위 1/3(스택) · 아래 2/3(교체)** 로 가른다 (위 ★주).
-          //   표시는 앱 전체 공통이다 (`DropVeil`)
+          // ★카드 전체가 **교체**를 받는다 (위 ★★주). 표시는 앱 전체 공통이다 (`DropVeil`)
           active ? (
-            <>
-              <DropVeil
-                innerRef={stack.ref}
-                over={stack.over}
-                label={t("cards.dropStack")}
-                name="stack"
-                top="0"
-                height="33.333%"
-              />
-              <DropVeil
-                innerRef={swap.ref}
-                over={swap.over}
-                label={t("cards.dropSwap")}
-                name="swap"
-                top="33.333%"
-                height="66.667%"
-              />
-            </>
+            <DropVeil innerRef={swap.ref} over={swap.over} label={t("cards.dropSwap")} name="swap" />
           ) : img.active ? (
             <DropVeil over={img.over} label={t("cards.dropThumb")} name="thumb" />
           ) : null
@@ -364,126 +333,6 @@ export function CharSection({
       </SectionCard>
       </div>
     </>
-  );
-}
-
-/** 순차 생성 더미 — 섹션 **뒤에 겹쳐** 윗변만 빼꼼 나온다.
- *  ★다음 차례가 누구인지 눈으로 알 수 있어야 한다는 것이 요구였다. 클릭하면 펼쳐진다.
- *
- *  겹침은 음수 마진으로 만든다. 앞(다음 차례) 카드가 DOM 마지막이라 뒤 카드를 덮고,
- *  마지막 카드의 음수 마진이 곧 **섹션이 덮고 남기는 높이**(PEEK)가 된다. */
-const CARD_H = 48; // 접힌 스택 카드의 실제 높이
-const PEEK = 22; // 섹션 위로 드러나는 높이 — 이름이 잘리지 않을 만큼
-const STEP = 6; // 뒤에 더 쌓인 카드가 한 장씩 더 드러나는 양
-
-function StackPeek({ ch }: { ch: Char }) {
-  const t = useI18n((s) => s.t);
-  const [open, setOpen] = useState(false);
-  const dropStack = usePrompt((s) => s.dropStack);
-  const frontStack = usePrompt((s) => s.frontStack);
-  /** ★그림 주소는 **여기서 한 번** 꺼낸다 — `useThumbView` 는 훅이라 아래 `map` 안에서 못 부른다
-   *  (`StyleSection` 의 같은 ★주: JSX 안에서 훅을 부르면 개수가 렌더마다 달라져 React 가 죽는다) */
-  const base = useGen((s) => s.base);
-  // 맨 앞(다음 차례)이 섹션에 가장 가까이 = DOM 마지막
-  const cards = [...ch.stack].reverse();
-  return (
-    <div onClick={() => setOpen((v) => !v)} style={{ cursor: "pointer" }}>
-      {cards.map((c, i) => {
-        const front = i === cards.length - 1;
-        return (
-          <div
-            key={i}
-            style={{
-              height: open ? 56 : CARD_H,
-              marginBottom: open ? -18 : -(CARD_H - (front ? PEEK : STEP)),
-              borderRadius: 12,
-              border: "1px solid var(--line)",
-              position: "relative",
-              color: "#fff",
-              fontSize: "var(--text-3xs)",
-              fontWeight: "var(--w-bold)",
-              lineHeight: 1.1,
-              textShadow: "0 1px 2px rgba(0,0,0,0.75)",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: open ? "0 12px" : `0 12px ${CARD_H - PEEK}px`,
-              boxShadow: "0 -3px 12px rgba(0,0,0,0.4)",
-              overflow: "hidden",
-              /* ★★**앞 카드 배너와 같은 재료로 그린다** (사용자 지적 2026-08-20: 스택 카드에
-                 우측 계단식 검은 패널이 없다). 바탕은 그림 오른쪽으로 이어지는 단색,
-                 왼쪽 240px 은 계단으로 잘린 색 면 — `cards/banner` 의 값 하나를 셋이 함께
-                 쓴다. 같은 카드인데 앞에 있느냐 뒤에 있느냐로 생김새가 달라지면 안 된다. */
-              background: BANNER_BG,
-            }}
-          >
-            {/* ★그림 자리 — **앞 카드 배너와 같은 것을 그린다** (사용자 지시 2026-08-24:
-                스택에도 썸네일이 보이게). 없으면 예전처럼 같은 실루엣에 카드 색만.
-                ★높이는 앞 카드 배너와 같은 56 이다 — 접힌 스택은 위쪽만 드러나므로
-                  그림도 위에서부터 같은 자리가 보인다 (`SectionCard` 의 배너와 짝이 맞는다). */}
-            <span
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: BANNER_IMG_W,
-                pointerEvents: "none",
-                maskImage: BANNER_CUT,
-                WebkitMaskImage: BANNER_CUT,
-                background: c.thumb ? undefined : bannerEmptyFill(c.color),
-              }}
-            >
-              {c.thumb && <FittedImg url={thumbUrl(base, c.thumb)} w={BANNER_IMG_W} h={56} view={c.thumb.banner} />}
-              {/* 중간 단 — 잘리기 전 구간을 한 번 어둡게 눕혀 계단을 만든다 */}
-              <span style={{ position: "absolute", inset: 0, background: BANNER_STEP }} />
-            </span>
-            <b style={{ position: "relative", ...TYPE.cardName, fontWeight: "var(--w-bold)" }}>
-              {c.name}
-            </b>
-            {front && (
-              <span
-                style={{
-                  position: "relative",
-                  background: "rgba(0,0,0,0.4)",
-                  borderRadius: 4,
-                  padding: "0 5px",
-                  fontSize: "calc(0.56rem * var(--text-scale))",
-                }}
-              >
-                {t("cards.nextUp")}
-              </span>
-            )}
-            {/* ★★**펼쳤을 때만 선다** (사용자 지시 2026-08-20) — 접혀 있으면 카드가 몇 px 만
-                보여서 누를 자리가 없고, 겹친 띠 위에 단추만 늘어서 무엇이 무엇의 것인지 모른다.
-                ★단추는 앞 카드 배너와 **같은 것**이다 (`BannerBtn` 하나를 쓴다).
-                ★자리도 **이름과 같은 줄**이다 (사용자 지시 2026-08-20) — 카드가 통째로
-                  보이는 상태라 앞 카드처럼 이름 오른편에 서야 짝이 맞는다.
-                ★아래 방향 화살표다 — 스택은 **아래에 있는 앞 카드**로 내려보내는 것이다. */}
-            {open && (
-              <span
-                style={{
-                  position: "absolute",
-                  right: 8,
-                  top: 0,
-                  bottom: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                <BannerBtn title={t("cards.stackFront")} onClick={() => frontStack(ch.id, cards.length - 1 - i)}>
-                  {Icon.chevronDown}
-                </BannerBtn>
-                <BannerBtn title={t("cards.stackDrop")} onClick={() => dropStack(ch.id, cards.length - 1 - i)}>
-                  {Icon.close12}
-                </BannerBtn>
-              </span>
-            )}
-          </div>
-        );
-      })}
-    </div>
   );
 }
 

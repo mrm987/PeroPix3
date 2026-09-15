@@ -113,7 +113,10 @@ export function CharStackedWarning() {
           return p.x === q.x && p.y === q.y;
         }),
       );
-  if (!canPosition || !useCoords || positioning || !stacked) return null;
+  /* ★★**순차 생성 모드에서는 안 낸다** (2026-09-15). 그 모드는 한 장에 한 명만 실으므로
+     (`store/gen` 의 `parties`) 자리가 겹쳐도 겹칠 사람이 없다. */
+  const seq = usePrompt((s) => s.seqChars);
+  if (!canPosition || !useCoords || positioning || !stacked || seq) return null;
   return (
     <div
       data-stacked-warning
