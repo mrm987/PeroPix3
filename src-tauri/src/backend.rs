@@ -4,11 +4,13 @@
 //! 당시 막힌 것은 빌드 배관이었지 이 구조가 아니다. 같은 형태를 유지하되
 //! 프로세스 수명 관리를 셸이 확실히 하도록 정리했다.
 
+use std::collections::HashMap;
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 pub const DEFAULT_PORT: u16 = 8770;
 
@@ -286,6 +288,12 @@ const LOG_KEEP: u64 = 128 * 1024;
 const LOG_HARD: u64 = 1024 * 1024;
 /// 앞이 잘렸을 때 남기는 표시 — 읽는 사람이 「여기가 처음이 아니다」를 알아야 한다
 const CUT_NOTE: &str = "…(앞부분이 잘렸습니다)\n";
+/// 이번 실행이 천장(`LOG_HARD`)에 닿았을 때 마지막으로 남기는 줄
+const CAP_NOTE: &str = "…(이번 실행의 로그가 상한을 넘어 이후 줄을 적지 않습니다)\n";
+/// 같은 줄을 다시 적기까지 기다리는 시간 — 화면 쪽 억제(`src/lib/report.ts`)와 같은 10초다.
+const REPEAT_WINDOW: Duration = Duration::from_secs(10);
+/// 억제 장부가 이보다 커지면 통째로 비운다 — 장부 자체가 메모리를 먹지 않게.
+const SEEN_MAX: usize = 1000;
 
 /// 로그 이름 — ★★**파일은 하나뿐이다** (사용자 지시 2026-08-27: *"로그 파일은 하나만
 /// 생기게"*). 파이썬의 두 물줄기(stdout·stderr)도 여기로 함께 흘린다.
@@ -345,6 +353,28 @@ fn trim_bytes(bytes: &[u8], keep: u64, hard: u64) -> String {
     }
 }
 
+/// 파일의 **꼬리만** 읽는다 — 많아야 `want` 바이트.
+///
+/// ★★**통째로 읽지 않는다** (사용자 제보 2026-09-16). 옛 코드는 `std::fs::read` 로 파일 전체를
+///   메모리에 올린 뒤 잘랐다. 로그가 **1.9GB** 까지 자란 제보자의 컴퓨터에서는 그 한 줄이
+///   1.9GB 를 읽어 들이느라 앱이 켜지는 자리에서 한참 붙들렸고, 화면 쪽 대기가 먼저 끝나
+///   「백엔드가 뜨지 않았습니다」로 넘어갔다. **자르기가 있어야 할 자리에서 자르기가 앱을
+///   막고 있었다.** 읽는 양에 천장이 있으면 파일이 얼마나 크든 이 함수의 값은 일정하다.
+/// ★남길 양(`LOG_KEEP`)보다 넉넉히 읽는 이유는 그 안에서 실행 경계(`MARK`)를 찾아야 하기
+///   때문이다. 천장(`LOG_HARD`)만큼 읽으면 결과도 언제나 천장 안으로 들어온다.
+/// ★꼬리에서 시작하므로 첫 글자가 반 토막일 수 있다 — `trim_bytes` 가 `from_utf8_lossy` 로
+///   받고 경계에서 다시 자르므로 그대로 흘려보낸다.
+fn read_tail(path: &Path, len: u64, want: u64) -> Option<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = File::open(path).ok()?;
+    if len > want {
+        f.seek(SeekFrom::Start(len - want)).ok()?;
+    }
+    let mut buf = Vec::new();
+    f.take(want).read_to_end(&mut buf).ok()?;
+    Some(buf)
+}
+
 fn open_log(root: &Path) -> Option<File> {
     let dir = root.join("logs");
     let _ = std::fs::create_dir_all(&dir);
@@ -355,13 +385,135 @@ fn open_log(root: &Path) -> Option<File> {
         let _ = std::fs::remove_file(dir.join(old));
     }
 
-    if std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0) > LOG_MAX {
-        if let Ok(bytes) = std::fs::read(&path) {
+    let len = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    if len > LOG_MAX {
+        if let Some(bytes) = read_tail(&path, len, LOG_HARD) {
             let _ = std::fs::write(&path, trim_bytes(&bytes, LOG_KEEP, LOG_HARD));
         }
     }
 
     std::fs::OpenOptions::new().create(true).append(true).open(&path).ok()
+}
+
+/// 자식의 출력을 로그 파일로 옮기는 창구 — **두 물줄기(stdout·stderr)가 이 하나를 나눠 쓴다.**
+///
+/// ★★**왜 중계하나** (사용자 제보 2026-09-16): 옛 코드는 로그 파일의 핸들을 자식에게 그대로
+///   물려주었다. 그러면 자식이 적는 양을 껍데기가 **아예 모르므로** 상한을 재는 자리가 앱을
+///   켤 때 한 번뿐이었다. 파이썬이 같은 오류를 쉬지 않고 쏟는 상태에 빠지면(미들웨어가 예외마다
+///   자취를 통째로 찍는다 — `backend/server.py` 의 `_log_errors`) 앱이 켜져 있는 **그동안**
+///   파일이 한없이 커졌고, 실제로 1.9GB 가 된 제보를 받았다.
+/// ★그래서 껍데기가 파이프로 받아 **한 줄씩 적으면서** 둘을 본다: 같은 줄이 되풀이되면 억제하고,
+///   이번 실행이 천장(`LOG_HARD`)에 닿으면 거기서 멈춘다. 둘 다 **적는 순간** 걸리므로 앱이
+///   켜져 있는 동안에도 파일 크기에 천장이 생긴다.
+/// ★`log_line` 은 이 창구를 거치지 않는다 — 껍데기가 부팅 때 적는 몇 줄이라 셀 것이 없다.
+struct Sink<W: Write> {
+    out: W,
+    /// 이번 실행이 적은 양 (실행 경계와 머리말을 포함한다)
+    written: u64,
+    /// 천장에 닿아 더 적지 않는 상태
+    capped: bool,
+    /// 줄마다 「마지막으로 적은 시각, 그 뒤로 생략한 횟수」
+    seen: HashMap<String, (Instant, u32)>,
+}
+
+impl<W: Write> Sink<W> {
+    fn new(out: W, written: u64) -> Self {
+        Self { out, written, capped: false, seen: HashMap::new() }
+    }
+
+    /// 한 줄 적는다 — 줄바꿈은 여기서 붙인다. `now` 를 받는 것은 판정이 시간을 앞으로
+    /// 돌려 볼 수 있게 하기 위해서다 (`Instant` 는 손으로 만들 수 없다).
+    fn line(&mut self, line: &str, now: Instant) {
+        // ★빈 줄은 억제하지 않는다 — 자취 사이의 빈 줄까지 「N회 생략」으로 바꾸면 읽을 수가
+        //   없다. 천장은 그대로 걸리므로 빈 줄만 쏟아져도 파일은 안 커진다.
+        let skipped = if line.is_empty() {
+            0
+        } else {
+            match self.seen.get_mut(line) {
+                Some((at, n)) if now.duration_since(*at) < REPEAT_WINDOW => {
+                    *n += 1;
+                    return;
+                }
+                Some((at, n)) => {
+                    *at = now;
+                    std::mem::replace(n, 0)
+                }
+                None => {
+                    if self.seen.len() >= SEEN_MAX {
+                        self.seen.clear();
+                    }
+                    self.seen.insert(line.to_string(), (now, 0));
+                    0
+                }
+            }
+        };
+        if skipped > 0 {
+            self.put(&format!("{line}    … 같은 줄 {skipped}회 생략\n"));
+        } else {
+            self.put(&format!("{line}\n"));
+        }
+    }
+
+    /// 억제해 둔 횟수를 흘려보낸다 — 자식이 끝났을 때 마지막 줄이 억제된 채로 남으면
+    /// 그 줄이 몇 번 났는지가 영영 사라진다.
+    fn flush_repeats(&mut self) {
+        let mut left: Vec<(String, u32)> = Vec::new();
+        for (line, (_, n)) in self.seen.iter_mut() {
+            if *n > 0 {
+                left.push((line.clone(), *n));
+                *n = 0;
+            }
+        }
+        left.sort();
+        for (line, n) in left {
+            self.put(&format!("{line}    … 같은 줄 {n}회 생략\n"));
+        }
+    }
+
+    fn put(&mut self, text: &str) {
+        if self.capped {
+            return;
+        }
+        if self.written + text.len() as u64 > LOG_HARD {
+            self.capped = true;
+            let _ = self.out.write_all(CAP_NOTE.as_bytes());
+            return;
+        }
+        self.written += text.len() as u64;
+        let _ = self.out.write_all(text.as_bytes());
+    }
+}
+
+/// 자식의 한 물줄기를 로그로 옮기는 스레드를 띄운다. 자식이 끝나면(파이프가 닫히면)
+/// 스레드도 스스로 끝난다.
+///
+/// ★줄 단위로 읽는다 — 억제도 천장도 줄을 단위로 세기 때문이다.
+/// ★**바이트째** 받아 `from_utf8_lossy` 로 옮긴다. `lines()` 를 쓰면 UTF-8 이 아닌 바이트
+///   하나에 그 줄이 통째로 오류가 되어 사라진다 (자식에게 `PYTHONIOENCODING=utf-8` 을 주지만,
+///   파이썬을 거치지 않고 나오는 줄도 있다).
+fn relay(
+    pipe: impl std::io::Read + Send + 'static,
+    sink: Arc<Mutex<Sink<File>>>,
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        let mut r = BufReader::new(pipe);
+        let mut buf = Vec::new();
+        loop {
+            buf.clear();
+            match r.read_until(b'\n', &mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+            let text = String::from_utf8_lossy(&buf);
+            let line = text.trim_end_matches(|c| c == '\r' || c == '\n');
+            if let Ok(mut s) = sink.lock() {
+                s.line(line, Instant::now());
+            }
+        }
+        if let Ok(mut s) = sink.lock() {
+            s.flush_repeats();
+        }
+    })
 }
 
 /// 껍데기가 **로그 파일에 한 줄** 적는다.
@@ -397,8 +549,10 @@ pub fn spawn() -> std::io::Result<Child> {
     }
     print!("{head}");
 
-    let out = log.as_ref().and_then(|f| f.try_clone().ok());
-    let err = log.as_ref().and_then(|f| f.try_clone().ok());
+    // ★★**파일 핸들을 자식에게 물려주지 않는다** — 파이프로 받아 우리가 적는다 (`Sink` 주석).
+    //   ★로그를 못 열었으면 **파이프를 열지 않는다.** 아무도 안 읽는 파이프는 버퍼가 차는
+    //     순간 자식을 멈춰 세운다.
+    let piped = log.is_some();
 
     let mut cmd = Command::new(&python);
     cmd.arg(&script)
@@ -411,8 +565,8 @@ pub fn spawn() -> std::io::Result<Child> {
         .env("PYTHONIOENCODING", "utf-8")
         .env("PYTHONUTF8", "1")
         .current_dir(&root)
-        .stdout(out.map(Stdio::from).unwrap_or_else(Stdio::null))
-        .stderr(err.map(Stdio::from).unwrap_or_else(Stdio::null));
+        .stdout(if piped { Stdio::piped() } else { Stdio::null() })
+        .stderr(if piped { Stdio::piped() } else { Stdio::null() });
 
     // 콘솔 창이 따로 뜨지 않게 (Windows)
     #[cfg(windows)]
@@ -422,14 +576,27 @@ pub fn spawn() -> std::io::Result<Child> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let child = cmd.spawn()?;
+    let mut child = cmd.spawn()?;
     adopt_into_job(&child); // ★부모가 어떻게 죽든 함께 내려가게
+
+    // ★두 물줄기가 **창구 하나**를 나눠 쓴다 — 억제 장부와 이번 실행의 누적량이 한 벌이라야
+    //   stdout 으로 온 줄과 stderr 로 온 줄이 서로를 센다.
+    if let Some(f) = log {
+        let sink = Arc::new(Mutex::new(Sink::new(f, head.len() as u64)));
+        if let Some(o) = child.stdout.take() {
+            let _ = relay(o, sink.clone()); // 스레드는 자식이 끝나면 스스로 끝난다
+        }
+        if let Some(e) = child.stderr.take() {
+            let _ = relay(e, sink);
+        }
+    }
     Ok(child)
 }
 
 #[cfg(test)]
 mod log_tests {
-    use super::{trim_at, trim_bytes, MARK};
+    use super::{trim_at, trim_bytes, Sink, CAP_NOTE, LOG_HARD, MARK, REPEAT_WINDOW};
+    use std::time::Instant;
 
     /// 실행 세 회분을 만든다 — 각 회는 경계 한 줄 + 본문 몇 줄
     fn runs(n: usize, body: usize) -> String {
@@ -496,6 +663,95 @@ mod log_tests {
 
     /// ★한 실행이 천장을 넘으면 **그 실행이라도** 앞을 자른다 — 안 그러면 오류를 쏟아 낸
     ///   실행 하나로 파일이 한없이 커진다. 자른 자리는 줄 경계다.
+    /// ★★같은 줄이 되풀이되면 한 번만 적는다 — 파이썬이 같은 자취를 쉬지 않고 쏟아 로그가
+    ///   1.9GB 가 된 제보(2026-09-16)를 막는 자리다. 생략한 횟수는 그 줄을 다시 적을 때 함께 남긴다.
+    #[test]
+    fn 같은_줄이_되풀이되면_억제한다() {
+        let mut s = Sink::new(Vec::new(), 0);
+        let t0 = Instant::now();
+        for _ in 0..100 {
+            s.line("ERROR [api] POST /api/generate → KeyError: seed", t0);
+        }
+        s.line("다른 줄", t0);
+        let text = String::from_utf8_lossy(&s.out).to_string();
+        assert_eq!(text.matches("KeyError").count(), 1, "되풀이된 줄은 한 번만 적힌다: {text}");
+
+        // 창(10초)이 지나면 다시 적되, 그동안 생략한 99회를 함께 남긴다
+        s.line("ERROR [api] POST /api/generate → KeyError: seed", t0 + REPEAT_WINDOW);
+        let text = String::from_utf8_lossy(&s.out).to_string();
+        assert!(text.contains("같은 줄 99회 생략"), "{text}");
+    }
+
+    /// ★자식이 끝났는데 마지막 줄이 억제된 채면 그 횟수가 영영 사라진다 — EOF 에서 흘려보낸다
+    #[test]
+    fn 끝날_때_억제해_둔_횟수를_남긴다() {
+        let mut s = Sink::new(Vec::new(), 0);
+        let t0 = Instant::now();
+        for _ in 0..5 {
+            s.line("되풀이되는 줄", t0);
+        }
+        s.flush_repeats();
+        let text = String::from_utf8_lossy(&s.out).to_string();
+        assert!(text.contains("같은 줄 4회 생략"), "{text}");
+    }
+
+    /// ★★한 실행이 천장에 닿으면 **적는 자리에서** 멈춘다 — 앱이 켜져 있는 동안에도 파일
+    ///   크기에 천장이 있어야 한다 (켤 때 한 번 자르는 것만으로는 그 사이를 못 막는다).
+    #[test]
+    fn 천장에_닿으면_그만_적는다() {
+        let mut s = Sink::new(Vec::new(), LOG_HARD - 40);
+        let t0 = Instant::now();
+        for i in 0..1000 {
+            s.line(&format!("서로 다른 줄 {i}"), t0); // 억제에 안 걸리게 저마다 다른 줄로
+        }
+        let text = String::from_utf8_lossy(&s.out).to_string();
+        assert!(s.out.len() < 4096, "천장을 넘으면 더 적지 않아야 한다 ({}바이트)", s.out.len());
+        assert!(text.ends_with(CAP_NOTE), "멈춘 이유를 남겨야 한다: {text}");
+    }
+
+    /// ★★**배관을 실제 자식 프로세스로 한 번 태운다.** 위의 판정들은 `Sink` 만 본다 —
+    ///   파이프에서 읽어 파일에 닿기까지가 실제로 이어져 있는지는 프로세스를 띄워 봐야 안다.
+    ///   여기를 갈아엎었으므로(파일 핸들 상속 → 파이프 중계) 가장 큰 위험이 「로그가 통째로
+    ///   안 남는다」이고, 그것은 앱을 켜 보기 전에는 눈에 안 띈다.
+    #[cfg(windows)]
+    #[test]
+    fn 자식의_출력이_파일까지_온다() {
+        use std::process::{Command, Stdio};
+        use std::sync::{Arc, Mutex};
+
+        let path = std::env::temp_dir().join("peropix-relay-test.log");
+        let _ = std::fs::remove_file(&path);
+        let f = std::fs::OpenOptions::new().create(true).append(true).open(&path).unwrap();
+        let sink = Arc::new(Mutex::new(super::Sink::new(f, 0)));
+
+        let mut child = Command::new("cmd")
+            .args(["/c", "echo repeat&echo repeat&echo repeat&echo last"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let h = super::relay(child.stdout.take().unwrap(), sink.clone());
+        let _ = child.wait();
+        h.join().unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(text.contains("last"), "자식이 찍은 줄이 파일까지 와야 한다: {text:?}");
+        assert_eq!(text.matches("repeat").count(), 2, "한 번 적히고 생략 횟수가 한 줄: {text:?}");
+        assert!(text.contains("같은 줄 2회 생략"), "{text:?}");
+    }
+
+    /// ★빈 줄은 억제하지 않는다 — 자취 사이의 빈 줄이 「N회 생략」으로 바뀌면 읽을 수가 없다
+    #[test]
+    fn 빈_줄은_억제하지_않는다() {
+        let mut s = Sink::new(Vec::new(), 0);
+        let t0 = Instant::now();
+        for _ in 0..3 {
+            s.line("", t0);
+        }
+        assert_eq!(String::from_utf8_lossy(&s.out), "\n\n\n");
+    }
+
     #[test]
     fn 한_실행이_너무_크면_줄_경계에서_자른다() {
         let text = runs(1, 2000);
