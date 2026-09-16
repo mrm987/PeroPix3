@@ -5,6 +5,8 @@ export const en = {
     backend: "Starting the engine…",
     workspace: "Opening your last workspace…",
     failed: "The backend didn't start. See the log:",
+    retry: "Try again",
+    retrying: "Trying again…",
   },
 
   window: {

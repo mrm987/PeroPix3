@@ -5,6 +5,8 @@ export const ja: Dict = {
     backend: "エンジンを起動中…",
     workspace: "前回のワークスペースを読み込み中…",
     failed: "バックエンドが起動しませんでした。ログをご確認ください:",
+    retry: "再試行",
+    retrying: "再試行中…",
   },
 
   window: {

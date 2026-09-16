@@ -151,8 +151,17 @@ export function App() {
       watchErrors();
       await initGen();
       mark("껍데기주소");
-      // 사이드카가 뜨는 데 잠깐 걸리므로 재시도한다.
-      for (let i = 0; i < 25; i++) {
+      /* 사이드카가 뜨는 데 잠깐 걸리므로 재시도한다.
+         ★★**기다리는 시간을 늘리지 않는다** (사용자 지적 2026-09-17: *"실패하면 그냥 무조건
+           1분 기다려야 하는데"*). 늦게 뜨는 경우를 구제하려고 상한을 60초로 잡아 봤으나,
+           그것은 **정말로 안 뜨는 경우에 사용자를 1분 동안 빈 화면 앞에 세워 두는** 값이다.
+           늦게 뜨는 경우는 실패 화면의 「다시 시도」가 이미 받으므로, 여기서 더 기다릴 이유가 없다.
+         ★횟수(`25회 × 400ms`)가 아니라 시간으로 센다 — 한 번의 시도가 오래 걸리면 실제로
+           기다린 시간이 셈과 어긋나기 때문이다.
+         ★**15초.** 옛 값(10초)에서 조금만 늘렸다. 게스트 실측으로 백엔드가 붙기까지 **6.8초**가
+           걸린 적이 있어(Vite 개발 모드 + 샌드박스라 가장 느린 조건) 10초는 여유가 3초뿐이었다. */
+      const until = Date.now() + 15_000;
+      while (Date.now() < until) {
         try {
           const h = await api<Health>("/api/health");
           if (!alive) return;
@@ -613,6 +622,26 @@ function ThemeButton() {
  *  ★기다리는 것이 무엇인지 말한다. "로딩 중"만 뜨면 멈춘 것과 구분이 안 된다. */
 function Booting({ ready, dead }: { ready: boolean; dead: boolean }) {
   const t = useI18n((s) => s.t);
+  const [retrying, setRetrying] = useState(false);
+
+  /** ★★**막다른 길을 만들지 않는다** (사용자 제보 2026-09-16). 지금까지 이 화면에는 로그
+   *  파일의 이름만 있었고, 사용자가 할 수 있는 일은 앱을 껐다 켜는 것뿐이었다. 제보자가 겪은
+   *  것처럼 원인이 일시적이면(껍데기가 거대한 로그를 자르는 동안 백엔드가 늦게 떴다) 여기서
+   *  한 번 더 붙기만 하면 되는데, 그 길이 화면에 없었다.
+   *  ★하는 일은 `Plugins` 의 「다시 붙이기」와 같다 — 껍데기가 **백엔드만** 다시 띄우고
+   *    (`restart_backend`) 화면을 새로 읽는다. 앱을 통째로 다시 띄우지 않는다.
+   *  ★껍데기가 없으면(브라우저로 연 개발 화면) 그냥 새로 읽는다. */
+  const retry = async () => {
+    setRetrying(true);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("restart_backend");
+    } catch {
+      /* 껍데기가 없거나 다시 띄우지 못했다 — 그래도 화면은 새로 읽어 본다 */
+    }
+    location.reload();
+  };
+
   return (
     <div
       data-booting={dead ? "dead" : ready ? "workspace" : "backend"}
@@ -633,16 +662,38 @@ function Booting({ ready, dead }: { ready: boolean; dead: boolean }) {
       >
         P
       </div>
-      {/* 남은 시간을 알 수 없으므로 왕복만 한다 — 가짜 퍼센트를 그리지 않는다 */}
-      <div style={{ width: 132, height: 2, borderRadius: 1, background: "var(--line)", overflow: "hidden" }}>
-        {!dead && <div className="boot-bar" style={{ width: "34%", height: "100%", background: "var(--accent)" }} />}
-      </div>
+      {/* 남은 시간을 알 수 없으므로 왕복만 한다 — 가짜 퍼센트를 그리지 않는다.
+          ★**실패했으면 트랙도 그리지 않는다** (사용자 결정 2026-09-17). 빈 트랙만 남으면
+            아직 무언가 진행 중인 것으로 읽히는데, 기다리기를 그만둔 자리다. */}
+      {!dead && (
+        <div style={{ width: 132, height: 2, borderRadius: 1, background: "var(--line)", overflow: "hidden" }}>
+          <div className="boot-bar" style={{ width: "34%", height: "100%", background: "var(--accent)" }} />
+        </div>
+      )}
       <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-dim)", textAlign: "center", lineHeight: 1.6 }}>
         {dead ? t("boot.failed") : ready ? t("boot.workspace") : t("boot.backend")}
         {dead && (
           <>
             <br />
             <span style={{ color: "var(--ink-faint)", fontFamily: "var(--font-mono)" }}>logs/peropix.log</span>
+            <div style={{ marginTop: "var(--sp-5)" }}>
+              <button
+                data-boot-retry
+                onClick={retry}
+                disabled={retrying}
+                style={{
+                  border: "1px solid var(--accent)",
+                  borderRadius: "var(--r-2)",
+                  background: "var(--accent)",
+                  color: "var(--accent-on)",
+                  padding: "var(--sp-2) var(--sp-5)",
+                  fontSize: "var(--text-xs)",
+                  opacity: retrying ? 0.6 : 1,
+                }}
+              >
+                {retrying ? t("boot.retrying") : t("boot.retry")}
+              </button>
+            </div>
           </>
         )}
       </div>

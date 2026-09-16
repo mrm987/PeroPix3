@@ -5,6 +5,8 @@ export const ko: Dict = {
     backend: "엔진을 깨우는 중…",
     workspace: "마지막 작업을 불러오는 중…",
     failed: "백엔드가 뜨지 않았습니다. 로그를 보세요:",
+    retry: "다시 시도",
+    retrying: "다시 시도하는 중…",
   },
 
   window: {
