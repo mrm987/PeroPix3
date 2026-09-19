@@ -21,6 +21,7 @@ import { api, backendUrl } from "./backend";
 import { useUi } from "../store/ui";
 import { putOnCanvas } from "./pluginFrames";
 import { toast } from "../store/toast";
+import { ask } from "../store/ask";
 import { sceneBlocks, screenAddr } from "./promptEdit";
 import { runAction } from "../store/queue";
 import { t, useI18n } from "../i18n";
@@ -345,7 +346,11 @@ function installBridge() {
   bridged = true;
   watchTheme();
   window.addEventListener("message", (e: MessageEvent) => {
-    const d = e.data as { type?: string; id?: unknown; call?: string; name?: string; args?: Record<string, unknown>; text?: string; key?: string } | null;
+    const d = e.data as {
+      type?: string; id?: unknown; call?: string; name?: string; args?: Record<string, unknown>;
+      text?: string; key?: string;
+      title?: string; body?: string; ok?: string; cancel?: string; danger?: boolean;
+    } | null;
     if (!d || d.type !== "peropix" || !d.call) return;
     const base = usePlugins.getState().base;
     let origin = "";
@@ -367,6 +372,19 @@ function installBridge() {
           case "scene": result = a.scene(); break;
           case "openCanvas": a.openCanvas(String(d.name ?? p.id)); break;
           case "toast": toast(String(d.text ?? "")); break;
+          /* ★★**확인은 앱이 그린다** (사용자 결정 2026-09-20). 플러그인 페이지가 제 확인창을
+             따로 그리면 플러그인마다 모양이 갈리고, 브라우저 `confirm` 은 앱이 쓰지 않는
+             OS 대화상자다 (`store/ask.ts` 의 ★주). 여기로 넘겨 **앱의 확인창 하나**로 뜬다.
+             ★확인 버튼 글자를 안 주면 앱 번역을 쓴다 — 플러그인이 세 언어를 안 갖춰도 맞는다. */
+          case "ask":
+            result = await ask({
+              title: String(d.title ?? ""),
+              body: d.body === undefined ? undefined : String(d.body),
+              ok: String(d.ok || t("common.confirm")),
+              cancel: String(d.cancel || t("common.cancel")),
+              danger: !!d.danger,
+            });
+            break;
           case "theme": result = a.theme(String(d.name ?? "")); break;
           case "t": result = t(String(d.key ?? d.name ?? ""), d.args as Record<string, string | number> | undefined); break;
           case "locale": result = a.locale(); break;

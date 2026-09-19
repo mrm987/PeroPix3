@@ -50,19 +50,25 @@
     }
   });
 
-  /** 앱에 한 마디 보내고 답을 기다린다 → `{ ok, result?, error? }` */
-  function call(msg) {
+  /** 앱에 한 마디 보내고 답을 기다린다 → `{ ok, result?, error? }`
+   *
+   *  ★`ms` 를 `0` 으로 주면 **안 끊는다.** 사람이 답할 때까지 기다리는 호출(`ask`)에 쓴다 —
+   *    20초로 끊으면 확인창을 열어 둔 채 잠깐 다른 일을 한 사이에 취소로 떨어지고, 그 뒤에
+   *    누른 「확인」은 아무 일도 안 한다. */
+  function call(msg, ms) {
     if (!inApp) return Promise.resolve({ ok: false, error: "앱 밖에서 열렸습니다" });
     return new Promise(function (resolve) {
       var id = ++seq;
       pending.set(id, resolve);
       parent.postMessage(Object.assign({ type: "peropix", id: id }, msg), "*");
+      var wait = ms === undefined ? 20000 : ms;
+      if (!wait) return;
       setTimeout(function () {
         if (pending.has(id)) {
           pending.delete(id);
           resolve({ ok: false, error: "앱이 답하지 않습니다" });
         }
-      }, 20000);
+      }, wait);
     });
   }
 
@@ -86,6 +92,29 @@
     plugin: function () { return unwrap(call({ call: "plugin" })); },
     openCanvas: function (id) { return call({ call: "openCanvas", name: id }); },
     toast: function (text) { return call({ call: "toast", text: String(text) }); },
+    /** 확인창 — **앱이 그린다** → `true`(확인) / `false`(취소).
+     *
+     *  ★★브라우저 `confirm` 을 쓰지 말 것 (사용자 결정 2026-09-20). 창 밖 OS 대화상자라 앱의
+     *    글꼴·테마·언어와 따로 놀고, 장식 없는 Tauri 창에서는 엉뚱한 자리에 뜬다. 앱 본체가
+     *    같은 이유로 이미 걷어낸 것이다 (`src/store/ask.ts`).
+     *  ★페이지 안에 비슷한 것을 그리지 않는 이유: 플러그인마다 모양이 갈린다. 여기로 넘기면
+     *    앱의 확인창 **하나**로 뜨고, 버튼 글자도 앱 번역을 따라간다.
+     *
+     *      if (await peropix.ask({ title: "지울까요?", danger: true })) …
+     *
+     *  ★앱 밖(그냥 브라우저)에서는 못 물으므로 `false` 로 떨어진다 — 지우는 쪽이 안전하다.
+     */
+    ask: function (opts) {
+      var o = opts || {};
+      return call({
+        call: "ask",
+        title: String(o.title || ""),
+        body: o.body === undefined ? undefined : String(o.body),
+        ok: o.ok ? String(o.ok) : "",
+        cancel: o.cancel ? String(o.cancel) : "",
+        danger: !!o.danger,
+      }, 0).then(function (r) { return !!(r && r.ok && r.result); });
+    },
     /** 앱 토큰 값 (`"--accent"`). 이름 없이 부르면 지금 테마 이름 */
     theme: function (name) { return unwrap(call({ call: "theme", name: name || "" })); },
     /** 앱 번역 (`t("plugins.install")`) */

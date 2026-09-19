@@ -970,6 +970,7 @@ export const en = {
   common: {
     delete: "Delete",
     cancel: "Cancel",
+    confirm: "OK",
     cannotUndo: "This cannot be undone.",
     close: "Close",
     toTrash: "Goes to the trash. It is gone for good after 24 hours.",

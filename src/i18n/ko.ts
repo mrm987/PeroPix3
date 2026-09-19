@@ -999,6 +999,8 @@ export const ko: Dict = {
   common: {
     delete: "삭제",
     cancel: "취소",
+    // ★플러그인이 앱 확인창을 부를 때의 기본 확인 글자 (`lib/pluginHost` 의 `ask`)
+    confirm: "확인",
     cannotUndo: "되돌릴 수 없습니다.",
     close: "닫기",
     // ★지우는 창구는 전부 휴지통을 거친다 (2026-08-18, v2-port-audit D7)

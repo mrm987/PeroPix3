@@ -968,6 +968,7 @@ export const ja: Dict = {
   common: {
     delete: "削除",
     cancel: "キャンセル",
+    confirm: "確認",
     cannotUndo: "元に戻せません。",
     close: "閉じる",
     toTrash: "ごみ箱へ移動します。24時間を過ぎると完全に消えます。",
