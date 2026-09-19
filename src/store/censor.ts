@@ -57,10 +57,12 @@ export type CensorImage = {
 };
 
 export type Tab = "before" | "processing" | "after";
-/** ★★검열 중·후의 도구는 **붓과 지우개** 둘뿐이다 (사용자 지시 2026-09-05: *"인페인트 브러시처럼
+/** ★★검열 중·후의 그리는 도구는 **붓과 지우개** 둘이다 (사용자 지시 2026-09-05: *"인페인트 브러시처럼
  *  사각형 브러시로 칠하고 지우는 형태로"*). 박스를 고르고·옮기고·돌리던 도구는 걷었다 —
- *  편집 대상이 박스 목록이 아니라 **칠한 칸의 격자**(`lib/censorMask`)가 되었기 때문이다. */
-export type Tool = "brush" | "erase";
+ *  편집 대상이 박스 목록이 아니라 **칠한 칸의 격자**(`lib/censorMask`)가 되었기 때문이다.
+ *  ★`pan` 은 그리지 않는다 — **확대한 그림을 끌어 옮기는** 도구다 (사용자 결정 2026-09-20).
+ *    생성 쪽은 그냥 끌기로 옮기지만 여기서는 끌기가 이미 붓질이라, 도구를 골라서 가른다. */
+export type Tool = "brush" | "erase" | "pan";
 /** 붓 지름의 천장 (px). 슬라이더와 Alt+휠이 같은 값을 본다 */
 export const BRUSH_MAX = 300;
 
@@ -104,6 +106,12 @@ type Saved = {
   /** 저장 자리 — **일괄변환과 같은 세 갈래** (사용자 지시 2026-09-04).
    *  `overwrite` 원본 자리에 · `sub` 첫 그림 아래 `output/` · `folder` 고른 폴더. */
   destMode: "overwrite" | "sub" | "folder";
+  /** 얼마로 볼까 — 생성 쪽 `spec.preview` 와 **같은 모양**이고 계산도 같은 `lib/zoomView` 다.
+   *  ★**검열은 따로 기억한다** (사용자 결정 2026-09-20). 칠하는 화면이라 크게 보는 배율이
+   *    따로 필요하고, 검열은 워크스페이스와 무관한 도구라 그쪽 설정에 얹을 자리가 없다.
+   *  ★보고 있던 **자리**(pan)는 안 남긴다 — 생성 쪽과 같은 이유로, 그림마다 다르고 다음에
+   *    열었을 때 엉뚱한 구석을 보고 있으면 「왜 이러지」가 된다. */
+  view: { fit: boolean; zoom: number };
 };
 
 const DEFAULTS: Saved = {
@@ -132,6 +140,8 @@ const DEFAULTS: Saved = {
   dest: "",
   // ★기본은 일괄변환과 같은 `sub` — 원본을 건드리지 않는 쪽이 기본이어야 한다
   destMode: "sub",
+  // ★기본은 꽉차게 — 판 안에 다 보이는 것이 검열을 시작하는 자리다
+  view: { fit: true, zoom: 1 },
 };
 
 function load(): Saved {
@@ -835,12 +845,12 @@ function fillConf(cur: Record<string, number>, classes: string[], base: number) 
 
 function save(s: Saved) {
   const { model, targets, labelConf, conf, floor, method, color, expand, feather, mosaic,
-    mosaicOpacity, blur, steamBright, steamAlpha, steamFade, peek, brushPx, brushShape, dest, destMode } = s;
+    mosaicOpacity, blur, steamBright, steamAlpha, steamFade, peek, brushPx, brushShape, dest, destMode, view } = s;
   // ★지금 방식의 값을 보관함에도 넣어 적는다 — 다음에 열 때 방식마다 제 값으로 시작한다
   const methodOpts = { ...s.methodOpts, [method]: { expand, feather, peek } };
   try {
     localStorage.setItem(KEY, JSON.stringify({ model, targets, labelConf, conf, floor, method,
-      color, expand, feather, mosaic, mosaicOpacity, blur, steamBright, steamAlpha, steamFade, peek, brushPx, brushShape, dest, destMode, methodOpts }));
+      color, expand, feather, mosaic, mosaicOpacity, blur, steamBright, steamAlpha, steamFade, peek, brushPx, brushShape, dest, destMode, methodOpts, view }));
   } catch {}
 }
 

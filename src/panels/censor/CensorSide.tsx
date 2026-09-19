@@ -3,6 +3,8 @@ import { api } from "../../lib/backend";
 import { toast } from "../../store/toast";
 import { Icon } from "../../components/Icon";
 import { BRUSH_MAX, useCensor, type Tool } from "../../store/censor";
+import { useCensorView, bumpZoom, setFit, setZoom } from "../../store/censorView";
+import { fitScale, percent } from "../../lib/zoomView";
 import { isEmpty, type Shape } from "../../lib/censorMask";
 import { card, box, on, num, dropFocus, Hint, Line, Sec } from "./ui";
 
@@ -112,32 +114,40 @@ export function CensorSide() {
           </>
         )}
 
+        <Sec label={t("censor.tools")} help={t("censor.toolHint")}>
+          {/* ★★도구 섹션은 **모든 탭에 있다** (2026-09-20). 「선택」은 그리는 도구가 아니라
+              확대한 그림을 끌어 옮기는 도구라, 읽기 전용인 검열 전 탭에서도 필요하다.
+              그리는 도구 둘은 아래에서 `editable` 일 때만 낸다. */}
+          {/* ★칸 수는 실제로 내는 도구 수에 맞춘다 — 2열에 셋을 넣으면 마지막 하나가 반쪽으로 남는다 */}
+          <div style={{ display: "grid", gridTemplateColumns: editable ? "1fr 1fr 1fr" : "1fr", gap: "var(--sp-2)" }}>
+            {(editable ? TOOLS : TOOLS.filter(([id]) => id === "pan")).map(([id, key, icon]) => (
+              <button
+                key={id}
+                data-censor-tool={id}
+                // ★도구 칩도 같다 — `1 2 3` 단축키와 같은 자리라 고리가 특히 잘 남는다
+                onMouseDown={dropFocus}
+                onClick={() => c.set({ tool: id })}
+                style={{
+                  ...box,
+                  ...(c.tool === id ? on : {}),
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "var(--sp-1)",
+                  padding: "var(--sp-2) 0",
+                }}
+              >
+                {Icon[icon]}
+                {t(key)}
+              </button>
+            ))}
+          </div>
+          <ViewLine />
+        </Sec>
+
         {editable && (
           <>
-            <Sec label={t("censor.tools")} help={t("censor.toolHint")}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-2)" }}>
-                {TOOLS.map(([id, key, icon]) => (
-                  <button
-                    key={id}
-                    data-censor-tool={id}
-                    // ★도구 칩도 같다 — `1 2` 단축키와 같은 자리라 고리가 특히 잘 남는다
-                    onMouseDown={dropFocus}
-                    onClick={() => c.set({ tool: id })}
-                    style={{
-                      ...box,
-                      ...(c.tool === id ? on : {}),
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "var(--sp-1)",
-                      padding: "var(--sp-2) 0",
-                    }}
-                  >
-                    {Icon[icon]}
-                    {t(key)}
-                  </button>
-                ))}
-              </div>
+            <Sec label={t("imgIn.brush")}>
               {/* ★붓 모양 — 사각·원 (사용자 지시 2026-09-05). 기본은 사각: 찾은 박스가 네모라 이어 그리기 자연스럽다 */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-2)" }}>
                 {SHAPES.map(([id, key, icon]) => (
@@ -379,10 +389,76 @@ const METHODS = [
 ] as const;
 
 // ★문구는 인페인트 마스크의 것을 그대로 쓴다 — 같은 뜻에 다른 말을 두지 않는다
-const TOOLS: [Tool, "imgIn.brush" | "imgIn.eraser", "brush" | "eraser"][] = [
+const TOOLS: [Tool, "imgIn.brush" | "imgIn.eraser" | "censor.toolPan", "brush" | "eraser" | "cursor"][] = [
   ["brush", "imgIn.brush", "brush"],
   ["erase", "imgIn.eraser", "eraser"],
+  // ★그리지 않는 도구다 — 확대한 그림을 끌어 옮긴다 (사용자 결정 2026-09-20)
+  ["pan", "censor.toolPan", "cursor"],
 ];
+
+/** 얼마로 볼까 — **생성 쪽 큰 그림과 같은 줄**이다 (`panels/Canvas.tsx` 의 보기 단추).
+ *
+ *  ★단추 뜻도 문구도 그쪽 것을 그대로 쓴다 (`scenes.view*`) — 같은 일을 하는 자리에 다른
+ *    말을 두면 두 화면이 다른 기능처럼 보인다.
+ *  ★배율은 검열이 따로 기억한다 (`useCensor.view`) — 계산만 같은 `lib/zoomView` 를 쓴다. */
+function ViewLine() {
+  const t = useI18n((s) => s.t);
+  const view = useCensor((s) => s.view);
+  const { nat, box: stage } = useCensorView();
+  const shown = view.fit ? fitScale(stage, nat) : view.zoom;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-1)", justifyContent: "center" }}>
+      <ViewBtn on={view.fit} onClick={setFit} tip={t("scenes.viewFit")}>{Icon.fitBox}</ViewBtn>
+      <ViewBtn
+        on={!view.fit && Math.abs(view.zoom - 1) < 0.001}
+        onClick={() => setZoom(1)}
+        tip={t("scenes.viewActual")}
+      >
+        {Icon.oneToOne}
+      </ViewBtn>
+      <span style={{ width: 1, height: 16, background: "var(--line)", margin: "0 2px" }} />
+      <ViewBtn onClick={() => bumpZoom(-1)} tip={t("scenes.viewOut")}>−</ViewBtn>
+      {/* ★고정폭이다 — 100% ↔ 37% 를 오갈 때 옆 단추가 밀리면 눌러 둔 자리를 놓친다 */}
+      <span
+        data-censor-pct
+        style={{
+          minWidth: 44,
+          textAlign: "center",
+          fontSize: "var(--text-2xs)",
+          fontFamily: "var(--font-mono)",
+          fontVariantNumeric: "tabular-nums",
+          color: view.fit ? "var(--ink-faint)" : "var(--ink)",
+        }}
+      >
+        {`${percent(shown)}%`}
+      </span>
+      <ViewBtn onClick={() => bumpZoom(1)} tip={t("scenes.viewIn")}>+</ViewBtn>
+    </div>
+  );
+}
+
+function ViewBtn({ on: active, tip, onClick, children }: {
+  on?: boolean; tip?: string; onClick: () => void; children: React.ReactNode;
+}) {
+  return (
+    <button
+      data-censor-view-btn
+      data-tip={tip}
+      onMouseDown={dropFocus}
+      onClick={onClick}
+      style={{
+        ...box,
+        ...(active ? on : {}),
+        padding: "2px 8px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 const SHAPES: [Shape, "censor.shapeSquare" | "censor.shapeRound", "shapeSquare" | "shapeRound"][] = [
   ["square", "censor.shapeSquare", "shapeSquare"],
