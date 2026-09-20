@@ -217,7 +217,7 @@ export function CensorStage() {
   }, [c.brushPx, c.brushShape, cursorOn]);
 
   const down = (e: React.PointerEvent) => {
-    /* ★★**「선택」 도구는 그리지 않고 끈다** (사용자 결정 2026-09-20). 생성 쪽은 그냥 끌기로
+    /* ★★**「이동」 도구는 그리지 않고 끈다** (사용자 결정 2026-09-20). 생성 쪽은 그냥 끌기로
        옮기지만 여기서는 끌기가 이미 붓질이라, 도구를 골라서 가른다. 맨 앞에 둔다 — 검열 전
        탭에서도(박스 켜고 끄기) 같은 도구로 옮길 수 있어야 한다. */
     if (c.tool === "pan" && e.button === 0 && movable) {
@@ -234,6 +234,11 @@ export function CensorStage() {
       if (i >= 0) c.toggleBox(i);
       return;
     }
+    /* ★★**「이동」 도구는 끌 것이 없어도 칠하지 않는다** (사용자 지적 2026-09-20: *"화면에 이미지
+       전체가 보이는 배율에서는 선택도구를 쓰면 브러시가 칠해짐"*). 위의 문은 `movable` 일 때만
+       잡으므로, 넘치지 않는 배율에서는 여기까지 떨어져 붓질이 됐다. 박스 켜고 끄기(위의 `!editable`)
+       보다 뒤에 둔다 — 검열 전 탭에서는 이 도구로 박스를 눌러야 한다. */
+    if (c.tool === "pan") return;
     // ★기본 동작(글자 선택·선택된 글자 끌기)을 막는다 — 선택이 남아 있으면 붓이 한 틱 만에 끊겼다
     e.preventDefault();
     /* ★★그 대신 **포커스를 손수 푼다.** `pointerdown` 을 막으면 뒤따르는 `mousedown` 이 안 나가고, 포커스를
@@ -303,12 +308,16 @@ export function CensorStage() {
     useCensor.getState().strokeEnd();
   };
 
-  /** 판보다 커서 끌 수 있는가 — 「선택」 도구를 켜 두어도 넘치지 않으면 끌 것이 없다 */
+  /** 판보다 커서 끌 수 있는가 — 「이동」 도구를 켜 두어도 넘치지 않으면 끌 것이 없다 */
   const movable = !view.fit && !!fitted && canPan(box, fitted);
-  /* ★「선택」 도구는 붓 커서를 숨기고 손 모양을 쓴다 — 그리지 않는 도구다 (아래 wrap 의 `cursor`). */
-  const cursor = c.tool === "pan"
-    ? (movable ? "grab" : "default")
-    : !editable ? (hover >= 0 ? "pointer" : "default") : "none";
+  /* ★「이동」 도구는 붓 커서를 숨기고 **십자 화살표**를 쓴다 — 그림을 끌어 옮긴다는 것이 커서로
+     보여야 한다 (사용자 지시 2026-09-20). 넘치지 않아 옮길 것이 없으면 평범한 화살표이고,
+     검열 전 탭에서는 박스 위에서 손가락이다 (거기서는 눌러서 끄고 켠다). */
+  const cursor = c.tool === "pan" && movable
+    ? "move"
+    : !editable
+      ? (hover >= 0 ? "pointer" : "default")
+      : c.tool === "pan" ? "default" : "none";
 
   if (!im) return null;
 
@@ -343,8 +352,8 @@ export function CensorStage() {
               maxHeight: "none",
               transform: `translate(${pan.x}px, ${pan.y}px)`,
             }),
-        // ★끌 수 있을 때만 손 모양 — 도구를 켜 두어도 넘치지 않으면 끌 것이 없다
-        cursor: c.tool === "pan" ? (movable ? "grab" : "default") : undefined,
+        // ★끌 수 있을 때만 십자 화살표 — 도구를 켜 두어도 넘치지 않으면 끌 것이 없다
+        cursor: c.tool === "pan" ? (movable ? "move" : "default") : undefined,
       }}
     >
       {/* ★★그림이 아직 없으면(탭 전환·목록 비움 사이) `<img>` 를 **아예 두지 않는다** (사용자 지적
@@ -408,7 +417,9 @@ export function CensorStage() {
         ))}
         {/* 붓 미리보기 — **눌렀을 때 칠해질 자리**를 그대로 그린다 (`brushBox`). 자리·크기·둥글기는
             `placeCursor` 가 DOM 에 바로 쓴다 — 리액트는 이 속성들을 다시 쓰지 않는다 */}
-        {editable && cursorOn && (
+        {/* ★「이동」 도구에서는 붓을 안 낸다 — 칠하지 않는데 칠할 자리를 보여 주면 거짓말이다
+            (사용자 지적 2026-09-20) */}
+        {editable && cursorOn && c.tool !== "pan" && (
           <rect
             ref={cursorRef}
             data-censor-brush

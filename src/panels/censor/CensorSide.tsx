@@ -312,7 +312,9 @@ export function CensorSide() {
           <Sec label={t("censor.keys")}>
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-1)" }}>
               {[
-                ["1 2", t("censor.k_tool")],
+                // ★도구는 셋이다 (`3` 은 검열 전 탭에서도 먹는다 — `panels/Censor.tsx`)
+                ["1 2 3", t("censor.k_tool")],
+                [`Ctrl+${t("censor.k_wheelKey")}`, t("censor.k_zoom")],
                 [`Alt+${t("censor.k_wheelKey")}`, t("censor.k_size")],
                 ["Ctrl+Z", t("censor.k_undo")],
                 [t("censor.k_wheelKey"), t("censor.k_wheel")],
@@ -389,11 +391,11 @@ const METHODS = [
 ] as const;
 
 // ★문구는 인페인트 마스크의 것을 그대로 쓴다 — 같은 뜻에 다른 말을 두지 않는다
-const TOOLS: [Tool, "imgIn.brush" | "imgIn.eraser" | "censor.toolPan", "brush" | "eraser" | "cursor"][] = [
+const TOOLS: [Tool, "imgIn.brush" | "imgIn.eraser" | "censor.toolPan", "brush" | "eraser" | "move"][] = [
   ["brush", "imgIn.brush", "brush"],
   ["erase", "imgIn.eraser", "eraser"],
-  // ★그리지 않는 도구다 — 확대한 그림을 끌어 옮긴다 (사용자 결정 2026-09-20)
-  ["pan", "censor.toolPan", "cursor"],
+  // ★그리지 않는 도구다 — 확대한 그림을 끌어 옮긴다. 아이콘도 커서와 같은 십자 화살표다
+  ["pan", "censor.toolPan", "move"],
 ];
 
 /** 얼마로 볼까 — **생성 쪽 큰 그림과 같은 줄**이다 (`panels/Canvas.tsx` 의 보기 단추).
