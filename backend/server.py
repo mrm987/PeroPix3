@@ -30,6 +30,18 @@ import sys
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# ★★**배포판은 이 파일이 `__main__` 으로 돌고 있다** (`python server.py`, `src-tauri/src/backend.rs`).
+#   그 상태에서 플러그인이 `import server` 를 하면 파이썬이 `sys.modules` 에서 그 이름을 못 찾아
+#   **이 파일을 통째로 한 번 더 실행한다.** 큐도 계정도 저장소도 별개인 백엔드 사본이 생기고,
+#   그 사본의 큐에는 `run_loop` 가 없어 거기 들어간 잡은 **오류 한 줄 없이 영영 안 나온다**
+#   (만화 제작기 실측 2026-09-20: 생성이 통째로 죽었다).
+# ★개발에서는 `uvicorn.run("server:app")` 이라 이름이 이미 `server` 여서 이 일이 안 일어난다.
+#   **배포판에서만 나는 결함**이라 개발 트리에서는 영원히 안 보인다.
+# ★별명은 **플러그인을 읽기 훨씬 전에** 걸어 둔다. `load_all` 은 이 파일 끝에서 돌고,
+#   그보다 늦게 걸면 그 사이에 들어오는 import 가 그대로 사본을 만든다.
+if __name__ == "__main__":
+    sys.modules["server"] = sys.modules["__main__"]
+
 from fastapi import File, Request, UploadFile, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
