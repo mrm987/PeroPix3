@@ -9,6 +9,10 @@ import { codexWire } from "../lib/codexStream";
 import { noteCliRun } from "../lib/cliCursor";
 import type { AgentAt } from "../lib/agentAt";
 import type { Addr } from "../lib/promptEdit";
+import {
+  applySummary, capToolResult, compactPlan, lastUsage, needsCompact, stripOldImages, summaryInput,
+  SUMMARY_SYSTEM, turnStartOf,
+} from "../lib/chatContext";
 
 /** LLM 채팅 — **반복 작업을 대신 시키는 창구** (3.0 의 목표 중 하나, ui-guide 7절).
  *
@@ -22,13 +26,16 @@ import type { Addr } from "../lib/promptEdit";
  *    같은 것을 두 벌로 담으면 둘이 어긋난다 (`backend/chats.py` 머리 주석). */
 
 /** 공급자에 보내는 정본 모양 (앤트로픽 기준 — backend/llm.py 머리 주석) */
-type Part =
+export type Part =
   /** ★`hidden` 은 **화면에 안 그리는 글** — 말을 건 때의 화면 주소다 (`send`). 공급자에게는
    *  본문으로 나가고(`forProvider` 가 표식만 벗긴다) 대화 파일에도 남는다 — 뒤 바퀴에서도 같은 주소가 간다. */
   | { type: "text"; text: string; hidden?: boolean }
   /** ★★**오류 조각** — 화면·저장에만 있고 **공급자에게는 안 나간다** (`forProvider` 가 거른다).
    *  사용자 지시 2026-08-30: 오류가 앱을 다시 켜면 사라져 확인할 수 없었다 — 대화에 남긴다. */
   | { type: "error"; text: string }
+  /** ★화면용 알림 조각 — 「압축」처럼 대화에 무슨 일이 있었는지 남긴다. 오류 조각과 같이 **공급자에게는 안 나간다**
+   *  (`forProvider` 가 거른다). 페로데스크가 압축 뒤에 「압축」 한 줄을 남기는 것과 같다 (2026-09-22). */
+  | { type: "note"; text: string }
   | {
       type: "tool_use";
       id: string;
@@ -49,7 +56,12 @@ type Part =
    *  ★공급자별 모양으로 옮기는 것은 **백엔드**가 한다 (`backend/llm.py`). */
   | { type: "image"; mime: string; b64: string };
 
-export type Wire = { role: "user" | "assistant"; content: Part[] };
+/** 한 응답의 사용량 — 백엔드가 세 규격에서 같은 모양으로 돌려준다 (`backend/llm.py`) */
+export type Usage = { in: number; out: number; cached: number };
+
+/** ★`usage` 는 조수 메시지에만 붙는다 — 그 응답을 만든 요청의 입력·출력·캐시 적중.
+ *  머리의 「맥락」 표시와 압축 판정이 이것을 본다 (`lib/chatContext`). */
+export type Wire = { role: "user" | "assistant"; content: Part[]; usage?: Usage };
 
 /** 화면에 그리는 한 줄 */
 export type Line =
@@ -58,7 +70,8 @@ export type Line =
   /** ★`at` 이 있으면 **고친 줄**이다 — 읽기 줄과 다른 얼굴로 그리고, 누르면 그 자리를 연다
    *  (`lib/agentAt.ts`). 없으면 읽기만 한 것이다. */
   | { kind: "tool"; name: string; note: string; ok: boolean; at?: AgentAt }
-  | { kind: "error"; text: string };
+  | { kind: "error"; text: string }
+  | { kind: "note"; text: string };
 
 /** ★공급자는 **정확한 이름**으로 고른다 (사용자 지시 2026-08-08: "호환은 적을 필요 없음").
  *  목록·라벨·호출명 예시는 **백엔드가 정본**이다 — 규격을 아는 쪽이 거기라서. */
@@ -83,6 +96,8 @@ export type ModelInfo = {
   reasoningLocked?: boolean;
   /** 추천 목록에 없지만 같은 가족의 **더 높은 버전** — 백엔드 `newer_than` (2026-08-30) */
   new?: boolean;
+  /** 창 크기 (토큰) — 오픈라우터가 준다. 압축 문턱이 이것으로 접는다 (`lib/chatContext.compactAt`) */
+  ctx?: number;
 };
 export type LlmConfig = {
   provider: string;
@@ -184,7 +199,7 @@ export function forProvider(wire: Wire[]): Wire[] {
       ...m,
       /* ★`hidden` 표식은 벗긴다 — 앤트로픽은 모르는 필드를 400 으로 돌려준다 (`backend/llm.py` 가 그대로 넘긴다) */
       content: m.content
-        .filter((b) => b.type !== "error")
+        .filter((b) => b.type !== "error" && b.type !== "note")
         .map((b) => (b.type === "text" ? { type: "text" as const, text: b.text } : b)),
     }))
     .filter((m) => m.content.length > 0);
@@ -213,6 +228,7 @@ export function linesOf(wire: Wire[]): Line[] {
         if (b.text.trim() && !b.hidden) out.push({ kind: m.role === "user" ? "user" : "ai", text: b.text });
       }
       else if (b.type === "error") out.push({ kind: "error", text: b.text });
+      else if (b.type === "note") out.push({ kind: "note", text: b.text });
       else if (b.type === "tool_use") names.set(b.id, b.name);
       else if (b.type === "tool_result") {
         let ok = true;
@@ -317,6 +333,13 @@ type S = {
    *  사용자가 중간에 탭을 옮겨도 조수는 이 자리를 기준으로 판단한다 (`lib/promptEdit.alignToTurn`).
    *  자리를 옮기는 액션이 성공하면 따라간다 (`store/queue.runAction`). */
   turnAddr: Addr | null;
+  /** ★마지막 응답의 사용량 — 머리의 「맥락 45k · 캐시 88%」와 압축 판정이 본다. 못 쟀으면 null (틀린 수치로 접지 않는다) */
+  ctx: Usage | null;
+  /** 압축이 도는 중 — 그동안 손으로 또 누르지 못하게 */
+  compacting: boolean;
+  /** ★★**대화 압축** — 마지막 턴만 남기고 앞을 요약 하나로 접는다 (2026-09-22, 페로데스크의 `/compact` 와 같은 자리).
+   *  문턱을 넘으면 `run` 이 보내기 전에 스스로 부르고, 머리의 단추로도 부른다. 접었으면 true. */
+  compact: () => Promise<boolean>;
 
   /** 지금 공급자가 주는 모델 목록. ★설정 화면과 채팅 칩이 **같은 것**을 본다 —
    *  두 곳에서 따로 받아 오면 한쪽만 갱신돼 서로 다른 목록을 보여 준다 */
@@ -372,6 +395,8 @@ export const useLlm = create<S>((set, get) => ({
   setUnread: (v) => set({ unread: v }),
   turnAt: 0,
   turnAddr: null,
+  ctx: null,
+  compacting: false,
 
   async loadConfig() {
     try {
@@ -484,6 +509,7 @@ export const useLlm = create<S>((set, get) => ({
         wire: d.wire ?? [],
         lines: linesOf(d.wire ?? []),
         error: "",
+        ctx: lastUsage(d.wire ?? []),
         /* ★★**떠 있는 카드·물음은 지우지 않는다** (사용자 지적 2026-08-31). 그것은 대화의
            내용이 아니라 **답을 기다리는 도구**다 — 바깥(MCP)에서 온 것은 대화와 아무 상관이
            없고, 여기서 지우면 그 도구가 영영 답을 못 받는다. 답하면 그때 스스로 지워진다. */
@@ -521,7 +547,7 @@ export const useLlm = create<S>((set, get) => ({
     // ★CLI 세션도 함께 끊는다 — 안 그러면 새 대화인데 저쪽은 옛 맥락을 들고 있다
     // ★떠 있는 카드·물음은 남긴다 (위 `open` 의 ★★주와 같은 까닭 — 도구가 기다리고 있다)
     set({ id: newId(), title: "", wire: [], lines: [], error: "", cliSession: null,
-          cliSessionGone: false, queued: [] });
+          cliSessionGone: false, queued: [], ctx: null });
   },
 
   /** ★대화 삭제도 **휴지통을 거친다** (사용자 결정 2026-08-18, v2-port-audit D7). */
@@ -605,6 +631,13 @@ export const useLlm = create<S>((set, get) => ({
 
     // ★이 턴 동안은 한 값으로 간다 — 첫 바퀴에서 이름이 붙어도 다음 바퀴의 앞부분이 같아야 캐시가 산다 (`NAME_FIRST` 의 ★★주)
     const nameFirst = !get().title;
+    /* ★★**보내기 전에 접는다** (2026-09-22). 마지막 응답의 입력 토큰이 문턱을 넘었으면 이 말을 보내기 전에
+       앞 대화를 요약으로 접는다 — 페로데스크가 턴 끝에 `/compact` 를 흘려 넣는 것과 같은 자리다.
+       ★못 접어도 턴은 간다 (오류는 대화에 한 줄 남는다). */
+    const cur = get().models.find((m) => m.id === get().cfg?.model);
+    if (needsCompact(get().ctx, cur?.ctx)) await get().compact();
+    /* ★이 턴의 시작 — 앞 턴이 본 그림은 이름 한 줄로 바뀌어 나간다 (`stripOldImages`). 압축 뒤에 잰다 */
+    const turnStart = turnStartOf(get().wire);
     try {
       for (let round = 0; round < MAX_ROUNDS; round++) {
         if (abort) break;
@@ -614,12 +647,13 @@ export const useLlm = create<S>((set, get) => ({
           text?: string;
           tools?: { id: string; name: string; input: Record<string, unknown>; raw?: unknown }[];
           error?: string;
+          usage?: Usage;
         }>("/api/llm/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             system: SYSTEM,
-            messages: withNameFirst(forProvider(get().wire), nameFirst),
+            messages: withNameFirst(forProvider(stripOldImages(get().wire, turnStart)), nameFirst),
             tools: specs.map((t) => ({ name: t.name, description: t.description, schema: t.inputSchema })),
           }),
         });
@@ -635,7 +669,9 @@ export const useLlm = create<S>((set, get) => ({
         if (r.text) parts.push({ type: "text", text: r.text });
         for (const c of calls)
           parts.push({ type: "tool_use", id: c.id, name: c.name, input: c.input, raw: c.raw });
-        push({ role: "assistant", content: parts });
+        // ★사용량은 그 응답에 남긴다 — 머리의 「맥락」과 다음 턴의 압축 판정이 이것을 본다
+        push({ role: "assistant", content: parts, usage: r.usage });
+        if (r.usage) set({ ctx: r.usage });
         if (!calls.length) break;
 
         // 도구 실행 — ★백엔드가 **데이터**를 만진다 (화면 조작이 아니다)
@@ -676,7 +712,8 @@ export const useLlm = create<S>((set, get) => ({
           results.push({
             type: "tool_result",
             tool_use_id: c.id,
-            content: JSON.stringify(body),
+            // ★큰 결과는 여기서 자른다 — 한 번 실린 것은 그 뒤 모든 바퀴에 다시 실린다 (`capToolResult` 주석)
+            content: capToolResult(JSON.stringify(body)),
           });
         }
         push({ role: "user", content: results });
@@ -698,6 +735,37 @@ export const useLlm = create<S>((set, get) => ({
       endTurn();
       void save(get());
       drain();
+    }
+  },
+
+  async compact() {
+    if (get().compacting) return false;
+    const plan = compactPlan(get().wire);
+    if (!plan) return false;
+    set({ compacting: true });
+    try {
+      const r = await api<{ text?: string; error?: string }>("/api/llm/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system: SUMMARY_SYSTEM,
+          messages: [{ role: "user", content: [{ type: "text", text: summaryInput(plan.head) }] }],
+        }),
+      });
+      if (r.error || !r.text?.trim()) {
+        noteError(t("ai.compactFail", { e: r.error || "empty" }));
+        return false;
+      }
+      const wire = applySummary(plan.tail, r.text, t("ai.compactNote", { n: plan.head.length }));
+      /* ★잰 값을 버린다 (페로데스크와 같다) — 요약 뒤의 크기는 다음 응답이 새로 잰다. 옛 값을 두면 또 접는다 */
+      set({ wire, lines: linesOf(wire), ctx: null });
+      void save(get());
+      return true;
+    } catch (e) {
+      noteError(t("ai.compactFail", { e: String((e as Error).message ?? e) }));
+      return false;
+    } finally {
+      set({ compacting: false });
     }
   },
 

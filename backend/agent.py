@@ -554,9 +554,13 @@ class Tools:
             ),
             (
                 "get_workspace",
-                "작업 상태 전부 — 탭·포즈 슬롯·프롬프트 블록·캐릭터. **지금 사용자가 만지고 있는 것**이 "
-                "여기 들어 있다 (화면은 이 파일을 보여 줄 뿐이다). 이름을 비우면 가장 최근 것.",
-                obj({"name": s("워크스페이스 이름 (비우면 최근)"), "records": n("최근 생성물 몇 개까지 (기본 0)")}),
+                "작업 상태 — 탭 목록과 **한 탭**의 씬 그룹·씬·프롬프트 블록·캐릭터. **지금 사용자가 만지고 "
+                "있는 것**이 여기 들어 있다 (화면은 이 파일을 보여 줄 뿐이다). 이름을 비우면 가장 최근 것. "
+                "탭을 비우면 활성 탭. 다른 탭은 `tab` 으로, 모든 탭은 `all: true` 로 (크다).",
+                obj({"name": s("워크스페이스 이름 (비우면 최근)"),
+                     "tab": s("탭 id 또는 이름 (비우면 활성 탭)"),
+                     "all": {"type": "boolean", "description": "모든 탭의 씬 그룹을 다 준다 (기본 false)"},
+                     "records": n("최근 생성물 몇 개까지 (기본 0)")}),
                 self._get_ws,
             ),
             (
@@ -804,8 +808,27 @@ class Tools:
             return fail("not_found", f"그런 워크스페이스가 없습니다: {name}",
                         what="workspace", given=name,
                         candidates=near_by(name, [x["name"] for x in self.store.list()]))
+        # ★★**기본은 지금 탭만** (2026-09-22). 예전에는 모든 탭의 씬 그룹·프롬프트를 통째로 줬는데,
+        #   탭이 여럿인 워크스페이스에서 한 번에 5만 글자가 나가 대화가 그것으로 찼다 (실측: 한 대화에서
+        #   두 번 불러 10만 글자). 조수는 `[screen]` 줄로 사용자가 보는 탭을 이미 알고, 다른 탭이
+        #   필요하면 `tab` 으로 집어 부른다. `all` 은 정말 전부가 필요할 때만.
+        want = str(a.get("tab") or "").strip()
+        every = a.get("all") is True
+        tabs = spec.get("tabs") or []
+        if want and not every:
+            hit = [c for c in tabs if c.get("id") == want] or [c for c in tabs if c.get("name") == want]
+            if not hit:
+                return fail("not_found", f"그런 탭이 없습니다: {want}", what="tab", given=want,
+                            candidates=near_by(want, [str(c.get("name") or "") for c in tabs]))
+            if len(hit) > 1:
+                return fail("ambiguous", f"같은 이름의 탭이 {len(hit)}개입니다: {want}", retry="never",
+                            what="tab", given=want, candidates=[f"{c.get('name')}#{c.get('id')}" for c in hit])
+            want = str(hit[0].get("id"))
+        only = None if every else (want or str(spec.get("activeTab") or ""))
         scene_groups = []
         for t in spec.get("sceneGroups", []):
+            if only and t.get("kind") == "sceneGroup" and str(t.get("tabId") or "") != only:
+                continue
             row = {"id": t.get("id"), "kind": t.get("kind"), "name": t.get("name")}
             if t.get("kind") == "sceneGroup":
                 # ★어느 탭에 달렸는지 — 조수가 「키키 탭의 씬 그룹」를 고르려면 있어야 한다
@@ -859,6 +882,8 @@ class Tools:
             #   여기서 **옮겨 담아** 계약을 지킨다.
             "tabs": [{"id": c.get("id"), "name": c.get("name")} for c in (spec.get("tabs") or [])],
             "activeTab": spec.get("activeTab"),
+            # ★어느 탭의 씬 그룹인지 — 전부면 "*" (조수가 「빠진 탭이 있나」를 알 수 있어야 한다)
+            "shownTab": "*" if every else only,
             "sceneGroups": scene_groups,
             "activeSceneGroup": spec.get("activeSceneGroup"),
         }

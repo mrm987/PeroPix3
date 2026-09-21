@@ -971,6 +971,12 @@ export const ko: Dict = {
     reset: "새 대화",
     busyLock: "응답을 기다리는 중 (중단하면 바꿀 수 있음)",
     history: "지난 대화",
+    /** 머리의 맥락 표시와 대화 압축 (2026-09-22, `lib/chatContext`) */
+    ctx: "맥락 {n} · 캐시 {p}%",
+    ctxTip: "마지막 요청의 입력 토큰과 캐시 적중. {at} 토큰을 넘으면 다음 말을 보내기 전에 앞 대화를 요약으로 접습니다.",
+    compact: "대화 압축 (마지막 턴만 남기고 앞을 요약)",
+    compactNote: "압축: 앞 메시지 {n}개를 요약으로 접었습니다",
+    compactFail: "압축하지 못했습니다: {e}",
     noHistory: "아직 지난 대화가 없습니다.",
     untitled: "(제목 없음)",
     pickN: "이걸로 ({n})",

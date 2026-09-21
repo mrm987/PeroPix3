@@ -28,6 +28,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -35,6 +36,49 @@ import re
 import httpx
 
 ANTHROPIC_VERSION = "2023-06-01"
+
+# ★★**429·5xx 는 두 번 더 보낸다** (2026-09-22, 페로데스크의 SDK 가 하는 것과 같다).
+#   공급자 쪽의 일시적 혼잡·과부하에 첫 응답만 보고 턴을 버리면, 사용자는 다시 말을 걸어야 하고
+#   그때까지 쌓인 도구 결과도 함께 버려진다. 1.5초·3초 뒤에 한 번씩 — 60초 타임아웃 안이다.
+#   ★`Retry-After` 가 초 단위 숫자로 오면 그것을 따르되 10초까지만 (그보다 길면 기다리게 하는 것이다).
+RETRY_ON = {429, 500, 502, 503, 529}
+RETRY_WAIT = (1.5, 3.0)
+
+
+async def _post(c: "httpx.AsyncClient", url: str, **kw) -> "httpx.Response":
+    """`c.post` 에 재시도를 얹은 것. 응답은 마지막 것이다."""
+    r = await c.post(url, **kw)
+    for wait in RETRY_WAIT:
+        if r.status_code not in RETRY_ON:
+            break
+        ra = (r.headers.get("retry-after") if getattr(r, "headers", None) else None) or ""
+        try:
+            wait = min(10.0, float(ra)) if ra.strip() else wait
+        except ValueError:
+            pass
+        await asyncio.sleep(wait)
+        r = await c.post(url, **kw)
+    return r
+
+
+# ★★오픈라우터의 402 — 「requires more credits, or fewer max_tokens … can only afford N」 (2026-09-22).
+#   오픈라우터는 요청 전에 「입력 + max_tokens 만큼의 출력」 값을 키 한도에 미리 걸어 두고,
+#   `max_tokens` 가 없으면 **고정 상한(65,536)** 을 쓴다 (문서 「Credit Limits」). 우리는 안 보내는
+#   것이 기본이라(`chat` 주석) 키의 남은 한도가 그 상한 아래로 내려가는 순간 모든 요청이 거절된다.
+#   ★그래서 **거절당했을 때만** N 보다 조금 작은 값을 붙여 한 번 더 보낸다 — 기본 정책은 그대로다.
+#   ★N 이 2,000 미만이면 그대로 오류다: 그 값으로는 답이 잘려 다른 모양의 실패가 된다.
+AFFORD_RE = re.compile(r"can only afford (\d+)")
+AFFORD_MARGIN = 1000
+AFFORD_MIN = 2000
+
+
+def afford_tokens(text: str) -> int | None:
+    """402 본문에서 「감당할 수 있는 토큰 수」를 꺼낸다. 없으면 None."""
+    m = AFFORD_RE.search(text or "")
+    if not m:
+        return None
+    n = int(m.group(1))
+    return n - AFFORD_MARGIN if n >= AFFORD_MIN else None
 # ★60초다 (사용자 결정 2026-08-08). 늘리는 것은 해결이 아니라 **기다리게 하는 것**이다 —
 #   공급자가 불안정해서 나는 타임아웃은 라우팅(아래 OR_ROUTING)으로 고치고, 여기서는 빨리 포기한다.
 TIMEOUT = 60.0
@@ -395,6 +439,9 @@ async def models(llm: dict) -> dict:
                 inp = 0.0
             img = "image" in ((m.get("architecture") or {}).get("input_modalities") or [])
             row = {"id": m["id"], "label": m.get("name") or "", "in": round(inp, 3), "vision": img}
+            # ★창 크기 — 화면의 대화 압축 문턱이 이것으로 접는다 (`lib/chatContext.ts`). 없으면 기본값
+            if m.get("context_length"):
+                row["ctx"] = int(m["context_length"])
             # ★추론 단계는 **모델이 알려 준다** — 코드에 박으면 모델마다 다른 것을 못 맞춘다
             #   (문서: "Use this when building client UIs"). `mandatory` 면 끌 수 없다.
             rs = m.get("reasoning") or {}
@@ -511,7 +558,8 @@ async def _anthropic(key, model, system, messages, tools, max_tokens, url, effor
             for t in tools
         ]
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
-        r = await c.post(
+        r = await _post(
+            c,
             url,
             headers={
                 "x-api-key": key,
@@ -593,7 +641,27 @@ def _to_openai(system: str, messages: list[dict], cache: bool = False) -> list[d
                 out.append({"role": "user", "content": parts})
             elif texts:
                 out.append({"role": "user", "content": "\n".join(texts)})
+    # ★★**마지막 메시지에도 표식을 건다** (2026-09-22). 시스템에만 걸면 클로드 계열은 도구 명세와
+    #   지침까지만 캐시되고 **대화 앞부분은 매 바퀴 새로 읽는다.** 오픈라우터 문서: 표식은 넷까지,
+    #   자리는 system·user·tool 메시지. 마지막에 걸면 거기까지의 앞부분 전체가 캐시 후보가 된다.
+    #   ★Grok·OpenAI·딥식은 자동 캐시라 이 표식과 무관하고, 있어도 탈이 없다 (시스템 표식과 같은 사정).
+    if cache and len(out) > 1:
+        _mark_last(out[-1])
     return out
+
+
+def _mark_last(m: dict) -> None:
+    """메시지 하나의 마지막 글 조각에 `cache_control` 을 단다. 글이 문자열이면 조각 목록으로 바꾼다."""
+    c = m.get("content")
+    if isinstance(c, str):
+        m["content"] = [{"type": "text", "text": c, "cache_control": {"type": "ephemeral"}}]
+        return
+    if isinstance(c, list):
+        for part in reversed(c):
+            if isinstance(part, dict) and part.get("type") == "text":
+                part["cache_control"] = {"type": "ephemeral"}
+                return
+        c.append({"type": "text", "text": " ", "cache_control": {"type": "ephemeral"}})
 
 
 async def _openai_compat(key, model, system, messages, tools, max_tokens, url,
@@ -624,7 +692,13 @@ async def _openai_compat(key, model, system, messages, tools, max_tokens, url,
         ]
     headers = {"Authorization": f"Bearer {key}", "content-type": "application/json"}
     async with httpx.AsyncClient(timeout=timeout) as c:
-        r = await c.post(url, headers=headers, json=body)
+        r = await _post(c, url, headers=headers, json=body)
+        # ★오픈라우터의 402 「can only afford N」 — 그 값으로 한 번 더 (위 `afford_tokens` 의 ★★주)
+        if r.status_code == 402 and routing and "max_tokens" not in body:
+            n = afford_tokens(r.text)
+            if n:
+                body["max_tokens"] = n
+                r = await _post(c, url, headers=headers, json=body)
         # ★★공식 OpenAI 의 추론 모델은 `/v1/chat/completions` 에서 **도구와 추론을 함께 못 쓴다**
         #   (실측 2026-08-30, gpt-5.6-terra: "Function tools with reasoning_effort are not supported
         #   … use /v1/responses or set reasoning_effort to 'none'"). 우리는 이 창구에 효과 단계를
@@ -634,7 +708,7 @@ async def _openai_compat(key, model, system, messages, tools, max_tokens, url,
         if (r.status_code == 400 and tools and "reasoning_effort" in r.text
                 and "reasoning_effort" not in body):
             body["reasoning_effort"] = "none"
-            r = await c.post(url, headers=headers, json=body)
+            r = await _post(c, url, headers=headers, json=body)
     if r.status_code >= 400:
         return {"error": _err(r)}
     d = r.json()
@@ -781,7 +855,8 @@ async def _gemini(key, model, system, messages, tools, max_tokens, url, effort="
             }
         ]
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
-        r = await c.post(
+        r = await _post(
+            c,
             url.format(model=model),
             params={"key": key},  # ★버텍스 Express 는 쿼리로 키를 받는다 (헤더가 아니다)
             headers={"content-type": "application/json"},

@@ -1,5 +1,6 @@
 import { composing } from "../lib/ime";
 import { TYPE } from "../styles/type";
+import { compactAt, fmtUsage } from "../lib/chatContext";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { useLlm, type Ask, type Confirm, type Line } from "../store/llm";
@@ -61,6 +62,7 @@ export function AiChat({ onOpenSettings }: { onOpenSettings: () => void }) {
   const t = useI18n((s) => s.t);
   // `id` = 지금 열려 있는 대화 (목록에서 어느 줄이 지금 것인지 표시)
   const { cfg, lines, wire, sending, error, ask, confirm, list, id: cur, title: chatTitle, cliSessionGone,
+          ctx, compacting, compact, models,
           loadConfig, restore, send, stop, newChat, open, remove } = useLlm();
   const [showList, setShowList] = useState(false);
   /* ★지난 대화 목록은 **밖을 누르면 닫힌다** (사용자 지시 2026-08-29: *"다시 버튼을 눌러야만
@@ -77,6 +79,10 @@ export function AiChat({ onOpenSettings }: { onOpenSettings: () => void }) {
     return () => window.removeEventListener("pointerdown", onDown);
   }, [showList]);
   const { engine, exe, scanning, detect } = useCli();
+  /* ★머리의 「맥락 45k · 캐시 88%」 — 마지막 응답의 입력 토큰과 캐시 적중 (2026-09-22). API 엔진에만 있다
+     (CLI 는 저쪽이 잰다). 문턱은 모델의 창 크기로 접는다 (`lib/chatContext.compactAt`). */
+  const ctxAt = compactAt(models.find((m) => m.id === cfg?.model)?.ctx);
+  const ctxShown = ctx && engine !== "cli" ? fmtUsage(ctx) : null;
   const ws = useWs((s) => s.current);
   const tab = useWs((s) => s.activeSceneGroup());
   const wsTab = useWs((s) => s.activeTabOf());
@@ -205,6 +211,27 @@ export function AiChat({ onOpenSettings }: { onOpenSettings: () => void }) {
           />
           {engine === "cli" ? "CLI" : "API"}
         </button>
+        {ctxShown && (
+          <span
+            data-ai-ctx={ctx?.in}
+            data-tip={t("ai.ctxTip", { at: ctxAt.toLocaleString() })}
+            style={{ ...TYPE.eyebrow, color: ctx && ctx.in >= ctxAt ? "var(--warn)" : "var(--ink-faint)", padding: "0 4px",
+                     fontVariantNumeric: "tabular-nums" }}
+          >
+            {t("ai.ctx", { n: ctxShown.k, p: String(ctxShown.pct) })}
+          </span>
+        )}
+        {lines.length > 0 && engine !== "cli" && (
+          <button
+            data-ai-compact
+            onClick={() => void compact()}
+            disabled={sending || compacting}
+            data-tip={sending ? t("ai.busyLock") : t("ai.compact")}
+            style={{ color: sending || compacting ? "var(--ink-ghost)" : "var(--ink-faint)", display: "grid" }}
+          >
+            {Icon.collapseAll}
+          </button>
+        )}
         <button
           data-ai-list
           onClick={() => setShowList((v) => !v)}
@@ -976,6 +1003,16 @@ function Row({ line }: { line: Line }) {
         }}
       >
         <Md text={line.text} />
+      </div>
+    );
+
+  if (line.kind === "note")
+    return (
+      <div
+        data-ai-note
+        style={{ alignSelf: "center", ...TYPE.eyebrow, color: "var(--ink-ghost)", padding: "2px 0" }}
+      >
+        {line.text}
       </div>
     );
 
