@@ -114,19 +114,41 @@ def _scenes(st: dict) -> list[dict]:
     return out
 
 
-def _scene_group_prompt(spec: dict, st: dict) -> dict:
-    """그 씬 그룹에 걸리는 **프롬프트**.
+def _prompt_view(p: dict) -> dict:
+    """탭의 **프롬프트** — 조수가 읽는 모양 (스타일 카드 · base · baseUc · 캐릭터 · 순차 생성).
 
-    ★★씬 그룹(kind=="sceneGroup")의 프롬프트는 **탭에 산다** (`spec.tabs[].prompt` — `workspace.ts` 의
-      `promptOf`). 한 탭 아래 씬 그룹들은 같은 인물의 다른 포즈 묶음이라 프롬프트를 함께 쓴다.
-      여기는 씬 그룹에서만 찾고 있어서 **프롬프트가 통째로 안 보였다** (2026-08-24 발견).
-    ★씬 그룹에 든 것을 읽는 폴백은 두지 않는다 — 그 모양(옛 워크스페이스·싱글 탭)이 남아 있지
-      않다 (사용자 확인 2026-08-24)."""
-    cid = st.get("tabId") or spec.get("activeTab")
-    for c in spec.get("tabs") or []:
-        if c.get("id") == cid and c.get("prompt"):
-            return c["prompt"]
-    return {}
+    ★★프롬프트는 **탭에 산다** (`spec.tabs[].prompt` — `workspace.ts` 의 `promptOf`). 한 탭 아래 씬 그룹들은
+      같은 인물의 다른 포즈 묶음이라 프롬프트를 함께 쓴다. 그래서 `get_workspace` 는 이것을 **`tabs[].prompt` 에
+      한 번만** 싣는다 (2026-09-22). 예전에는 씬 그룹 행마다 실어서, 한 탭에 씬 그룹이 둘이면 같은 2,300 글자가
+      두 번 나갔다 (실측: 17탭 워크스페이스에서 48k 중 44k 가 프롬프트).
+    ★★**스타일 카드가 없으면 없다고 보인다** (2026-09-07). 새 탭은 `styleOn: false` 로 시작하는데
+      예전에는 `style` 이름·`base` 만 실어서 「카드가 없음」과 「카드가 비었음」이 같은 모양이었다 —
+      조수가 없는 카드의 `base` 에 쓰고 성공이라 답했다 (블록은 저장되지만 화면·생성에 안 나온다).
+      ★값이 없으면 켜진 것이다 (옛 워크스페이스, `store/prompt` 의 `styleOn`).
+    ★「캐릭터 프롬프트」다 — 덱의 **캐릭터 카드**와 다른 것이다 (낱말표).
+      ★★`id`·`on`·`center` 를 함께 준다 (선결 조건 3-6): 꺼진 캐릭터를 켜거나 자리를 옮기려면 조수가
+        그 값을 **먼저 볼 수 있어야** 한다. `center` 는 화면에서 설 자리(0~1)이고 **언제나 값이 있다**
+        (`store/prompt.ts` 의 `Char.center`) — 좌표를 안 쓰는 상태는 이 값을 비우는 것이 아니라
+        `use_coords` 를 끄는 것이다.
+      ★한때 `stack`(순차 생성 대기줄)을 함께 실었다. 2026-09-15 에 스택이 **모드**로 바뀌어 (`seqChars`)
+        그 값 자체가 없어졌다.
+    ★★**순차 생성 모드**(`seqChars`) — 켜면 켜 둔 캐릭터를 **한 명씩** 뽑아 장 수가 그만큼 곱해진다
+      (`src/lib/costNow.ts` 의 `seqTimesNow`). 쓰기(`set_seq_chars`)를 만들기 전에 읽기부터 채운다 —
+      못 읽는 값은 못 고친다. 값은 **탭의 것**이다 (`TabPrompt.seqChars`) — 없으면 꺼진 것이다."""
+    on = p.get("styleOn", True) is not False
+    st = p.get("style") or {}
+    return {
+        "styleCard": ({"name": st.get("name"), "ref": st.get("ref")} if on else None),
+        "base": _view(p.get("base")) if on else [],
+        "baseUc": _view(p.get("baseUc")) if on else [],
+        "characters": [
+            {"id": c.get("id"), "name": c.get("name"),
+             "on": c.get("on", True), "center": c.get("center"),
+             "prompt": _view(c.get("prompt")), "uc": _view(c.get("uc"))}
+            for c in (p.get("chars") or [])
+        ],
+        "seqChars": p.get("seqChars") is True,
+    }
 
 
 def _tab_model(spec: dict) -> str:
@@ -554,9 +576,9 @@ class Tools:
             ),
             (
                 "get_workspace",
-                "작업 상태 — 탭 목록과 **한 탭**의 씬 그룹·씬·프롬프트 블록·캐릭터. **지금 사용자가 만지고 "
-                "있는 것**이 여기 들어 있다 (화면은 이 파일을 보여 줄 뿐이다). 이름을 비우면 가장 최근 것. "
-                "탭을 비우면 활성 탭. 다른 탭은 `tab` 으로, 모든 탭은 `all: true` 로 (크다).",
+                "작업 상태 — 탭 목록과 **한 탭**의 프롬프트(`tabs[].prompt`: 스타일 카드·base·UC·캐릭터)와 "
+                "씬 그룹·씬. **지금 사용자가 만지고 있는 것**이 여기 들어 있다 (화면은 이 파일을 보여 줄 뿐이다). "
+                "이름을 비우면 가장 최근 것. 탭을 비우면 활성 탭. 다른 탭은 `tab` 으로, 모든 탭은 `all: true` 로 (크다).",
                 obj({"name": s("워크스페이스 이름 (비우면 최근)"),
                      "tab": s("탭 id 또는 이름 (비우면 활성 탭)"),
                      "all": {"type": "boolean", "description": "모든 탭의 씬 그룹을 다 준다 (기본 false)"},
@@ -842,45 +864,21 @@ class Tools:
                      "locked": bool(k.get("locked")), "scenes": len(k.get("cells") or [])}
                     for k in (t.get("cards") or [])
                 ]
-            p = _scene_group_prompt(spec, t)
-            if p:
-                # ★★**스타일 카드가 없으면 없다고 보인다** (2026-09-07). 새 탭은 `styleOn: false` 로 시작하는데
-                #   예전에는 `style` 이름·`base` 만 실어서 「카드가 없음」과 「카드가 비었음」이 같은 모양이었다 —
-                #   조수가 없는 카드의 `base` 에 쓰고 성공이라 답했다 (블록은 저장되지만 화면·생성에 안 나온다).
-                #   ★값이 없으면 켜진 것이다 (옛 워크스페이스, `store/prompt` 의 `styleOn`).
-                on = p.get("styleOn", True) is not False
-                st = p.get("style") or {}
-                row["prompt"] = {
-                    "styleCard": ({"name": st.get("name"), "ref": st.get("ref")} if on else None),
-                    "base": _view(p.get("base")) if on else [],
-                    "baseUc": _view(p.get("baseUc")) if on else [],
-                    # ★「캐릭터 프롬프트」다 — 덱의 **캐릭터 카드**와 다른 것이다 (낱말표)
-                    #  ★★`id`·`on`·`center` 를 함께 준다 (선결 조건 3-6): 꺼진 캐릭터를
-                    #    켜거나 자리를 옮기려면 조수가 그 값을 **먼저 볼 수 있어야** 한다.
-                    #  ★`center` 는 화면에서 설 자리(0~1)이고 **언제나 값이 있다**
-                    #    (`store/prompt.ts` 의 `Char.center`) — 좌표를 안 쓰는 상태는
-                    #    이 값을 비우는 것이 아니라 `use_coords` 를 끄는 것이다.
-                    #  ★한때 `stack`(순차 생성 대기줄)을 함께 실었다. 2026-09-15 에 스택이
-                    #    **모드**로 바뀌어 (아래 `seqChars`) 그 값 자체가 없어졌다.
-                    "characters": [
-                        {"id": c.get("id"), "name": c.get("name"),
-                         "on": c.get("on", True), "center": c.get("center"),
-                         "prompt": _view(c.get("prompt")), "uc": _view(c.get("uc"))}
-                        for c in (p.get("chars") or [])
-                    ],
-                    # ★★**순차 생성 모드** — 켜면 켜 둔 캐릭터를 **한 명씩** 뽑아 장 수가 그만큼
-                    #   곱해진다 (`src/lib/costNow.ts` 의 `seqTimesNow`). 쓰기(`set_seq_chars`)를
-                    #   만들기 전에 읽기부터 채운다 — 못 읽는 값은 못 고친다.
-                    #   ★값은 **탭의 것**이다 (`TabPrompt.seqChars`) — 없으면 꺼진 것이다.
-                    "seqChars": p.get("seqChars") is True,
-                }
             scene_groups.append(row)
+        # ★★**프롬프트는 보인 탭에만, 한 번만** (2026-09-22). 프롬프트는 탭의 것인데 씬 그룹 행마다 실었더니
+        #   한 탭에 씬 그룹이 둘이면 같은 글이 두 번 나갔다. 탭 목록은 언제나 전부지만 프롬프트는 보인 탭에만.
+        tab_rows: list[dict[str, Any]] = []
+        for c in tabs:
+            trow: dict[str, Any] = {"id": c.get("id"), "name": c.get("name")}
+            if (every or str(c.get("id")) == only) and c.get("prompt"):
+                trow["prompt"] = _prompt_view(c["prompt"])
+            tab_rows.append(trow)
         out: dict[str, Any] = {
             "name": name,
             # ★★이름은 **화면 낱말**이다 (`docs/terms-plan.md` 의 낱말표) — 탭·씬 그룹·씬.
             #   저장 열쇠와 우연히 같아진 것이지 묶인 것이 아니다. 저장 쪽 이름을 또 바꾸면
             #   여기서 **옮겨 담아** 계약을 지킨다.
-            "tabs": [{"id": c.get("id"), "name": c.get("name")} for c in (spec.get("tabs") or [])],
+            "tabs": tab_rows,
             "activeTab": spec.get("activeTab"),
             # ★어느 탭의 씬 그룹인지 — 전부면 "*" (조수가 「빠진 탭이 있나」를 알 수 있어야 한다)
             "shownTab": "*" if every else only,
@@ -1353,8 +1351,9 @@ The user makes art with NovelAI (NAI); a prompt is **Danbooru tags** joined by c
   5. **Save to the deck** - `save_card` (what is on screen) when they want to keep it.
   6. **Make or overwrite a deck card directly** - `create_card` / `update_card` - when they
      want a deck card that is not on screen.
-  `get_workspace` shows `prompt.styleCard` - `null` means there is no style card on that tab
-  yet, and then `base` is empty because there is nowhere for it to live.
+  `get_workspace` puts the tab's prompt on `tabs[].prompt` (only for the tab it shows; scene
+  groups on one tab share it). `prompt.styleCard` `null` means there is no style card on that
+  tab yet, and then `base` is empty because there is nowhere for it to live.
   `prompt.seqChars` is the tab's **one-by-one mode**: when true, each enabled character is
   generated in its own image instead of all of them sharing one, so the number of images is
   multiplied by the number of enabled characters. `set_seq_chars` turns it on and off.
@@ -1461,7 +1460,7 @@ Principles:
   tell whether the work finished. (User rule 2026-08-30: "가끔 아무 말 없이 끝나서 중단된 것처럼
   보인다".)
 - **"Change X" defaults to (1)** - people usually mean what is on screen right now.
-- **When a name comes up, find where it lives first.** Look at the current scene group's `characters`
+- **When a name comes up, find where it lives first.** Look at the current tab's `prompt.characters`
   with get_workspace; if it is not there, look in the deck with list_cards. **If it is in
   both, ask which one.**
 - update_card overwrites an existing card - use it only when they clearly asked for that.
