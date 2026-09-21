@@ -5,7 +5,7 @@ import { usePrompt } from "./prompt";
 import { allCells, allScenes, onBeforeWsSwitch, useWs } from "./workspace";
 import { useQueue } from "./queue";
 import { currentAccountId } from "./accounts";
-import { useImageInput } from "./imageInput";
+import { useImageInput, type ImageSnap } from "./imageInput";
 import { useUi } from "./ui";
 import { sizeForBase } from "../lib/baseSize";
 import { toast } from "./toast";
@@ -418,6 +418,18 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined;
  *  ★localStorage 는 **새 탭의 출발값**으로 남는다 (마지막으로 쓰던 값). */
 let watching = false;
 let lastSpot: string | null = null;
+/** ★★**이미지 입력도 탭마다 따로다** (사용자 결정 2026-09-21).
+ *
+ *  사용자 신고: 탭 A 에서 베이스 그림을 걸어 둔 채 탭 A 를 지우고 탭 B 에서 생성을 눌렀더니
+ *  **탭 B 의 프롬프트에 탭 A 의 그림**으로 i2i 가 나갔다. 베이스 그림은 켜고 끄는 스위치도
+ *  없고 걸려 있다는 표시도 없어서(「이미지 입력」 섹션은 접히면 언마운트된다) 조용히 나갔다.
+ *  생성 옵션(`tab.gen`)·프롬프트(`tab.prompt`)는 이미 탭이 들고 있었는데 이것만 전역이었다.
+ *
+ *  ★★**파일에 안 적는다.** 여기 드는 것은 그림 바이트(base64)라, 워크스페이스 파일에 담으면
+ *    자동 저장마다 수 MB 를 다시 쓴다. 지금도 이 값들은 어디에도 안 남으므로(앱을 다시 켜면
+ *    비어 있다) **메모리에만** 둔다 — 오래가는 정도는 전과 같고 탭 사이만 갈린다.
+ *  ★워크스페이스를 옮기면 통째로 버린다 (전과 같은 규칙). */
+const tabImages = new Map<string, ImageSnap>();
 function watchTabParams() {
   if (watching) return;
   watching = true;
@@ -441,7 +453,10 @@ function watchTabParams() {
     lastSpot = spot;
     const sameWs = !!prev && prev.split("::")[0] === (s.current ?? "");
     if (sameWs) {
-      useWs.getState().stashGen(prev.split("::").slice(1).join("::"), useGen.getState().params);
+      const from = prev.split("::").slice(1).join("::");
+      useWs.getState().stashGen(from, useGen.getState().params);
+      // ★생성 옵션과 **같은 자리에서** 담는다 — 규칙이 둘로 갈리지 않게
+      tabImages.set(from, useImageInput.getState().snapshot());
     }
     const tab = spec?.tabs?.find((c) => c.id === id);
     if (tab?.gen) {
@@ -457,7 +472,16 @@ function watchTabParams() {
     }
     if (!sameWs) {
       // ★베이스 그림·바이브·레퍼런스도 워크스페이스를 안 넘는다 (같은 이유)
+      tabImages.clear();
       useImageInput.getState().resetAll();
+    } else if (id) {
+      /* ★★**탭 것으로 갈아 끼운다.** 담아 둔 것이 없는 탭(새 탭·처음 가 보는 탭)은
+         **아무것도 안 걸린 상태**로 시작한다 — 앞 탭의 그림이 따라가지 않는 것이 이 변경의 요점이다.
+         ★바이브는 `load` 가 캐시를 다시 물어본다 (`store/imageInput` 의 ★★주). */
+      useImageInput.getState().load(tabImages.get(id) ?? null);
+      // 지운 탭이 담아 둔 것은 버린다 (그림 바이트라 들고 있을 이유가 없다)
+      const live = new Set((spec?.tabs ?? []).map((c) => c.id));
+      for (const k of [...tabImages.keys()]) if (!live.has(k)) tabImages.delete(k);
     }
   });
 }

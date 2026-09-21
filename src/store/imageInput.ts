@@ -114,9 +114,28 @@ type S = {
   resetAll: () => void;
   patchBase: (p: Partial<Pick<S, "baseMode" | "baseStrength" | "baseInpaintStrength" | "baseNoise" | "baseMask">>) => void;
 
+  /** ★★**지금 걸려 있는 것 한 벌** — 탭을 떠날 때 담는다 (`store/gen` 의 탭 전환).
+   *  프롬프트와 같은 양식이다 (`usePrompt.snapshot`·`load`). */
+  snapshot: () => ImageSnap;
+  /** ★★**그 탭 것으로 갈아 끼운다.** `null` 이면 아무것도 안 걸린 상태로.
+   *  ★바이브는 갈아 끼운 **뒤에 캐시를 물어본다** (사용자 지시 2026-09-21: *"바이브는 한번
+   *    인코딩하면 갤러리의 바이브쪽에 저장되니까 나중에 같은걸 넣으면 그걸 다시 불러와야함"*).
+   *    화면에도 같은 물음이 있지만(`ImageInputPanel`), 그 섹션은 **접히면 언마운트돼** 안 돈다 —
+   *    그러면 구워 둔 인코딩을 못 찾아 요금이 다시 드는 것처럼 보인다. */
+  load: (s: ImageSnap | null) => void;
+
   /** ★생성 요청에 실을 조각. **단발·큐 두 경로가 같은 것을 쓴다** (하나의 정보에는 하나의 창구) */
   payload: () => Record<string, unknown>;
 };
+
+/** 한 탭이 들고 있는 이미지 입력 한 벌.
+ *  ★`editing`(마스크를 칠하는 중인가)은 **안 담는다** — 그것은 화면 상태다. */
+export type ImageSnap = Pick<
+  S,
+  | "vibeOn" | "vibes" | "normalizeVibe" | "refOn" | "refs"
+  | "baseImage" | "baseName" | "baseMode" | "baseStrength" | "baseInpaintStrength"
+  | "baseNoise" | "baseMask" | "baseSize" | "focused" | "tileRect"
+>;
 
 /** v2 제한 그대로 (index.html:18376) */
 export const MAX_VIBES = 16;
@@ -288,6 +307,24 @@ export const useImageInput = create<S>((set, get) => ({
           baseStrength: 0.7, baseInpaintStrength: 1, baseNoise: 0,
           baseSize: null, tileRect: null, focused: false, editing: false,
           vibeOn: false, vibes: [], normalizeVibe: true, refOn: false, refs: [] }),
+
+  snapshot() {
+    const s = get();
+    return {
+      vibeOn: s.vibeOn, vibes: s.vibes, normalizeVibe: s.normalizeVibe,
+      refOn: s.refOn, refs: s.refs,
+      baseImage: s.baseImage, baseName: s.baseName, baseMode: s.baseMode,
+      baseStrength: s.baseStrength, baseInpaintStrength: s.baseInpaintStrength,
+      baseNoise: s.baseNoise, baseMask: s.baseMask, baseSize: s.baseSize,
+      focused: s.focused, tileRect: s.tileRect,
+    };
+  },
+  load(snap) {
+    if (!snap) return get().resetAll();
+    // ★`editing` 은 담지 않은 값이라 여기서 끈다 — 칠하던 중에 탭을 옮겼어도 새 탭은 평소 화면이다
+    set({ ...snap, editing: false });
+    if (snap.vibes.length) void get().syncVibeCache();
+  },
   setTileRect: (r) => set({ tileRect: r }),
 
   setFocused: (v) => {
