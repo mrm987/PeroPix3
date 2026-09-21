@@ -503,8 +503,11 @@ function Cell({
       )}
       {/* ★★**작가 필터로 볼 때는 어느 작가인지 칸에 적는다** (사용자 지시 2026-09-21).
           여럿을 켜 두면 격자가 작가별로 모여 서는데, 어느 무리를 보고 있는지 칸에 없으면
-          경계가 안 보인다. ★`pointer-events: none` 이 필수다 — 덧그림이 커서를 가로채면
-          그 위의 누름이 칸에 안 닿는다. */}
+          경계가 안 보인다.
+          ★★**한 명도 생략하지 않는다 — 한 줄에 한 명씩 세로로 쌓는다** (사용자 지시 2026-09-21).
+            한 줄에 이어 붙이면 둘째 작가부터 잘려 나가, 그 그림이 누구누구의 것인지 못 읽는다.
+            줄이는 것은 **이름 하나가 칸보다 길 때** 그 줄 안에서뿐이다.
+          ★`pointer-events: none` 이 필수다 — 덧그림이 커서를 가로채면 그 위의 누름이 칸에 안 닿는다. */}
       {artists && artists.length > 0 && (
         <span
           data-cell-artists={artists.join(", ")}
@@ -513,18 +516,20 @@ function Cell({
             left: 0,
             right: 0,
             bottom: 0,
-            padding: "2px 4px",
-            background: "linear-gradient(transparent, rgba(8,10,14,0.78) 45%)",
+            display: "grid",
+            padding: "8px 4px 2px",
+            background: "linear-gradient(transparent, rgba(8,10,14,0.82) 60%)",
             color: "rgba(255,255,255,0.92)",
             fontSize: "var(--text-2xs)",
             lineHeight: 1.35,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
             pointerEvents: "none",
           }}
         >
-          {artists.join(" · ")}
+          {artists.map((a) => (
+            <span key={a} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {a}
+            </span>
+          ))}
         </span>
       )}
       {/* ★여기서 **켜고 끈다** (페로픽스파이 `.thumb-star`). 큰 그림에는 별표를 두지 않는다 —
