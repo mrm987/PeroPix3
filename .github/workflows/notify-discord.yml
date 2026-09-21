@@ -73,6 +73,8 @@ jobs:
           # ★★**디스코드 상한(2,000자)을 넘지 않게만 자른다.** 넘으면 400 으로 되돌아오고,
           #   머리말과 내려받기 줄이 차지하는 만큼을 빼고 남는 자리를 본문에 준다 — 짧으면 안 자른다.
           #   ★자르기는 `jq` 로 한다: 바이트가 아니라 **글자** 기준이라 한글이 중간에 안 끊긴다.
+          # ★**`flags: 4` 는 SUPPRESS_EMBEDS** — 링크에서 저절로 생기는 미리보기를 끈다 (매번
+          #   손으로 지우고 있었다). `embeds` 배열을 안 쓰므로 이 플래그가 지우는 것은 그 미리보기뿐이다.
           jq -n \
             --arg tag "$TAG" \
             --arg body "$(cat /tmp/body.txt)" \
@@ -83,7 +85,7 @@ jobs:
              | (2000 - ($head | length) - ($tail | length) - 3) as $room
              | ($body | if length > $room then .[0:$room] + "…" else . end) as $b
              | (if ($b | gsub("\\s"; "")) == "" then "" else "\n\n" + $b end) as $mid
-             | {content: ($head + $mid + $tail)}' \
+             | {content: ($head + $mid + $tail), flags: 4}' \
             > /tmp/payload.json
 
           # ★★**실패를 삼키지 않는다.** 그냥 `curl` 은 400 을 받아도 성공으로 끝나, 알림이
