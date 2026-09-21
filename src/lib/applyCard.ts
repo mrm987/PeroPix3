@@ -14,7 +14,7 @@ import { canEnableChar, useGen } from "../store/gen";
 import { usePrompt, thumbFromCard } from "../store/prompt";
 import { useUi } from "../store/ui";
 import { useWs } from "../store/workspace";
-import { styleOptsPatch } from "./styleOpts.ts";
+import { PICK_BOTH, styleOptsPatch, type StylePick } from "./styleOpts.ts";
 import type { CardKind } from "../store/cards";
 
 type AnyCardLike = {
@@ -29,23 +29,33 @@ type AnyCardLike = {
   cells?: unknown[];
 };
 
-/** 꽂는다. 못 하면 까닭을 돌려준다 (조수가 사용자에게 말할 수 있게). */
-export function applyCard(kind: CardKind, c: AnyCardLike): { error?: string; did?: string } {
+/** 꽂는다. 못 하면 까닭을 돌려준다 (조수가 사용자에게 말할 수 있게).
+ *
+ *  ★`pick` 은 **스타일 카드에만** 쓴다 — 무엇을 덮을지 시트가 고른 결과다
+ *    (`app/StylePickDialog`). 안 주면 둘 다 건다 (조수가 부르는 경로). */
+export function applyCard(
+  kind: CardKind,
+  c: AnyCardLike,
+  pick: StylePick = PICK_BOTH,
+): { error?: string; did?: string } {
   if (kind === "styles") {
-    usePrompt.getState().setStyle({
-      ref: c.id ?? null,
-      name: c.name,
-      color: c.color,
-      base: c.base,
-      uc: c.uc,
-      thumb: thumbFromCard(c.thumb),
-    } as never);
-    /* ★★프롬프트가 되는 넷도 함께 건다 (`lib/styleOpts` 의 ★주) — 이것이 카드 밖에
-       남아 있으면 **같은 카드가 다른 그림을 낸다.** 옛 카드에는 없으니 그때는 안 바뀐다.
+    if (pick.prompt)
+      usePrompt.getState().setStyle({
+        ref: c.id ?? null,
+        name: c.name,
+        color: c.color,
+        base: c.base,
+        uc: c.uc,
+        thumb: thumbFromCard(c.thumb),
+      } as never);
+    /* ★★담긴 설정도 함께 건다 (`lib/styleOpts` 의 ★주). 프롬프트가 되는 넷은 **프롬프트와 한 몸**
+       이라(카드 밖에 남으면 같은 카드가 다른 그림을 낸다) 프롬프트 칸과 함께 걸리고,
+       생성 옵션 일곱은 따로 고른다.
        ★바뀐 것이 있으면 그 자리를 **편다** — 프롬프트 밖의 값이 함께 바뀌는 것이라
          안 알리면 「왜 갑자기 퀄리티 태그가 붙었지」가 된다. */
+    const groups = ([] as ("prompt" | "gen")[]).concat(pick.prompt ? "prompt" : [], pick.gen ? "gen" : []);
     const cur = useGen.getState().params;
-    const patch = styleOptsPatch(cur, c.opts as never);
+    const patch = styleOptsPatch(cur, c.opts as never, groups);
     if (Object.keys(patch).length) {
       useGen.setState({ params: { ...cur, ...patch } });
       useUi.getState().reveal("left", "params", false);
@@ -78,4 +88,14 @@ export function applyCard(kind: CardKind, c: AnyCardLike): { error?: string; did
     cells: c.cells as never,
   });
   return { did: `포즈세트 「${c.name}」 을 「${cur.name}」 에 얹었습니다` };
+}
+
+/** ★★**사람이 끌어다 놓은 스타일 카드**는 무엇을 덮을지 먼저 묻는다 (사용자 지시 2026-09-21).
+ *  시트를 취소하면 아무것도 안 걸린다. 조수는 이 경로가 아니라 `applyCard` 를 바로 부른다 —
+ *  화면이 없는 자리에서 답을 기다리면 영영 안 끝난다. */
+export async function dropStyleCard(c: AnyCardLike): Promise<void> {
+  const { askStylePick } = await import("../store/stylePick");
+  const pick = await askStylePick(c.name, c.opts as never);
+  if (!pick) return;
+  applyCard("styles", c, pick);
 }

@@ -445,6 +445,18 @@ export const en = {
   },
 
   /** Importing an image dropped from outside (`app/DropImport`) */
+  style: {
+    dropTitle: "Apply “{name}”",
+    pickPrompt: "Prompt",
+    promptBody: "Base · Undesired Content",
+    pickGen: "Generation options",
+    noGen: "Not saved in this card",
+    same: "same as now",
+    apply: "Apply",
+    on: "on",
+    off: "off",
+    none: "none",
+  },
   drop: {
     title: "Import",
     exif: "Inspect EXIF",

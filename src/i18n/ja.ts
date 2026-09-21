@@ -443,6 +443,18 @@ export const ja: Dict = {
   },
 
   /** 外から落とした画像の取り込み (`app/DropImport`) */
+  style: {
+    dropTitle: "「{name}」を適用します",
+    pickPrompt: "プロンプト",
+    promptBody: "ベース · Undesired Content",
+    pickGen: "生成オプション",
+    noGen: "このカードには含まれていません",
+    same: "現在と同じ",
+    apply: "適用",
+    on: "オン",
+    off: "オフ",
+    none: "なし",
+  },
   drop: {
     title: "取り込み",
     exif: "EXIF を見る",

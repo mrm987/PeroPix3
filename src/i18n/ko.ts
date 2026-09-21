@@ -457,6 +457,19 @@ export const ko: Dict = {
     vibeFileBad: "NAI 바이브 파일이 아닙니다.",
   },
 
+  /** 스타일 카드를 놓았을 때 무엇을 덮을지 고르는 시트 (`app/StylePickDialog`) */
+  style: {
+    dropTitle: "「{name}」 을 겁니다",
+    pickPrompt: "프롬프트",
+    promptBody: "베이스 · Undesired Content",
+    pickGen: "생성 옵션",
+    noGen: "이 카드에 담겨 있지 않습니다",
+    same: "지금과 같음",
+    apply: "걸기",
+    on: "켬",
+    off: "끔",
+    none: "없음",
+  },
   /** 밖에서 떨군 그림 가져오기 (`app/DropImport`) */
   drop: {
     title: "가져오기",

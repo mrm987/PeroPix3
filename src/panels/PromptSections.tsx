@@ -17,7 +17,7 @@ import { useUi } from "../store/ui";
 import { useDropZone, useDragSource, useDrag } from "../cards/dragStore";
 import { flashStyle, useFlashAt } from "../store/ui";
 import { TYPE } from "../styles/type";
-import { applyCard } from "../lib/applyCard";
+import { applyCard, dropStyleCard } from "../lib/applyCard";
 import { zoneIcon } from "../cards/CardArt";
 import { DropVeil } from "../cards/DropVeil";
 import type { Block } from "../lib/blocks";
@@ -73,7 +73,7 @@ export function StyleSection({ onThumb }: SectionProps) {
     /* ★★꽂는 규칙은 **공용 함수 하나**다 (`lib/applyCard`, 2026-08-24) — 조수가
        «저장해 둔 그 그림체로» 를 받을 때 **같은 것**을 부른다. 여기 규칙을 되살리지 말 것:
        두 벌이 되면 끌어다 놓은 것과 조수가 꽂은 것이 달라진다. */
-    onDrop: (d) => applyCard("styles", d.card as StyleCard),
+    onDrop: (d) => void dropStyleCard(d.card as StyleCard),
   });
   const img = useThumbDrop("base", (di) => onThumb("base", di));
   /** ★★훅은 **JSX 안에서 부르지 않는다** (사용자 지적 2026-08-19: 스타일 카드를 빼면 화면이

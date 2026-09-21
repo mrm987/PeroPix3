@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ValueBox } from "../components/ValueBox";
 import { useI18n } from "../i18n";
 import { useGen } from "../store/gen";
 import {
@@ -404,11 +405,14 @@ export function EnhanceDialog({
                 min={0}
                 max={1}
                 step={0.01}
-                value={strength}
+                // ★손잡이는 범위 안에 묶는다. 값이 1 을 넘어도 슬라이더는 끝에 선다 (v2 와 같다)
+                value={Math.min(1, strength)}
                 onChange={(e) => setStrength(Number(e.target.value))}
                 style={{ flex: 1 }}
               />
-              <span style={{ width: 34, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{strength}</span>
+              {/* ★★숫자를 눌러 **범위 밖의 값도** 넣는다 (v2 `.enhance-clickable-value`, 24857 —
+                  0 미만만 막고 1 초과는 허용). 부품은 정밀 레퍼런스가 쓰는 그것 하나다. */}
+              <ValueBox value={strength} step={0.01} onCommit={(v) => setStrength(Math.max(0, v))} />
             </Row>
             <Row label={t("imgIn.noise")}>
               <input
@@ -416,11 +420,11 @@ export function EnhanceDialog({
                 min={0}
                 max={1}
                 step={0.01}
-                value={noise}
+                value={Math.min(1, noise)}
                 onChange={(e) => setNoise(Number(e.target.value))}
                 style={{ flex: 1 }}
               />
-              <span style={{ width: 34, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{noise}</span>
+              <ValueBox value={noise} step={0.01} onCommit={(v) => setNoise(Math.max(0, v))} />
             </Row>
           </>
         )}

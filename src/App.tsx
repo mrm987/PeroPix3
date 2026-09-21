@@ -27,6 +27,7 @@ import { Toasts } from "./app/Toasts";
 import { TipLayer } from "./components/Tip";
 import { BusyOverlay } from "./app/BusyOverlay";
 import { AskDialog } from "./app/AskDialog";
+import { StylePickDialog } from "./app/StylePickDialog";
 import { AiChat } from "./panels/AiChat";
 import { Canvas } from "./panels/Canvas";
 import { CanvasTabs } from "./panels/CanvasTabs";
@@ -498,6 +499,7 @@ export function App() {
           (`ExifTool` 의 `wide`), 여기까지 두면 한 번 떨군 것을 둘이 잡는다
           (v2 도 같은 자리에서 갈랐다: `!isInCensorMode() && !isInUtilityMode()`). */}
       {(mode === "generate" || mode === "gallery") && <DropImport />}
+      <StylePickDialog />
       <AskDialog />
       <Toasts />
       {/* 툴팁 층 — 화면 아무 데나 `data-tip` 을 달면 여기서 뜬다 (`components/Tip`) */}
