@@ -6,7 +6,7 @@ import { pushUndo } from "../lib/undo";
 import { Icon } from "../components/Icon";
 import { Ratio } from "../components/Ratio";
 import { Help } from "../components/Tip";
-import { ImageInputBadge, ImageInputPanel } from "./ImageInputPanel";
+import { ImageInputPanel } from "./ImageInputPanel";
 import { flashStyle, useFlash, useUi } from "../store/ui";
 
 const SAMPLERS = ["k_euler_ancestral", "k_euler", "k_dpmpp_2m", "k_dpmpp_2m_sde", "k_dpmpp_2s_ancestral", "k_dpmpp_sde"];
@@ -120,9 +120,9 @@ export function OptionsPanel() {
       </Category>
 
       {/* v2 의 `Vibe / Character Ref` + `Base Image` 절 */}
-      {/* ★★딱지는 **패널 밖**이다 — 이 묶음은 접히면 안이 통째로 언마운트되므로, 걸려 있는
-          그림을 알리는 표시가 안에 있으면 접힌 동안 아무것도 못 말한다 (`ImageInputBadge`) */}
-      <Category id="opt-img" label={t("options.catImage")} badge={<ImageInputBadge />} defaultFolded flashKey="base" flashQuiet>
+      {/* ★걸린 그림을 알리는 딱지는 **생성 버튼 곁**이다 (`ImageInputBadge` → `GenerateFooter`) —
+          이 묶음은 접히면 안이 통째로 언마운트돼서, 안에 두면 접힌 동안 아무 말도 못 한다 */}
+      <Category id="opt-img" label={t("options.catImage")} defaultFolded flashKey="base" flashQuiet>
         <ImageInputPanel />
       </Category>
 

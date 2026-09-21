@@ -4,7 +4,7 @@ import { canFocus, defaultRect, focusedPlan, wholeRectMask } from "../lib/focuse
 import { sizeForBase } from "../lib/baseSize";
 import { toast } from "./toast";
 import { t } from "../i18n";
-import { useGen } from "./gen";
+import { modelCaps, useGen } from "./gen";
 import { api } from "../lib/backend";
 
 /** 이미지 입력 — Vibe Transfer · Precise Reference · 베이스 이미지(i2i·인페인트).
@@ -130,6 +130,13 @@ type S = {
    *    그러면 구워 둔 인코딩을 못 찾아 요금이 다시 드는 것처럼 보인다. */
   load: (s: ImageSnap | null) => void;
 
+  /** ★★**지금 생성에 실제로 실리는 것** — 앱에서 이 물음에 답하는 자리는 여기 하나다.
+   *
+   *  거르는 것이 셋이다: **모델 능력**(V5 는 바이브도 레퍼런스도 없다) · **묶음 스위치**
+   *  (`vibeOn`·`refOn`) · **낱장 스위치**(`on`). 셋 중 하나만 빠져도 화면과 실제가 갈린다.
+   *  ★보내는 쪽(`payload`) · 값을 매기는 쪽(`lib/costNow`·`GenerateFooter`) ·
+   *    알리는 쪽(`ImageInputBadge`)이 전부 이것을 부른다. */
+  riding: () => { vibes: Vibe[]; refs: PreciseRef[] };
   /** ★생성 요청에 실을 조각. **단발·큐 두 경로가 같은 것을 쓴다** (하나의 정보에는 하나의 창구) */
   payload: () => Record<string, unknown>;
 };
@@ -381,6 +388,17 @@ export const useImageInput = create<S>((set, get) => ({
     set(p);
   },
 
+  riding() {
+    const s = get();
+    // ★능력표는 **백엔드와 같은 것**을 본다 (`backend/nai.py` 의 `caps`) — 거기서 지우는 것을
+    //   여기서 세면 "보낸다고 해 놓고 안 나가는" 상태가 된다
+    const cap = modelCaps(useGen.getState().params.model);
+    return {
+      vibes: cap.vibe && s.vibeOn ? s.vibes.filter(inputOn) : [],
+      refs: cap.char_ref && s.refOn ? s.refs.filter(inputOn) : [],
+    };
+  },
+
   payload() {
     // ★★인페인트는 **i2i 와 같은 베이스 옵션**이다 (사용자 지시 2026-08-19).
     //   예전에는 "칠하는 동안에만" 실었고, 그래서 편집에서 나오면 베이스가 통째로
@@ -393,12 +411,14 @@ export const useImageInput = create<S>((set, get) => ({
       focusing && !s.baseMask && s.baseSize
         ? wholeRectMask(s.tileRect!, s.baseSize.w, s.baseSize.h)
         : s.baseMask;
+    // ★★거르는 규칙은 **`riding` 하나**다 (꺼 둔 한 장 · 묶음 스위치 · 모델 능력).
+    //   여기서 다시 적으면 화면의 요금·딱지와 실제로 나가는 것이 갈린다
+    const ride = get().riding();
     return {
-      // ★꺼 둔 한 장은 안 나간다 (사용자 지시 2026-09-21)
-      vibe_transfer: s.vibeOn ? s.vibes.filter(inputOn) : [],
-      precise_references: s.refOn ? s.refs.filter(inputOn).map((r) => ({
+      vibe_transfer: ride.vibes,
+      precise_references: ride.refs.map((r) => ({
         image: r.image, mode: r.mode, strength: r.strength, fidelity: r.fidelity,
-      })) : [],
+      })),
       // ★사용자 토글이다 (8절). 꺼 두면 합이 1을 넘어도 값을 그대로 보낸다
       normalize_reference_strength: s.normalizeVibe,
       base_image: s.baseImage,

@@ -10,8 +10,8 @@
  */
 
 import { anlasCost, type Cost } from "./anlas.ts";
-import { modelCaps, useGen } from "../store/gen";
-import { inputOn, useImageInput } from "../store/imageInput";
+import { useGen } from "../store/gen";
+import { useImageInput } from "../store/imageInput";
 import { useSub } from "../store/sub";
 import { allScenes, useWs } from "../store/workspace";
 import { useUi } from "../store/ui";
@@ -47,7 +47,7 @@ export function costNow(rounds = 1): Cost {
   const img = useImageInput.getState();
   // ★지금 워크스페이스의 **계정** 것이다 — 계정마다 티어·Opus 잔량이 다르다 (`store/sub`)
   const sub = useSub.getState().current();
-  const cap = modelCaps(params.model);
+  const ride = img.riding();
   // ★해상도 칸이 아니라 **나가는 크기**로 센다 (Focused 인페인트는 서버가 1MP 로 키운다)
   const size = img.costSize();
   const usage = (sub?.tier ?? 0) >= 3 ? (sub?.usage ?? null) : null;
@@ -58,10 +58,11 @@ export function costNow(rounds = 1): Cost {
     steps: params.steps,
     opus: (sub?.tier ?? 0) >= 3,
     opusExhausted: !!usage?.isNegative,
-    // ★그 모델이 지원하지 않으면 안 나간다 — 능력표로 막아야 보내는 것과 표시가 같아진다
-    uncachedVibes: cap.vibe && img.vibeOn ? img.vibes.filter((v) => inputOn(v) && !v.encoded).length : 0,
-    activeVibes: cap.vibe && img.vibeOn ? img.vibes.filter(inputOn).length : 0,
-    refCount: cap.char_ref && img.refOn ? img.refs.filter(inputOn).length : 0,
+    // ★★거르는 규칙은 **`riding` 하나**다 (모델 능력 · 묶음 스위치 · 낱장 스위치).
+    //   여기서 다시 적으면 화면의 요금과 실제로 나가는 것이 갈린다
+    uncachedVibes: ride.vibes.filter((v) => !v.encoded).length,
+    activeVibes: ride.vibes.length,
+    refCount: ride.refs.length,
     inpaint: img.costInpaint(),
     strength: img.costStrength(),
     count: countNow(rounds),

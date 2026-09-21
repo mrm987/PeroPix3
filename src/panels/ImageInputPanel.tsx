@@ -5,7 +5,6 @@ import { Help } from "../components/Tip";
 import {
   MAX_VIBES,
   fileToBase64,
-  inputOn,
   processReference,
   pushVibe,
   useImageInput,
@@ -882,39 +881,45 @@ function Pick({
   );
 }
 
-/** ★★「베이스 이미지」 묶음 이름 옆의 **작은 딱지** — 무언가 걸려 있으면 뜬다
- *  (사용자 지시 2026-09-21: *"'베이스 이미지' 섹션에 하나라도 들어있으면 뭔가 작게 표시해줘.
- *  호버하면 뭐가 들어있는지 보여주고"*).
+/** ★★**지금 생성에 실리는 그림이 있다**를 알리는 작은 딱지 — 장 수 칸 오른쪽에 뜬다
+ *  (사용자 지시 2026-09-21: *"생성 버튼쪽에 표시. 장 수 정하는 곳 우측에 표시하면 될듯"*).
+ *  커서를 대면 무엇이 들었는지 한 줄씩 말한다.
  *
- *  ★★**접혀 있어도 보여야 한다**는 것이 이 딱지의 전부다. 이 묶음은 접히면 언마운트돼서
+ *  ★★**생성 버튼 곁이라야 한다.** 「베이스 이미지」 묶음은 접히면 안이 통째로 언마운트돼서
  *    (`Category` 의 `{!folded && children}`), 넣어 둔 베이스 그림이 화면 어디에도 안 보인 채
- *    생성에 실려 나갔다 (사용자 신고 2026-09-21). 그래서 **패널 밖**에 산다 — `OptionsPanel`
- *    이 `Category` 의 `badge` 로 넘기고, 접힘과 무관하게 그려진다.
- *  ★세는 것은 **걸려 있는 수**다 (꺼 둔 것까지). 꺼 둔 것은 지금 안 나갈 뿐 넣어 둔 것이라,
- *    빼면 "표시가 없는데 들어 있다"가 그대로 남는다. 켜짐과 꺼짐은 툴팁이 말한다. */
+ *    생성에 실려 나갔다 (사용자 신고 2026-09-21). 누르기 직전에 보이는 자리가 여기다.
+ *  ★★**세는 것은 「실제로 실리는 것」뿐이다** (사용자 지시 2026-09-21: *"켜둔것만 기준으로 표시.
+ *    꺼둔건 포함 안함. 실제 생성에 들어가는 것만 체크"* · *"v5로 바꾸면 현재 상태에 맞게 표시.
+ *    담아뒀어도 지금 안보이면 없는걸로 취급"*). 꺼 둔 한 장 · 꺼 둔 묶음 · 그 모델에 없는 절은
+ *    전부 빠진다. 판정은 앱에 하나다 — `useImageInput.riding()`. */
 export function ImageInputBadge() {
   const t = useI18n((s) => s.t);
   const s = useImageInput();
-  const n = (s.baseImage ? 1 : 0) + s.vibes.length + s.refs.length;
+  // ★모델을 바꾸면 딸려 바뀐다 — V5 로 가면 바이브·레퍼런스가 통째로 빠진다
+  useGen((g) => g.params.model);
+  const ride = s.riding();
+  const n = (s.baseImage ? 1 : 0) + ride.vibes.length + ride.refs.length;
   if (!n) return null;
   return (
     <span
       data-input-badge={n}
-      data-tip={inputTip(s, t)}
+      data-tip={inputTip(s, ride, t)}
       style={{
         flexShrink: 0,
-        minWidth: 16,
-        padding: "0 5px",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        padding: "1px 6px 1px 4px",
         borderRadius: 999,
         background: "var(--accent)",
         color: "var(--accent-on)",
         fontSize: "var(--text-3xs)",
         fontWeight: "var(--w-semi)",
-        lineHeight: "16px",
-        textAlign: "center",
+        lineHeight: 1.4,
         fontVariantNumeric: "tabular-nums",
       }}
     >
+      {Icon.picture12}
       {n}
     </span>
   );
@@ -923,19 +928,19 @@ export function ImageInputBadge() {
 /** 목록은 여섯 줄에서 끊는다 — 바이브는 16장까지 들어가는데 다 적으면 툴팁이 화면을 덮는다 */
 const TIP_MAX = 6;
 
-/** 딱지의 툴팁 — 걸려 있는 것을 한 줄씩 적는다.
+/** 딱지의 툴팁 — **실리는 것만** 한 줄씩 적는다 (딱지가 세는 것과 같은 목록이다).
  *  ★★**조각을 코드에서 잇지 않는다** (`lib/tipText.test.ts` ⑤번 판정). 괄호도 가운뎃점도
  *    세는 말도 번역 문구 안에 넣고, 여기서는 **줄바꿈으로만** 잇는다. */
 function inputTip(
   s: ReturnType<typeof useImageInput.getState>,
+  ride: ReturnType<ReturnType<typeof useImageInput.getState>["riding"]>,
   t: (key: string, vars?: Record<string, string | number>) => string,
 ) {
   const out = [t("imgIn.sumTitle")];
-  const group = (label: string, on: boolean, list: { name: string; on?: boolean }[]) => {
+  const group = (label: string, list: { name: string }[]) => {
     if (!list.length) return;
-    out.push(t(on ? "imgIn.sumGroup" : "imgIn.sumGroupOff", { label, n: list.length }));
-    for (const it of list.slice(0, TIP_MAX))
-      out.push(t(on && inputOn(it) ? "imgIn.sumItem" : "imgIn.sumItemOff", { name: it.name }));
+    out.push(t("imgIn.sumGroup", { label, n: list.length }));
+    for (const it of list.slice(0, TIP_MAX)) out.push(t("imgIn.sumItem", { name: it.name }));
     if (list.length > TIP_MAX) out.push(t("imgIn.sumMore", { n: list.length - TIP_MAX }));
   };
   if (s.baseImage) {
@@ -943,7 +948,7 @@ function inputTip(
     out.push(t("imgIn.sumBase", { mode: t(s.baseMode === "inpaint" ? "imgIn.inpaint" : "imgIn.i2i") }));
     if (s.baseName) out.push(t("imgIn.sumItem", { name: s.baseName }));
   }
-  group(t("imgIn.vibe"), s.vibeOn, s.vibes);
-  group(t("imgIn.ref"), s.refOn, s.refs);
+  group(t("imgIn.vibe"), ride.vibes);
+  group(t("imgIn.ref"), ride.refs);
   return out.join("\n");
 }

@@ -5,10 +5,11 @@ import { PluginSlot } from "../components/PluginSlot";
 /** ★키를 조립하지 않는다 — i18n 검사가 동적 접두사를 잡는다 (`i18n.test.ts`) */
 const SEED_LABELS = ["options.seedFixed", "options.seedRound", "options.seedScene"] as const;
 const SEED_HINTS = ["options.seedFixedHint", "options.seedRoundHint", "options.seedSceneHint"] as const;
-import { SEED_MODES, modelCaps, randomSeed, useGen } from "../store/gen";
+import { SEED_MODES, randomSeed, useGen } from "../store/gen";
 import { useQueue } from "../store/queue";
 import { allScenes, useWs } from "../store/workspace";
-import { inputOn, useImageInput } from "../store/imageInput";
+import { useImageInput } from "../store/imageInput";
+import { ImageInputBadge } from "./ImageInputPanel";
 import { useUi } from "../store/ui";
 import { toast } from "../store/toast";
 import { MAX_PER_IMAGE } from "../lib/anlas";
@@ -55,8 +56,6 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
   const [firing, setFiring] = useState(false);
   const tab = useWs((s) => s.activeSceneGroup());
   const img = useImageInput();
-  /** ★그 모델에서 되는 것 — 값 계산이 **보내는 것과 같아야** 한다 (`lib/naiModels.ts`) */
-  const cap = modelCaps(params.model);
   /* ★★캐릭터 상한은 **켜는 순간** 막는다 (사용자 지시 2026-08-21, `store/gen.ts` 의
      `toggleCharCapped`·`clampCharsToModel`). 넘긴 채로 두고 여기서 「초과분은 무시됩니다」를
      띄우던 것을 걷었다 — 다른 자리는 전부 막는데 여기만 알리고 두면, 그대로 생성했을 때
@@ -174,8 +173,9 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
       height: size.height,
       steps: params.steps,
       opus: (sub?.tier ?? 0) >= 3,
-      refs: cap.char_ref && img.refOn ? img.refs.filter(inputOn).length : 0,
-      vibes: cap.vibe && img.vibeOn ? img.vibes.filter(inputOn).length : 0,
+      // ★실측 장치에 넘기는 수도 **`riding` 하나**에서 온다 (`costNow` 와 같은 값)
+      refs: img.riding().refs.length,
+      vibes: img.riding().vibes.length,
       inpaint: img.costInpaint(),
       count,
       from: "generate",
@@ -445,6 +445,13 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
             {seqTimes > 1
               ? t("gen.slotsTimesSeq", { s: slots, p: perSlot, c: seqTimes, t: count })
               : t("gen.slotsTimes", { s: slots, p: perSlot, t: count })}
+          </span>
+          {/* ★★**이번 생성에 그림이 실린다**를 여기서 알린다 (사용자 지시 2026-09-21:
+              *"생성 버튼쪽에 표시. 장 수 정하는 곳 우측에 표시하면 될듯"*). 「베이스 이미지」
+              묶음은 접히면 안이 통째로 언마운트돼서, 넣어 둔 그림이 화면 어디에도 안 보인 채
+              생성에 실려 나갔다 — 누르기 직전에 눈에 들어오는 자리가 여기다. */}
+          <span style={{ marginLeft: "auto", display: "grid" }}>
+            <ImageInputBadge />
           </span>
       </div>
 
