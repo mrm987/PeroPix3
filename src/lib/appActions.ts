@@ -24,6 +24,7 @@ import { useUi } from "../store/ui";
 import { useGen } from "../store/gen";
 import { useLlm } from "../store/llm";
 import { usePrompt } from "../store/prompt";
+import { MAX_VIBES, useImageInput } from "../store/imageInput";
 import { costNow, countNow } from "./costNow.ts";
 import { t } from "../i18n";
 
@@ -1137,5 +1138,248 @@ defineAction({
       at: { kind: "card", cardKind: kind, id: saved.id },
       after: { id: saved.id, name: saved.name },
     };
+  },
+});
+
+/* ── 이미지 입력 (베이스 그림 · 바이브 · 정밀 레퍼런스) ─────────────────────
+   ★사용자 지시 2026-09-21: *"mcp에 베이스 이미지, 레퍼런스, 바이브 등을 직접 넣고 빼는 기능."*
+   ★★그림을 가리키는 말은 **`lib/findImage` 하나**가 푼다 — 절대 경로(아무 폴더나)·`gallery:번호`·
+     `gallery:경로`·`output:경로`·보관함 이름. 못 찾거나 여럿이면 거기서 오류가 난다.
+   ★★**이 도구들은 안 묻는다** (`confirm: "none"`, 사용자 결정 2026-09-21) — 넣고 빼는 것 자체는
+     돈이 안 나가고 되돌릴 수 있다. 실제 지출은 생성 단계가 이미 묻는다.
+   ★★**지금 탭 것**이다 (2026-09-21: 이미지 입력은 탭마다 따로다, `store/gen` 의 `tabImages`). */
+
+/** 지금 걸려 있는 것 한 눈 — 넣고 빼는 도구가 답에 함께 싣는다 (조수가 다음 수를 고를 근거) */
+function imageInputs() {
+  const s = useImageInput.getState();
+  return {
+    base: s.baseImage ? { name: s.baseName, mode: s.baseMode, strength: s.baseStrength, noise: s.baseNoise } : null,
+    vibeOn: s.vibeOn,
+    vibes: s.vibes.map((v, i) => ({ index: i + 1, name: v.name, on: v.on !== false,
+                                    strength: v.strength, info_extracted: v.info_extracted, cached: !!v.encoded })),
+    refOn: s.refOn,
+    references: s.refs.map((r, i) => ({ index: i + 1, name: r.name, on: r.on !== false,
+                                        mode: r.mode, strength: r.strength, fidelity: r.fidelity })),
+  };
+}
+
+/** `which` 로 한 장을 집는다 — **번호(1부터)나 이름**. 못 찾거나 여럿이면 오류다 */
+function pickInput(kind: "vibe" | "reference", which: string) {
+  const s = useImageInput.getState();
+  const list: { name: string }[] = kind === "vibe" ? s.vibes : s.refs;
+  const names = list.map((x, i) => `${i + 1}: ${x.name}`);
+  const want = String(which ?? "").trim();
+  if (!list.length) return { at: -1, miss: err("not_found", `걸려 있는 ${kind === "vibe" ? "바이브" : "레퍼런스"}가 없습니다.`, { retry: "never" }) };
+  if (/^\d+$/.test(want)) {
+    const at = Number(want) - 1;
+    if (at < 0 || at >= list.length)
+      return { at: -1, miss: err("not_found", `${list.length}장뿐입니다 (${want}번은 없습니다).`, { given: want, candidates: names, retry: "never" }) };
+    return { at, miss: null };
+  }
+  const low = want.toLowerCase();
+  const hit = list.map((x, i) => ({ x, i })).filter((e) => e.x.name.toLowerCase().includes(low));
+  if (hit.length === 1) return { at: hit[0].i, miss: null };
+  if (hit.length > 1)
+    return { at: -1, miss: err("ambiguous", `「${want}」 에 여럿이 걸립니다. 번호로 집어 주세요.`, { given: want, candidates: names, retry: "never" }) };
+  return { at: -1, miss: err("not_found", `그런 것이 없습니다: ${want}`, { given: want, candidates: names, retry: "never" }) };
+}
+
+defineAction({
+  id: "set_base_image",
+  title: "베이스 그림을 겁니다",
+  desc: "★**i2i·인페인트의 베이스 그림을 건다** — «이 그림을 바탕으로»·«이어 그려» 가 이것이다. "
+    + "★`image` 로 그림을 가리킨다: 절대 경로(`D:\\사진\\a.png` — **아무 폴더나 된다**) · "
+    + "`gallery:1`(보관함에서 최신이 1번) · `gallery:작가/abc.png` · `output:멀티/탭/씬/001.png` · 보관함 파일 이름. "
+    + "★건 뒤에는 **해상도가 그 그림에 맞춰진다** (공홈과 같다). "
+    + "★★이것만으로는 그림이 안 나온다 — 실제 생성은 `generate` 다.",
+  args: {
+    image: { type: "string", desc: "어느 그림 — 절대 경로 · gallery:번호 · gallery:경로 · output:경로 · 보관함 이름", required: true },
+    mode: { type: "string", desc: '"img2img"(기본) · "inpaint"(마스크는 사용자가 칠한다)' },
+    strength: { type: "number", desc: "얼마나 바꾸나 0~1 (기본 0.7). 낮을수록 원본에 가깝다" },
+    noise: { type: "number", desc: "노이즈 0~1 (기본 0)" },
+  },
+  confirm: "none",
+  run: async (a) => {
+    const { findImage } = await import("./findImage.ts");
+    const got = await findImage(String(a.image ?? ""));
+    if ("error" in got) return got;
+    const { fitSizeToBase } = await import("../store/gen");
+    const s = useImageInput.getState();
+    s.setBase(got.data, got.name);
+    const mode = String(a.mode ?? "") === "inpaint" ? "inpaint" : "img2img";
+    const patch: Record<string, unknown> = { baseMode: mode };
+    if (typeof a.strength === "number") patch.baseStrength = Math.min(1, Math.max(0, a.strength));
+    if (typeof a.noise === "number") patch.baseNoise = Math.min(1, Math.max(0, a.noise));
+    s.patchBase(patch as never);
+    // ★해상도를 그림에 맞춘다 — 사람이 넣었을 때와 **같은 길**이다 (`panels/ImageActions`)
+    await fitSizeToBase(got.data);
+    return {
+      ok: true, did: `베이스 그림에 「${got.name}」 을 검 (${mode})`,
+      at: { kind: "imageInput", what: "base" }, image: got.from, inputs: imageInputs(),
+      before: { what: "base", had: false },
+    };
+  },
+});
+
+defineAction({
+  id: "clear_base_image",
+  title: "베이스 그림을 뺍니다",
+  desc: "★**걸어 둔 베이스 그림을 뺀다** — 마스크·Focused 사각형도 함께 빠진다. "
+    + "«이어 그리기 그만»·«그림 빼고 처음부터» 가 이것이다.",
+  args: {},
+  confirm: "none",
+  run: async () => {
+    const s = useImageInput.getState();
+    if (!s.baseImage) return { ok: true, did: "걸린 베이스 그림이 없었음", inputs: imageInputs() };
+    const name = s.baseName;
+    s.clearBase();
+    return { ok: true, did: `베이스 그림 「${name}」 을 뺌`, at: { kind: "imageInput", what: "base" },
+             inputs: imageInputs() };
+  },
+});
+
+defineAction({
+  id: "add_vibe",
+  title: "바이브를 더합니다",
+  desc: "★**Vibe Transfer 에 그림을 한 장 더한다** — «이 그림 분위기로»·«이 느낌 가져와» 가 이것이다. "
+    + "★`image` 를 가리키는 법은 `set_base_image` 와 같다. "
+    + "★★**인코딩은 Anlas 가 든다** (장당 2). 전에 구운 것이 있으면 그대로 쓴다 — 답의 `cached` 가 그것이다. "
+    + "★넣으면 Vibe 묶음이 켜진다 (정밀 레퍼런스와는 동시에 못 쓴다 — NAI 제약).",
+  args: {
+    image: { type: "string", desc: "어느 그림 — `set_base_image` 와 같은 꼴", required: true },
+    strength: { type: "number", desc: "Reference Strength 0~1 (비우면 모델 기본값)" },
+    info_extracted: { type: "number", desc: "Information Extracted 0.01~1 (비우면 모델 기본값). ★바꾸면 인코딩을 다시 굽는다(유료)" },
+  },
+  confirm: "none",
+  run: async (a) => {
+    const { findImage } = await import("./findImage.ts");
+    const got = await findImage(String(a.image ?? ""));
+    if ("error" in got) return got;
+    const s = useImageInput.getState();
+    if (s.vibes.length >= MAX_VIBES)
+      return err("blocked", `바이브는 ${MAX_VIBES}장까지입니다.`, { retry: "never" });
+    s.addVibe(got.data, got.name);
+    const at = useImageInput.getState().vibes.length - 1;
+    const patch: Record<string, unknown> = {};
+    if (typeof a.strength === "number") patch.strength = Math.min(1, Math.max(0, a.strength));
+    if (typeof a.info_extracted === "number") patch.info_extracted = Math.min(1, Math.max(0.01, a.info_extracted));
+    if (Object.keys(patch).length) s.patchVibe(at, patch as never);
+    s.setVibeOn(true);
+    // ★구워 둔 인코딩이 있으면 그대로 쓴다 — 돈이 안 나간다
+    await useImageInput.getState().syncVibeCache();
+    return {
+      ok: true, did: `바이브에 「${got.name}」 을 더함`, index: at + 1, image: got.from,
+      at: { kind: "imageInput", what: "vibe" }, inputs: imageInputs(),
+      before: { what: "vibe", added: at + 1 },
+    };
+  },
+});
+
+defineAction({
+  id: "add_reference",
+  title: "정밀 레퍼런스를 더합니다",
+  desc: "★**Precise Reference 에 그림을 한 장 더한다** — 인물·그림체를 그대로 옮길 때 쓴다. "
+    + "★`image` 를 가리키는 법은 `set_base_image` 와 같다. "
+    + "★넣으면 레퍼런스 묶음이 켜진다 (바이브와는 동시에 못 쓴다 — NAI 제약).",
+  args: {
+    image: { type: "string", desc: "어느 그림 — `set_base_image` 와 같은 꼴", required: true },
+    mode: { type: "string", desc: '"character&style"(기본) · "character" · "style"' },
+    strength: { type: "number", desc: "Reference Strength (기본 1)" },
+    fidelity: { type: "number", desc: "Fidelity 0~1 (기본 1)" },
+  },
+  confirm: "none",
+  run: async (a) => {
+    const { findImage } = await import("./findImage.ts");
+    const got = await findImage(String(a.image ?? ""));
+    if ("error" in got) return got;
+    const { processReference } = await import("../store/imageInput");
+    const mode = ["character&style", "character", "style"].includes(String(a.mode ?? ""))
+      ? (String(a.mode) as "character&style" | "character" | "style")
+      : "character&style";
+    const s = useImageInput.getState();
+    s.addRef({
+      image: await processReference(got.data),
+      preview: got.data,
+      name: got.name,
+      mode,
+      strength: typeof a.strength === "number" ? a.strength : 1,
+      fidelity: typeof a.fidelity === "number" ? Math.min(1, Math.max(0, a.fidelity)) : 1,
+    });
+    s.setRefOn(true);
+    const at = useImageInput.getState().refs.length;
+    return {
+      ok: true, did: `정밀 레퍼런스에 「${got.name}」 을 더함 (${mode})`, index: at, image: got.from,
+      at: { kind: "imageInput", what: "reference" }, inputs: imageInputs(),
+      before: { what: "reference", added: at },
+    };
+  },
+});
+
+defineAction({
+  id: "remove_image_input",
+  title: "바이브·레퍼런스를 뺍니다",
+  desc: "★**걸어 둔 바이브나 정밀 레퍼런스를 한 장 뺀다.** 베이스 그림은 `clear_base_image` 다. "
+    + "★`which` 는 **번호(1부터)나 이름**이다 — 무엇이 걸려 있는지는 `list_image_inputs` 로 본다.",
+  args: {
+    kind: { type: "string", desc: '"vibe" · "reference"', required: true },
+    which: { type: "string", desc: "몇 번째(1부터) 또는 이름", required: true },
+  },
+  confirm: "none",
+  run: async (a) => {
+    const kind = String(a.kind ?? "") === "reference" ? "reference" : "vibe";
+    const p = pickInput(kind, String(a.which ?? ""));
+    if (p.miss) return p.miss;
+    const s = useImageInput.getState();
+    const name = kind === "vibe" ? s.vibes[p.at].name : s.refs[p.at].name;
+    if (kind === "vibe") s.removeVibe(p.at);
+    else s.removeRef(p.at);
+    return {
+      ok: true, did: `${kind === "vibe" ? "바이브" : "레퍼런스"}에서 「${name}」 을 뺌`,
+      at: { kind: "imageInput", what: kind }, inputs: imageInputs(),
+    };
+  },
+});
+
+defineAction({
+  id: "toggle_image_input",
+  title: "바이브·레퍼런스를 켜고 끕니다",
+  desc: "★**걸어 둔 채로 이 한 장만 켜고 끈다** (사용자 지시 2026-09-21: 프롬프트 블록처럼). "
+    + "빼지 않고 잠시 빼 보고 싶을 때 쓴다 — 꺼 두면 생성에 안 실리고 요금에서도 빠진다. "
+    + "★묶음 전체를 끄는 것이 아니다. `which` 는 번호(1부터)나 이름이다.",
+  args: {
+    kind: { type: "string", desc: '"vibe" · "reference"', required: true },
+    which: { type: "string", desc: "몇 번째(1부터) 또는 이름", required: true },
+    on: { type: "boolean", desc: "켤까(true) 끌까(false). 비우면 뒤집는다" },
+  },
+  confirm: "none",
+  run: async (a) => {
+    const kind = String(a.kind ?? "") === "reference" ? "reference" : "vibe";
+    const p = pickInput(kind, String(a.which ?? ""));
+    if (p.miss) return p.miss;
+    const s = useImageInput.getState();
+    const item = kind === "vibe" ? s.vibes[p.at] : s.refs[p.at];
+    const next = typeof a.on === "boolean" ? a.on : item.on === false;
+    if (kind === "vibe") s.patchVibe(p.at, { on: next });
+    else s.patchRef(p.at, { on: next });
+    return {
+      ok: true, did: `${kind === "vibe" ? "바이브" : "레퍼런스"} 「${item.name}」 을 ${next ? "켬" : "끔"}`,
+      at: { kind: "imageInput", what: kind }, inputs: imageInputs(),
+      before: { what: kind, index: p.at + 1, on: item.on !== false },
+    };
+  },
+});
+
+defineAction({
+  id: "list_image_inputs",
+  title: "걸려 있는 그림 입력을 봅니다",
+  desc: "★**지금 탭에 걸려 있는 베이스 그림·바이브·정밀 레퍼런스**를 목록으로 준다. "
+    + "빼거나 켜고 끄기 전에 이것으로 번호를 확인한다. "
+    + "★이미지 입력은 **탭마다 따로**다 — 여기 나오는 것은 지금 보고 있는 탭 것이다.",
+  args: {},
+  confirm: "none",
+  run: async () => {
+    const v = imageInputs();
+    const n = (v.base ? 1 : 0) + v.vibes.length + v.references.length;
+    return { ok: true, did: n ? `걸려 있는 그림 입력 ${n}개` : "걸려 있는 그림 입력이 없음", inputs: v };
   },
 });
