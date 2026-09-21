@@ -59,7 +59,7 @@ export function capToolResult(s: string, max = TOOL_MAX): string {
  *   · 창(`ctx`)을 알면 그 60% (페로데스크의 50만/100만과 같은 비율 언저리).
  *   · 단가가 오르는 경계(`tier`, 오픈라우터 `pricing.overrides[].min_prompt_tokens`)를 알면 **그 경계의 90%** 까지만.
  *     문턱을 경계에 딱 맞추면 넘은 뒤에야 접혀 한 번은 두 배 단가를 낸다.
- *   · 창을 모르면 12만 (앤트로픽·OpenAI 직접 연결은 목록 API 가 창을 안 준다).
+ *   · 창을 모르면 12만 (직접 연결은 오픈라우터 공개 목록에서 찾아 오는데, 거기에도 없는 모델).
  *  ★한때 12만을 **상한**으로 두어 100만짜리 모델도 12만에서 접혔다 (창의 12% 만 쓰는 셈이었다). */
 export const COMPACT_AT = 120_000;
 export const COMPACT_RATIO = 0.6;

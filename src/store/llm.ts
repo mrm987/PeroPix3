@@ -96,7 +96,8 @@ export type ModelInfo = {
   reasoningLocked?: boolean;
   /** 추천 목록에 없지만 같은 가족의 **더 높은 버전** — 백엔드 `newer_than` (2026-08-30) */
   new?: boolean;
-  /** 창 크기 (토큰) — 오픈라우터가 준다. 압축 문턱이 이것으로 접는다 (`lib/chatContext.compactAt`) */
+  /** 창 크기 (토큰). 오픈라우터·제미나이는 자기 목록이, 앤트로픽·OpenAI·Vertex 는 오픈라우터 공개 목록에서 찾아 붙인다
+   *  (`llm.attach_windows`). 압축 문턱이 이것으로 접는다 (`lib/chatContext.compactAt`) */
   ctx?: number;
   /** 단가가 오르는 입력 토큰 경계 (오픈라우터 `pricing.overrides`). 있으면 문턱을 이 아래로 잡는다 */
   tier?: number;

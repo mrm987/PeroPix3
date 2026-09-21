@@ -32,6 +32,7 @@ import asyncio
 import json
 import os
 import re
+import time
 
 import httpx
 
@@ -356,6 +357,65 @@ VERTEX_MODELS = [
 NOT_CHAT = ("embedding", "tts", "whisper", "dall-e", "moderation", "audio", "realtime", "image", "search")
 
 
+# ★★**직접 연결은 창을 오픈라우터 공개 목록에서 찾는다** (사용자 지시 2026-09-22). 앤트로픽·OpenAI 의 목록 API 는
+#   창을 안 준다 (OpenAI: id·created·owned_by·shutdown_date 뿐, 앤트로픽: id·display_name·created_at 뿐, 실측).
+#   Vertex 는 고정 목록이라 물어볼 창구가 없다. 오픈라우터 공개 목록(키 없이 열린다)은 같은 모델을
+#   `anthropic/claude-opus-4.6` 꼴로 들고 있어 창(`context_length`)과 단가 경계(`pricing.overrides`)를 함께 준다.
+#   못 찾으면 없는 채로 두어 화면이 12만 기본값을 쓴다 (`lib/chatContext.compactAt`).
+OR_PUBLIC = "https://openrouter.ai/api/v1/models"
+OR_PREFIX = {"anthropic": "anthropic", "openai": "openai", "vertex": "google"}
+OR_WINDOWS_TTL = 3600.0
+_or_windows_cache: dict = {"at": 0.0, "map": {}}
+
+
+def or_id(pid: str, model: str) -> str:
+    """직접 연결의 모델 id 를 오픈라우터 id 로. 앤트로픽만 모양이 다르다: 날짜 꼬리를 떼고 `4-5` 를 `4.5` 로
+    (`claude-sonnet-4-5-20250929` → `anthropic/claude-sonnet-4.5`, `claude-3-5-sonnet` → `claude-3.5-sonnet`)."""
+    m = model
+    if pid == "anthropic":
+        m = re.sub(r"-\d{8}$", "", m)
+        m = re.sub(r"(\d)-(\d)", r"\1.\2", m)
+    return f"{OR_PREFIX[pid]}/{m}"
+
+
+def window_of(m: dict) -> dict:
+    """오픈라우터 목록 한 줄에서 창(`ctx`)과 단가 경계(`tier`)만. 오픈라우터 목록과 직접 연결 둘 다 이것을 쓴다.
+    ★단가 경계는 `pricing.overrides[].min_prompt_tokens` (예: Grok 4.6 은 20만부터 두 배). 여럿이면 가장 낮은 것."""
+    out: dict = {}
+    if m.get("context_length"):
+        out["ctx"] = int(m["context_length"])
+    tiers = [int(o["min_prompt_tokens"]) for o in ((m.get("pricing") or {}).get("overrides") or [])
+             if isinstance(o, dict) and o.get("min_prompt_tokens")]
+    if tiers:
+        out["tier"] = min(tiers)
+    return out
+
+
+async def or_windows() -> dict[str, dict]:
+    """오픈라우터 공개 목록 → `{id: {ctx, tier}}`. 한 시간 캐시. 실패하면 빈 dict (창 없이 간다: 목록 자체는 뜬다)."""
+    now = time.monotonic()
+    if _or_windows_cache["map"] and now - _or_windows_cache["at"] < OR_WINDOWS_TTL:
+        return _or_windows_cache["map"]
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as c:
+            r = await c.get(OR_PUBLIC)
+        if r.status_code >= 400:
+            return {}
+        mp = {m["id"]: window_of(m) for m in (r.json().get("data") or []) if isinstance(m, dict) and m.get("id")}
+    except Exception:
+        return {}
+    _or_windows_cache.update(at=now, map=mp)
+    return mp
+
+
+def attach_windows(pid: str, rows: list[dict], windows: dict[str, dict]) -> None:
+    """직접 연결의 목록 행에 오픈라우터에서 찾은 창·단가 경계를 붙인다. 못 찾은 행은 그대로."""
+    for row in rows:
+        w = windows.get(or_id(pid, row["id"]))
+        if w:
+            row.update(w)
+
+
 async def models(llm: dict) -> dict:
     """공급자에게 **직접 물어본다** — 목록을 코드에 박으면 썩는다.
 
@@ -379,6 +439,7 @@ async def models(llm: dict) -> dict:
                 # 제미나이는 추론이 필수다 — 사실상 끄기는 `minimal` 이다
                 row["reasoningLocked"] = True
             out.append(row)
+        attach_windows("vertex", out, await or_windows())
         return {"models": out, "fixed": True}
     key = llm.get("key", "")
     if pid == "local":
@@ -443,15 +504,8 @@ async def models(llm: dict) -> dict:
                 inp = 0.0
             img = "image" in ((m.get("architecture") or {}).get("input_modalities") or [])
             row = {"id": m["id"], "label": m.get("name") or "", "in": round(inp, 3), "vision": img}
-            # ★창 크기 — 화면의 대화 압축 문턱이 이것으로 접는다 (`lib/chatContext.ts`). 없으면 기본값
-            if m.get("context_length"):
-                row["ctx"] = int(m["context_length"])
-            # ★단가가 오르는 경계 (`pricing.overrides[].min_prompt_tokens`, 예: Grok 4.6 은 20만부터 두 배).
-            #   문턱이 이 아래에 잡히도록 화면에 준다. 여럿이면 가장 낮은 것.
-            tiers = [int(o["min_prompt_tokens"]) for o in (pr.get("overrides") or [])
-                     if isinstance(o, dict) and o.get("min_prompt_tokens")]
-            if tiers:
-                row["tier"] = min(tiers)
+            # ★창 크기와 단가 경계 — 화면의 대화 압축 문턱이 이것으로 접는다 (`lib/chatContext.ts`). 없으면 기본값
+            row.update(window_of(m))
             # ★추론 단계는 **모델이 알려 준다** — 코드에 박으면 모델마다 다른 것을 못 맞춘다
             #   (문서: "Use this when building client UIs"). `mandatory` 면 끌 수 없다.
             rs = m.get("reasoning") or {}
@@ -460,6 +514,8 @@ async def models(llm: dict) -> dict:
                 row["effortDefault"] = rs.get("default_effort") or ""
                 row["reasoningLocked"] = bool(rs.get("mandatory"))
             out.append(row)
+    if pid in OR_PREFIX:
+        attach_windows(pid, out, await or_windows())
     out.sort(key=lambda m: m["id"])
     if pid in CURATED:
         pick = CURATED[pid]
