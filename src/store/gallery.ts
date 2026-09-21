@@ -3,7 +3,7 @@ import { api, type TrashEntry } from "../lib/backend";
 import { t } from "../i18n";
 import { toast, undoToast } from "./toast";
 import { loadTags } from "../lib/tagData";
-import { isArtist, tallyTags, type IndexEntry, type TagHit } from "../lib/tagSearch";
+import { isArtist, normTag, tallyTags, type IndexEntry, type TagHit } from "../lib/tagSearch";
 
 /** 갤러리 — 워크스페이스에 쌓인 그림을 훑어 본다.
  *
@@ -74,9 +74,6 @@ export type IndexStatus = { running: boolean; done: number; total: number; error
 export type ArtistScope = "all" | "folder";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** 같은 태그의 표기 차이를 하나로 (`lib/tagSearch` 와 같은 규칙) */
-const normTag = (s: string) => s.toLowerCase().replace(/_/g, " ").trim();
 
 /** 그 파일이 이 폴더에 **바로** 놓여 있나 — 폴더 목록과 같은 판정이다 (하위는 안 센다) */
 const inFolder = (rel: string, folder: string) => {

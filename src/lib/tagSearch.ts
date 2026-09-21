@@ -13,7 +13,11 @@ import { tagType } from "./tagData.ts";
 export type IndexEntry = { m: number; s: number; p: string[] };
 export type TagHit = { t: string; files: string[] };
 
-const norm = (s: string) => s.toLowerCase().replace(/_/g, " ").trim();
+/** 표기 차이를 하나로 모으는 열쇠 — 대소문자와 밑줄/띄어쓰기를 지운다.
+ *  ★★**태그를 열쇠로 쓰는 자리는 전부 이것을 쓴다**: 집계·고른 작가(`store/gallery`)·
+ *    목록의 줄(`panels/GalleryFolders`)·작가 색(`store/ui.artistColor`)·썸네일에 적는 이름
+ *    (`panels/Gallery` 의 `Cell`). 자리마다 따로 쓰면 한 곳만 어긋나도 조용히 안 맞는다. */
+export const normTag = (s: string) => s.toLowerCase().replace(/_/g, " ").trim();
 
 /** 태그 → 그 태그가 쓰인 파일들(**최신순**). 한 장에 같은 태그가 두 번 있어도 한 번만 센다. */
 export function tallyTags(files: Record<string, IndexEntry>): Map<string, TagHit> {
@@ -23,7 +27,7 @@ export function tallyTags(files: Record<string, IndexEntry>): Map<string, TagHit
     const seen = new Set<string>();
     for (const p of files[rel].p) {
       for (const { t } of parseSegs(p)) {
-        const key = norm(t);
+        const key = normTag(t);
         if (!key || seen.has(key)) continue;
         seen.add(key);
         const hit = map.get(key);
@@ -41,7 +45,7 @@ export const isArtist = (tag: string): boolean =>
 
 /** 검색어·「작가만」으로 거르고 **많이 쓴 순**으로 */
 export function filterTags(map: Map<string, TagHit>, query: string, artistOnly: boolean): TagHit[] {
-  const q = norm(query);
+  const q = normTag(query);
   const out: TagHit[] = [];
   for (const [key, hit] of map) {
     if (q && !key.includes(q)) continue;

@@ -3,6 +3,8 @@ import { create } from "zustand";
 /** 플러그인 캔버스의 프레임 하나 — 자리·크기(캔버스 좌표), 접힘, 앞뒤 차례(`z` 가 클수록 앞) */
 export type PluginFrame = { x: number; y: number; w: number; h: number; fold?: boolean; z: number };
 import { PICK_DROP, type MetaPick } from "../lib/metaApply";
+import { COLORS, type BlockColor } from "../lib/blocks";
+import { normTag } from "../lib/tagSearch";
 import { useEffect, useRef } from "react";
 
 /** 모드 = 하단 네비의 자리. v2.x 의 모드 전환이 여기로 온다.
@@ -88,6 +90,15 @@ type Persisted = {
    *  ★작가 목록이 길어 폴더 목록을 밀어 버렸다 (사용자 지적 2026-09-21) — 어느 쪽을 넓게
    *    볼지는 그때그때 다르므로 값 하나로 두고 사람이 정한다. */
   artistH: number;
+  /** 작가마다 칠해 둔 색 — 열쇠는 `normTag` 를 지난 태그다 (사용자 지시 2026-09-21).
+   *  ★색은 **블록과 같은 일곱 가지**다 (`lib/blocks` 의 `COLORS`) — 같은 점을 누르는 조작이라
+   *    고를 수 있는 색이 다르면 같은 장치로 안 읽힌다.
+   *  ★색이 없는 작가는 표에 아예 없다 (`null` 로 두면 표가 지운 작가로 계속 부푼다).
+   *  ★보관함은 워크스페이스와 별개이므로 이 색도 앱 전체에 하나다. */
+  artistColor: Record<string, BlockColor>;
+  /** 작가를 골라 두지 않았어도 **칸마다 그 그림의 작가를 전부 적는다** (사용자 지시 2026-09-21).
+   *  ★골라 둔 작가가 있으면 그것만 진하게 보이고 나머지는 흐려진다 (`panels/Gallery` 의 `Cell`). */
+  artistAlways: boolean;
   /** 생성 화면을 끄고 **슬롯만 모아 본다** — 선별 뒤 확인용 (사용자 결정 2026-08-04) */
   curated: boolean;
   /** ★슬롯당 몇 장 만드나 (페로픽스파이 `countPerSlot`). 한 번에 여러 장을 뽑아
@@ -220,6 +231,8 @@ const DEFAULTS: Persisted = {
   laneHeadW: 286,
   laneHeight: 302,
   artistH: 240,
+  artistColor: {},
+  artistAlways: false,
   curated: false,
   perSlot: 1,
   // ★★기본 켬 (사용자 결정 2026-09-07: 자유도 우선, `CLAUDE.md`). 되돌릴 수 없는 것만 묻는다.
@@ -294,6 +307,9 @@ type S = Persisted & {
   setLaneHeadW: (n: number) => void;
   setLaneHeight: (n: number) => void;
   setArtistH: (n: number) => void;
+  /** 작가의 색을 **다음 색으로 돌린다** — 블록 머리의 색 점과 같은 조작이다 */
+  cycleArtistColor: (tag: string) => void;
+  setArtistAlways: (v: boolean) => void;
   setLeftWidth: (w: number) => void;
   setAiWidth: (w: number) => void;
   toggleAi: () => void;
@@ -385,6 +401,22 @@ export const useUi = create<S>((set, get) => ({
   setLaneHeight: (n) => set({ laneHeight: Math.max(84, Math.round(n)) }),
   // ★아래로는 머리 한 줄, 위로는 패널을 다 먹지 않을 만큼만
   setArtistH: (n) => set({ artistH: Math.min(720, Math.max(96, Math.round(n))) }),
+  /* ★차례는 블록과 같다 (`COLORS` 의 맨 앞이 「색 없음」) — 한 바퀴 돌면 다시 없어진다.
+     ★색을 벗기면 **표에서 뺀다.** `null` 로 남기면 한 번 눌러 본 작가가 영영 쌓인다. */
+  cycleArtistColor: (tag) => {
+    const key = normTag(tag);
+    const now = get().artistColor;
+    const next = COLORS[(COLORS.indexOf(now[key] ?? null) + 1) % COLORS.length];
+    const map = { ...now };
+    if (next) map[key] = next;
+    else delete map[key];
+    set({ artistColor: map });
+    get().commitLayout();
+  },
+  setArtistAlways: (v) => {
+    set({ artistAlways: v });
+    get().commitLayout();
+  },
   /** 세로 모드의 씬 폭 — ★**칸 하나만 남을 만큼까지 줄인다** (사용자 지시 2026-08-22).
    *  머리가 좁아지면 글이 줄바꿈으로 접히고, 그래도 모자라면 잘린다 — 큰 그림을 넓게 쓰려고
    *  줄이는 것이라 여기서 막지 않는다. */
@@ -549,7 +581,7 @@ export const useUi = create<S>((set, get) => ({
     //   `notifyDone`·`perSlot`·`curated` 가 빠져 있어, 켜 놓아도 껐다 켜면 기본값으로
     //   돌아갔다 (감사 2026-08-16). 필드를 늘리면 **여기에도 더할 것.**
     const { leftWidth, rightWidth, leftCollapsed, rightCollapsed, cols, laneSize, laneHeadW,
-      laneHeight, artistH, font, textScale, importPick, aiWidth, aiCollapsed,
+      laneHeight, artistH, artistColor, artistAlways, font, textScale, importPick, aiWidth, aiCollapsed,
       notifyDone, notifySound, notifyVolume, perSlot, curated, agentAuto, agentAskHard,
       tagSuggest, artistPrefix, weightHl, fmView, streamPreview, focusNewPending, enhanceLast, maskBrush, convertLast, sizeLast,
       laneSide, laneWidth, laneHeadH, view } = get();
@@ -566,6 +598,8 @@ export const useUi = create<S>((set, get) => ({
           laneHeadW,
           laneHeight,
           artistH,
+          artistColor,
+          artistAlways,
           font,
           textScale,
           importPick,

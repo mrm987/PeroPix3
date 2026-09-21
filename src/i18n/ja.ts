@@ -1098,6 +1098,9 @@ export const ja: Dict = {
     /** 何人オンかをヘッダーに出す */
     artistOn: "{n} 人オン",
     artistCount: "{n} 枚",
+    artistAlways: "常に全作家を表示",
+    artistAlwaysTip: "作家を選ばなくても、サムネイルにその画像の作家をすべて表示します。選んだ作家は濃く表示されます。",
+    artistColor: "作家の色を変える",
     all: "gallery",
     countImages: "{n}枚",
     dropToKeep: "ここに置くと保存",

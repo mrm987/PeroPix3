@@ -1099,6 +1099,9 @@ export const en = {
     /** How many are on, shown in the header */
     artistOn: "{n} on",
     artistCount: "{n}",
+    artistAlways: "Always show every artist",
+    artistAlwaysTip: "Label every thumbnail with its artists even when no artist is selected. Selected artists stand out",
+    artistColor: "Change artist colour",
     all: "gallery",
     countImages: "{n} images",
     dropToKeep: "Drop here to keep",

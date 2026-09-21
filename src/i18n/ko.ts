@@ -1138,6 +1138,10 @@ export const ko: Dict = {
     /** 머리줄에 몇 명을 켜 두었나 */
     artistOn: "{n}명 켬",
     artistCount: "{n}장",
+    /** 골라 두지 않았어도 칸마다 작가를 전부 적는다 (사용자 지시 2026-09-21) */
+    artistAlways: "항상 전체 작가 보이기",
+    artistAlwaysTip: "작가를 고르지 않아도 썸네일에 그 그림의 작가를 전부 적습니다. 골라 둔 작가는 진하게 보입니다.",
+    artistColor: "작가 색 바꾸기",
     all: "gallery",
     /** 폴더 밖(뿌리)으로 되돌리는 드롭 자리 — 끌고 있을 때만 뜬다 */
     countImages: "{n}장",

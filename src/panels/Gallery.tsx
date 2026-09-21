@@ -2,7 +2,7 @@ import { useI18n } from "../i18n";
 import { useRename } from "../components/useRename";
 import { ask } from "../store/ask";
 import { toast } from "../store/toast";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useGen } from "../store/gen";
 import { useWs } from "../store/workspace";
 import { useGallery } from "../store/gallery";
@@ -19,6 +19,8 @@ import { nextAfter } from "../lib/pickNext";
 import type { ImageMeta } from "../store/gallery";
 import { Icon } from "../components/Icon";
 import { onNearBottom } from "../lib/nearBottom";
+import { COLOR_HEX } from "../lib/blocks";
+import { normTag } from "../lib/tagSearch";
 
 /** 옮길 곳 드롭다운에서 **최상위**를 가리키는 값. 서버가 쓰는 값은 빈 문자열인데,
  *  그것은 이 드롭다운에서 「고르지 않음」자리표시자가 이미 쓰고 있다. 보낼 때 되돌린다. */
@@ -48,7 +50,9 @@ export function Gallery() {
   /** ★별표는 **보관함이 든다** — 워크스페이스가 아니다 (store/gallery.ts `starred` 주석) */
   const { items, folders, picked, focus, big, meta, loading, total, hasMore, load, more, setFocus, setBig,
           togglePick, setPicked, pickAll, clearPick, remove, moveTo, isStarred, toggleStar, rename, vibeMode,
-          artists, artistScope, folder, artistItems } = useGallery();
+          artists, artistScope, folder, artistItems, artistTags, artistBusy, rescanArtists } = useGallery();
+  /** ★작가를 안 골랐어도 칸마다 작가를 적나 (사용자 지시 2026-09-21) */
+  const artistAlways = useUi((s) => s.artistAlways);
   const [dest, setDest] = useState("");
   /** ★별표는 **거르는 장치**다 — 큰 그림에 별표 버튼을 두지 않는다 (사용자 지시 2026-08-05) */
   const [starOnly, setStarOnly] = useState(false);
@@ -59,6 +63,31 @@ export function Gallery() {
   const filtered = artistItems();
   const [artistShown, setArtistShown] = useState(PAGE);
   useEffect(() => setArtistShown(PAGE), [artists, artistScope, folder, starOnly]);
+
+  /* ★★「항상 전체 작가 보이기」를 켜면 **고르지 않은 작가까지** 칸에 적는다 (사용자 지시 2026-09-21).
+     `artistItems` 가 실어 주는 것은 **고른 작가**뿐이라, 여기서 곁파일을 뒤집어 파일마다 제
+     작가를 모아 둔다. ★색인이 바뀔 때만 다시 짓는다 — 칸마다 훑으면 수천 번을 돈다. */
+  const byFile = useMemo(() => {
+    if (!artistAlways) return null;
+    const m = new Map<string, string[]>();
+    for (const hit of artistTags.values()) {
+      for (const rel of hit.files) {
+        const had = m.get(rel);
+        if (had) had.push(hit.t);
+        else m.set(rel, [hit.t]);
+      }
+    }
+    return m;
+  }, [artistAlways, artistTags]);
+  /** 골라 둔 작가 — 칸에서 이것만 진하게 보인다 */
+  const onSet = useMemo(() => new Set(artists), [artists]);
+
+  /* ★★**켜 둔 채로 앱을 켜면 색인이 비어 있다** — 작가 칸은 접힌 채로 시작하므로 훑을 일이
+     없어, 「항상 보이기」가 켜져 있어도 칸에 아무것도 안 뜬다. 그래서 여기서 한 번 당긴다.
+     ★중앙이라서 여기 둔다 — 좌우 패널은 접으면 언마운트된다 (`CLAUDE.md` 의 그 함정). */
+  useEffect(() => {
+    if (artistAlways && !artistTags.size && !artistBusy) void rescanArtists();
+  }, [artistAlways, artistTags, artistBusy, rescanArtists]);
 
   const source = filtered ?? items;
   const all = starOnly ? source.filter((i) => isStarred(i.file)) : source;
@@ -203,8 +232,10 @@ export function Gallery() {
               name={it.name}
               starred={isStarred(it.file)}
               picked={picked.has(it.file)}
-              /* 작가 필터로 보고 있으면 **그 그림이 가진 그 작가들**을 칸에 적는다 */
-              artists={it.artists}
+              /* 칸에 적을 작가 — 「항상 보이기」를 켜 두었으면 **그 그림의 작가 전부**,
+                 아니면 작가 필터가 걸어 준 **고른 작가들**이다 */
+              artists={byFile ? byFile.get(it.file) : it.artists}
+              artistOn={onSet}
               onStar={() => void toggleStar(it.file)}
               onPick={(mod) => onPick(it.file, mod)}
               onOpen={() => openBig(it.file)}
@@ -401,6 +432,7 @@ function Cell({
   starred,
   picked,
   artists,
+  artistOn,
   onStar,
   onPick,
   onOpen,
@@ -410,8 +442,10 @@ function Cell({
   name: string;
   starred: boolean;
   picked: boolean;
-  /** 작가 필터가 걸렸을 때 이 그림이 가진 그 작가들 — 없으면 안 그린다 */
+  /** 칸에 적을 작가들 — 없으면 안 그린다 */
   artists?: string[];
+  /** 골라 둔 작가 (`normTag` 를 지난 열쇠) — 이 안에 든 것만 진하게 보인다 */
+  artistOn?: Set<string>;
   onStar: () => void;
   /** 한 번 눌렀다 — 고르기 (수식키를 함께 넘긴다) */
   onPick: (mod: { ctrl: boolean; shift: boolean }) => void;
@@ -421,6 +455,8 @@ function Cell({
   onDragFiles: () => string[];
 }) {
   const startDrag = useDragSource();
+  /** 작가마다 칠해 둔 색 — 작가 목록의 줄과 같은 표를 본다 (`store/ui.artistColor`) */
+  const hues = useUi((s) => s.artistColor);
   /** ★★**더블클릭을 여기서 직접 센다** (`onDoubleClick` 을 안 쓴다). 이 칸은 끌기 출발점이라
    *  pointerdown 에서 기본 동작을 막는데(`pointerGesture`), 그러면 브라우저의 호환 click 도
    *  더블클릭도 오지 않는다 — 블록 줄에서 같은 이유로 이름 더블클릭이 오래 죽어 있었다
@@ -525,11 +561,30 @@ function Cell({
             pointerEvents: "none",
           }}
         >
-          {artists.map((a) => (
-            <span key={a} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {a}
-            </span>
-          ))}
+          {artists.map((a) => {
+            const k = normTag(a);
+            /* ★★칠해 둔 색이 **글자 색**이다 (사용자 지시 2026-09-21) — 목록의 줄과 같은 색이라,
+               어느 작가인지 이름을 읽기 전에 색으로 먼저 알아본다 (`store/ui.artistColor`). */
+            const hue = hues[k] ? COLOR_HEX[hues[k]!] : null;
+            /* ★골라 둔 작가만 진하게 (사용자 지시 2026-09-21). 아무도 안 골랐으면 다 같은 무게다 —
+               그때는 무엇과 견줄 것이 없어서, 흐리게 해 봐야 읽기만 어렵다. */
+            const on = !artistOn?.size || artistOn.has(k);
+            return (
+              <span
+                key={a}
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  color: hue ?? undefined,
+                  opacity: on ? 1 : 0.5,
+                  fontWeight: on && artistOn?.size ? "var(--w-bold)" : undefined,
+                }}
+              >
+                {a}
+              </span>
+            );
+          })}
         </span>
       )}
       {/* ★여기서 **켜고 끈다** (페로픽스파이 `.thumb-star`). 큰 그림에는 별표를 두지 않는다 —

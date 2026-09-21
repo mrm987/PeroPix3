@@ -9,7 +9,8 @@ import { ask } from "../store/ask";
 import { toast } from "../store/toast";
 import { Icon } from "../components/Icon";
 import { FolderOpenButton } from "../components/FolderOpenButton";
-import { filterTags } from "../lib/tagSearch";
+import { filterTags, normTag } from "../lib/tagSearch";
+import { COLOR_HEX } from "../lib/blocks";
 import { useUi } from "../store/ui";
 
 /** 갤러리의 폴더 목록 — 좌 패널.
@@ -434,6 +435,11 @@ function ArtistFilter() {
     useGallery();
   const artistH = useUi((s) => s.artistH);
   const setArtistH = useUi((s) => s.setArtistH);
+  /** 작가마다 칠해 둔 색 — 점을 누르면 다음 색으로 돌아간다 (블록 머리의 색 점과 같다) */
+  const artistColor = useUi((s) => s.artistColor);
+  const cycleArtistColor = useUi((s) => s.cycleArtistColor);
+  const artistAlways = useUi((s) => s.artistAlways);
+  const setArtistAlways = useUi((s) => s.setArtistAlways);
   const [shown, setShown] = useState(SHOW_ARTISTS);
   /** 경계를 잡은 자리 — 잡을 때의 커서 y 와 그때의 높이 */
   const grip = useRef<{ y: number; h: number } | null>(null);
@@ -451,7 +457,6 @@ function ArtistFilter() {
       .sort((a, b) => b.n - a.n || a.t.localeCompare(b.t));
   }, [artistTags, artistQuery, artistScope, folder, artistIndex]);
 
-  const key = (tag: string) => tag.toLowerCase().replace(/_/g, " ").trim();
   const scopeBtn = (v: "all" | "folder", label: string) => (
     <button
       data-artist-scope={v}
@@ -554,6 +559,40 @@ function ArtistFilter() {
             {scopeBtn("folder", t("gallery.artistScopeFolder"))}
           </div>
 
+          {/* ★★**작가를 안 골랐어도 칸마다 작가를 적는다** (사용자 지시 2026-09-21).
+              켜 두면 지금 보이는 그림 전부가 제 작가를 달고, 골라 둔 작가만 진하게 보인다. */}
+          <button
+            data-artist-always
+            data-on={artistAlways ? "" : undefined}
+            onClick={() => setArtistAlways(!artistAlways)}
+            data-tip={t("gallery.artistAlwaysTip")}
+            style={{
+              ...artistRow,
+              flexShrink: 0,
+              border: `1px solid ${artistAlways ? "var(--accent)" : "var(--line)"}`,
+              background: artistAlways ? "var(--accent-bg)" : "transparent",
+              color: artistAlways ? "var(--ink)" : "var(--ink-dim)",
+            }}
+          >
+            {/* 켜고 끄는 네모 — 드롭 가져오기 시트(`app/DropImport`)와 같은 모양이다 */}
+            <span
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: 14,
+                height: 14,
+                flexShrink: 0,
+                borderRadius: "var(--r-1)",
+                border: `1px solid ${artistAlways ? "var(--accent)" : "var(--line)"}`,
+                background: artistAlways ? "var(--accent)" : "transparent",
+                color: artistAlways ? "var(--accent-on)" : "transparent",
+              }}
+            >
+              {Icon.check}
+            </span>
+            {t("gallery.artistAlways")}
+          </button>
+
           <input
             data-artist-search
             value={artistQuery}
@@ -606,26 +645,54 @@ function ArtistFilter() {
           ) : (
             <>
               {hits.slice(0, shown).map((h) => {
-                const on = artists.includes(key(h.t));
+                const k = normTag(h.t);
+                const on = artists.includes(k);
+                /* ★색을 칠해 두면 **그 색이 줄의 배경과 글자**를 정한다 (사용자 지시 2026-09-21).
+                   배경은 옅게 깔고 글자는 색 그대로다 — 줄이 칠해져도 이름을 읽을 수 있어야 한다.
+                   ★고름 표시는 **테두리**가 계속 맡는다: 배경을 색이 가져가므로 그것까지 맡기면
+                     칠해 둔 작가는 골랐는지 안 골랐는지가 안 보인다. */
+                const hex = artistColor[k] ? COLOR_HEX[artistColor[k]!] : null;
                 return (
                   <button
                     key={h.t}
                     data-artist={h.t}
                     data-on={on ? "" : undefined}
+                    data-artist-hue={artistColor[k] ?? undefined}
                     /* 누를 때마다 켜고 끈다 — 여럿을 켜면 하나라도 든 그림을 본다 */
                     onClick={() => toggleArtist(h.t)}
                     style={{
                       ...artistRow,
                       flexShrink: 0,
                       border: `1px solid ${on ? "var(--accent)" : "transparent"}`,
-                      background: on ? "var(--accent-bg)" : "transparent",
-                      color: on ? "var(--ink)" : "var(--ink-soft)",
+                      background: hex ? `${hex}26` : on ? "var(--accent-bg)" : "transparent",
+                      color: hex ?? (on ? "var(--ink)" : "var(--ink-soft)"),
                     }}
                   >
+                    {/* ★★블록 머리의 색 점과 **같은 장치**다 (`blocks/BlockRow` 의 `data-block-color`) —
+                        누를 때마다 다음 색으로 돌고, 한 바퀴 돌면 색이 없어진다.
+                        ★줄의 누름을 삼켜야 한다 — 안 그러면 색을 고르다 필터가 켜진다. */}
+                    <span
+                      data-artist-color={h.t}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        cycleArtistColor(h.t);
+                      }}
+                      data-tip={t("gallery.artistColor")}
+                      style={{
+                        width: 10,
+                        height: 10,
+                        flexShrink: 0,
+                        borderRadius: "50%",
+                        border: "1px solid var(--line)",
+                        background: hex ?? "transparent",
+                      }}
+                    />
                     <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {h.t}
                     </span>
-                    <span style={{ color: "var(--ink-faint)" }}>{t("gallery.artistCount", { n: h.n })}</span>
+                    <span style={{ opacity: hex ? 0.75 : 1, color: hex ? undefined : "var(--ink-faint)" }}>
+                      {t("gallery.artistCount", { n: h.n })}
+                    </span>
                   </button>
                 );
               })}
