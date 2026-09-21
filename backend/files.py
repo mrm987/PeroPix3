@@ -170,64 +170,19 @@ def restore(root: Path, entries: list[dict]) -> dict:
     return trash.restore_at(root, entries)
 
 
-def _to_front(folder: Path) -> None:
-    """열려 있는 탐색기 창을 **앞으로**. 못 찾으면 조용히 넘어간다.
+def _shell_open(p: Path) -> bool:
+    """셸에 **경로로** 부탁해 탐색기를 연다. 됐으면 True.
 
-    ★★COM(`Shell.Application`)으로 훑지 않는다 (사용자 지적 2026-08-19: 느렸다) —
-      `EnumWindows` 로 **최상위 창만** 훑는다. 창 목록은 수십 개라 눈 깜짝할 새다.
-    ★탐색기 창의 제목은 **폴더 이름**이다 (클래스 `CabinetWClass`). 이름만 맞으면 앞으로 낸다.
-    ★포커스 제한은 `AttachThreadInput` 으로 넘는다 (v2 와 같은 수법, 다만 창 찾기가 싸다)."""
-    if sys.platform != "win32":
-        return
-    try:
-        import ctypes
-        from ctypes import wintypes
-
-        u = ctypes.windll.user32
-        want = folder.name or str(folder)
-        found = []
-
-        @ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
-        def each(hwnd, _):
-            cls = ctypes.create_unicode_buffer(64)
-            u.GetClassNameW(hwnd, cls, 64)
-            if cls.value != "CabinetWClass":
-                return True
-            n = u.GetWindowTextLengthW(hwnd)
-            buf = ctypes.create_unicode_buffer(n + 1)
-            u.GetWindowTextW(hwnd, buf, n + 1)
-            if buf.value == want:
-                found.append(hwnd)
-                return False
-            return True
-
-        u.EnumWindows(each, 0)
-        if not found:
-            return
-        hwnd = found[0]
-        if u.IsIconic(hwnd):
-            u.ShowWindow(hwnd, 9)  # SW_RESTORE
-        fore = u.GetForegroundWindow()
-        mine = u.GetWindowThreadProcessId(hwnd, None)
-        other = u.GetWindowThreadProcessId(fore, None)
-        if mine != other:
-            u.AttachThreadInput(mine, other, True)
-            u.BringWindowToTop(hwnd)
-            u.SetForegroundWindow(hwnd)
-            u.AttachThreadInput(mine, other, False)
-        else:
-            u.BringWindowToTop(hwnd)
-            u.SetForegroundWindow(hwnd)
-    except Exception as e:  # 앞으로 못 내도 창은 열려 있다
-        print(f"[reveal] 앞으로 가져오지 못했습니다 ({e})")
-
-
-def _select_in_explorer(f: Path) -> bool:
-    """그 파일을 **고른 채로** 폴더를 연다. 됐으면 True.
-
-    ★★`explorer /select,` 를 쓰지 않는다 (사용자 지적 2026-08-19: 느렸다) — 그것은
-      **탐색기 프로세스를 새로 띄우고 창도 새로 만든다.** `SHOpenFolderAndSelectItems` 는
-      셸에 직접 부탁하는 것이라 **열려 있는 창을 다시 쓰고** 곧바로 뜬다.
+    ★★`explorer /select,` 와 `os.startfile` 을 쓰지 않는다 (사용자 지적 2026-08-19: 느렸다). 그것은 탐색기
+      프로세스와 창을 새로 띄운다. `SHOpenFolderAndSelectItems` 는 셸에 직접 부탁하는 것이라 **이미 열려 있는 창을
+      다시 쓰고 앞으로 낸다.**
+    ★★폴더는 **빈 자식 pidl 하나**를 고를 것으로 넘긴다 (사용자 지적 2026-09-22). 문서대로 `cidl=0` 에 폴더 pidl 을
+      주면 **부모**를 열고 그 폴더를 고른다. 빈 자식 하나를 주면 그 폴더 자체가 열리고, 같은 이름의 다른 폴더가
+      열려 있어도 **경로**로 창을 찾는다 (게스트 실측: B/same 이 떠 있는 채 A/same 을 열면 A/same 이 앞에 오고,
+      한 번 더 열면 새 창 없이 그 창이 다시 앞에 온다).
+      예전에는 `os.startfile` 로 열고 창 **제목**(= 폴더 이름)으로 찾아 앞으로 냈는데, 같은 이름의 다른 폴더 창이
+      먼저 걸리면 그 창이 앞으로 왔다.
+    ★파일은 그 파일 pidl 하나를 `cidl=0` 으로 — 부모 폴더가 열리고 그 파일이 고른 채가 된다.
     ★COM 은 **이 스레드에서** 열고 닫는다 (요청은 워커 스레드에서 돈다, `server.files_reveal`)."""
     if sys.platform != "win32":
         return False
@@ -239,28 +194,31 @@ def _select_in_explorer(f: Path) -> bool:
         ole32.CoInitialize(None)
         try:
             shell32.ILCreateFromPathW.restype = ctypes.c_void_p
-            pidl = shell32.ILCreateFromPathW(ctypes.c_wchar_p(str(f)))
+            pidl = shell32.ILCreateFromPathW(ctypes.c_wchar_p(str(p)))
             if not pidl:
                 return False
             try:
-                # (폴더 pidl, 고를 것 수, 고를 것들, 플래그) — 파일 하나면 그 파일의 pidl 로 족하다
-                shell32.SHOpenFolderAndSelectItems(ctypes.c_void_p(pidl), 0, None, 0)
+                if p.is_dir():
+                    empty = ctypes.create_string_buffer(2)  # 길이 0 의 ITEMIDLIST (끝 표식만)
+                    arr = (ctypes.c_void_p * 1)(ctypes.addressof(empty))
+                    hr = shell32.SHOpenFolderAndSelectItems(ctypes.c_void_p(pidl), 1, arr, 0)
+                else:
+                    hr = shell32.SHOpenFolderAndSelectItems(ctypes.c_void_p(pidl), 0, None, 0)
             finally:
                 shell32.ILFree(ctypes.c_void_p(pidl))
         finally:
             ole32.CoUninitialize()
-        return True
-    except Exception as e:  # 안 되면 폴더만 여는 쪽으로 떨어진다
-        print(f"[reveal] 파일을 고른 채로 열지 못했습니다 ({e})")
+        return int(hr) == 0
+    except Exception as e:  # 안 되면 `os.startfile` 로 떨어진다
+        print(f"[reveal] 셸로 열지 못했습니다 ({e})")
         return False
 
 
 def _open(p: Path, select: bool) -> None:
-    """탐색기에서 그 자리를 연다. `select` 면 **그 파일을 고른 채로**.
+    """탐색기에서 그 자리를 연다. `select` 면 **그 파일을 고른 채로**, 아니면 그 폴더(파일이면 그 부모)를.
 
-    ★★`explorer /select,` 는 안 쓴다 — 프로세스와 창을 새로 띄워 눈에 띄게 느렸다
-      (`_select_in_explorer` 주석). 셸 API 로 부탁하면 열려 있는 창을 다시 쓴다.
-    ★연 뒤 **앞으로 낸다** — 그냥 열면 뒤에서 열린다 (`_to_front`)."""
+    ★셸 API 가 창을 찾아 앞으로 내므로 따로 앞으로 낼 것이 없다 (`_shell_open`). 그것이 안 될 때만
+      `os.startfile` 로 떨어지는데, 그때는 창이 뒤에서 열릴 수 있다."""
     target = p if p.is_dir() else p.parent
     if sys.platform == "win32":
         try:
@@ -269,9 +227,8 @@ def _open(p: Path, select: bool) -> None:
             ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY
         except Exception:
             pass
-        if not (select and p.is_file() and _select_in_explorer(p)):
+        if not _shell_open(p if (select and p.is_file()) else target):
             os.startfile(str(target))  # noqa: S606
-        _to_front(target)
     elif sys.platform == "darwin":
         subprocess.Popen(["open", "-R", str(p)] if select and p.is_file() else ["open", str(target)])
     else:
