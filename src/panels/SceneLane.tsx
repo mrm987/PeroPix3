@@ -1297,6 +1297,8 @@ type GroupProps = {
 
 /** 씬 세트 머리의 높이 — ★절반으로 줄였다 (사용자 지적 2026-08-16: 56 은 너무 두꺼웠다) */
 const HEAD_H = 28;
+/** 재기 전에도 썸네일을 부르는 줄 수 — 맨 위가 한 박자 비어 보이지 않게 (`SceneRow` 의 ★★주) */
+const EAGER_ROWS = 4;
 /** ★자르지 않고 **끝만 부드럽게 뺀다** — 잘라 두면 줄 가운데서 뚝 끊긴 것처럼 보인다 */
 const HEAD_FADE = "linear-gradient(90deg, #000 0 72%, transparent 100%)";
 
@@ -1680,9 +1682,32 @@ function SceneRow(
   const patchCell = (patch: Partial<Slot>) =>
     p.onPatch({ cells: p.card.cells.map((x) => (x.id === c.id ? { ...x, ...patch } : x)) });
 
+  /* ★★**안 보이는 줄은 썸네일을 안 부른다** (사용자 지적 2026-09-21: *"한 워크스페이스에서
+       이미지가 엄청 많아지니까 … 일부 탭을 누르면 씬에 있는 썸네일들이 즉시 로드가 안 되고
+       씬에 마우스 호버하거나 씬을 클릭해야 로드됨"*).
+     칸은 **가로로만** 잘라 그렸고(`from`·`to`) 줄은 전부 그렸다. 탭 하나에 씬이 스물이면 눈에
+     보이는 서너 줄 말고도 열몇 줄이 제 몫의 썸네일을 한꺼번에 불렀고, 브라우저는 한 곳에 여섯
+     줄만 열어 두므로 나머지는 줄을 선다 — 보이는 줄의 그림이 그만큼 늦게 왔다. 그림이 적을
+     때는 웹뷰 캐시가 다 받아 두고 있어서 안 드러났다.
+     ★★`loading="lazy"` 로 되돌리지 말 것 — 그쪽은 브라우저가 검사 자체를 미뤄 커서를 올려야
+       받아 오는 결함이 있었다 (아래 `<img>` 의 ★★주). 여기서는 관찰자를 우리가 걸어 **첫 판정을
+       우리 손으로** 받는다.
+     ★앞의 몇 줄은 재기 전에도 그린다 — 판정이 한 박자 늦어도 맨 위가 비어 보이지 않게. */
+  const rowBox = useRef<HTMLDivElement>(null);
+  const [near, setNear] = useState(p.offset + p.index < EAGER_ROWS);
+  useEffect(() => {
+    const el = rowBox.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setNear(e.isIntersecting), { rootMargin: "300px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   return (
     <div
+      ref={rowBox}
       data-scene={c.id}
+      data-near={near ? "" : undefined}
       onClick={() => p.onFocus({ cell: c.id, file: p.focus.cell === c.id ? p.focus.file : null })}
       style={{
         display: "flex",
@@ -2084,6 +2109,9 @@ function SceneRow(
                 lineHeight: 0,
               }}
             >
+              {/* ★안 보이는 줄에서는 안 그린다 (위 ★★주). 미저장 그림은 주소가 `data:` 라
+                  받아 올 것이 없으므로 그대로 둔다 — 빈 칸으로 보이면 그게 더 헷갈린다. */}
+              {(near || !!r.preview) && (
               <img
                 src={takeSrc(r, p.base, p.ws, true)}
                 alt=""
@@ -2102,6 +2130,7 @@ function SceneRow(
                 decoding="async"
                 style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
               />
+              )}
               {/* ★★고른 장을 덮는 **옅은 강조색** (위 ★★주). 갤러리 칸과 같은 차림이다
                   (`Gallery` 의 `data-cell-veil`) — `opacity` 로 태워 테마를 그대로 따르고,
                   `pointer-events: none` 이라 커서를 가로채지 않는다. */}

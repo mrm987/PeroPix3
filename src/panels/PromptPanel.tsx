@@ -5,7 +5,6 @@ import { usePrompt } from "../store/prompt";
 import { canEnableChar } from "../store/gen";
 import { StyleSection, CharSection, JoinZone, type SectionProps } from "./PromptSections";
 import { BlockLibButton } from "../blocks/BlockDrawer";
-import { TagSearchButton } from "../blocks/TagDrawer";
 import { WildcardButton } from "./WildcardModal";
 import { TranslateButton } from "./TranslateButton";
 import { OptionsPanel } from "./OptionsPanel";
@@ -51,7 +50,6 @@ export function PromptPanel({ onThumb }: SectionProps) {
               <TranslateButton />
               <WildcardButton />
               <BlockLibButton />
-              <TagSearchButton />
             </span>
           }
         >

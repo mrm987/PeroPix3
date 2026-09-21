@@ -24,6 +24,9 @@ import { onNearBottom } from "../lib/nearBottom";
  *  그것은 이 드롭다운에서 「고르지 않음」자리표시자가 이미 쓰고 있다. 보낼 때 되돌린다. */
 const ROOT_DEST = "/";
 
+/** 한 번에 그리는 칸 수 — 서버 쪽 나눔과 같은 값이다 (`backend/server.PAGE`) */
+const PAGE = 60;
+
 /** 갤러리 — 워크스페이스에 쌓인 그림을 훑어 본다 (feature-inventory G절).
  *
  *  ★칸에는 **썸네일**을 쓴다 (`lib/imgUrl`). 여기는 수백 장이 한 번에 뜨는 화면이라,
@@ -44,15 +47,26 @@ export function Gallery() {
   const ws = useWs((s) => s.current);
   /** ★별표는 **보관함이 든다** — 워크스페이스가 아니다 (store/gallery.ts `starred` 주석) */
   const { items, folders, picked, focus, big, meta, loading, total, hasMore, load, more, setFocus, setBig,
-          togglePick, setPicked, pickAll, clearPick, remove, moveTo, isStarred, toggleStar, rename, vibeMode } =
-    useGallery();
-  // ★바닥에 닿기 전에 다음 쪽을 당긴다 (v2 방식, lib/nearBottom)
-  const onScroll = onNearBottom(() => void more(ws));
+          togglePick, setPicked, pickAll, clearPick, remove, moveTo, isStarred, toggleStar, rename, vibeMode,
+          artist, artistScope, folder, artistItems } = useGallery();
   const [dest, setDest] = useState("");
   /** ★별표는 **거르는 장치**다 — 큰 그림에 별표 버튼을 두지 않는다 (사용자 지시 2026-08-05) */
   const [starOnly, setStarOnly] = useState(false);
+  /* ★★**작가를 고르면 목록을 서버에 다시 묻지 않는다** (사용자 지시 2026-09-21). 곁파일이 파일마다
+     시각·크기를 들고 있어 그것만으로 칸을 지을 수 있고, 거르는 판정(태그 쪼개기·작가 판별)은
+     어차피 화면 몫이다 (`store/gallery.artistItems`). 그래서 쪽도 여기서 센다 — 서버 쪽 나눔은
+     폴더 목록용이라 걸러진 결과와 맞지 않는다. */
+  const filtered = artistItems();
+  const [artistShown, setArtistShown] = useState(PAGE);
+  useEffect(() => setArtistShown(PAGE), [artist, artistScope, folder, starOnly]);
 
-  const shown = starOnly ? items.filter((i) => isStarred(i.file)) : items;
+  const source = filtered ?? items;
+  const all = starOnly ? source.filter((i) => isStarred(i.file)) : source;
+  const shown = filtered ? all.slice(0, artistShown) : all;
+  /** 더 받을 것이 남았나 — 걸러진 목록은 화면이, 아니면 서버가 센다 */
+  const left = filtered ? all.length - shown.length : hasMore ? total - items.length : 0;
+  // ★바닥에 닿기 전에 다음 쪽을 당긴다 (v2 방식, lib/nearBottom)
+  const onScroll = onNearBottom(() => (filtered ? setArtistShown((v) => v + PAGE) : void more(ws)));
   const idx = focus ? shown.findIndex((i) => i.file === focus) : -1;
 
   // ★목록은 **여기서** 불러온다. 좌우 패널은 접으면 언마운트되지만 중앙은 항상 떠 있다.
@@ -112,7 +126,10 @@ export function Gallery() {
     setBig(true);
   };
 
+  /** 고른 것을 지운다 — 묻고, 휴지통을 거친다. ★고른 것 전부가 대상이라 `only` 를 안 넘긴다
+   *  (안 넘겨야 선택도 함께 풀린다, `store/gallery.remove`) */
   const onRemove = async () => {
+    if (!picked.size) return;
     if (
       !(await ask({
         title: t("gallery.removeConfirm", { n: picked.size }),
@@ -140,7 +157,7 @@ export function Gallery() {
       <>
       <Toolbar
         picked={picked.size}
-        total={total || items.length}
+        total={filtered ? all.length : total || items.length}
         starOnly={starOnly}
         onStarOnly={() => setStarOnly((v) => !v)}
         folders={folders.map((f) => f.path)}
@@ -148,7 +165,6 @@ export function Gallery() {
         setDest={setDest}
         onAll={pickAll}
         onClear={clearPick}
-        onRemove={onRemove}
         /* ★고른 것 중 **마지막에 누른 장**을 띄운다 (없으면 고른 것의 첫 장) */
         onBig={() => {
           const one = focus && picked.has(focus) ? focus : [...picked][0];
@@ -157,7 +173,7 @@ export function Gallery() {
         onMove={() => dest && void moveTo(ws, dest === ROOT_DEST ? "" : dest)}
       />
 
-      {items.length === 0 ? (
+      {source.length === 0 ? (
         <Empty loading={loading} />
       ) : (
         <div
@@ -194,18 +210,24 @@ export function Gallery() {
               onDragFiles={() => (picked.has(it.file) ? [...picked] : [it.file])}
             />
           ))}
-          {hasMore && (
+          {left > 0 && (
             <span
               data-gallery-more
               style={{ gridColumn: "1/-1", padding: "var(--sp-3)", textAlign: "center",
                        fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}
             >
-              {t("gallery.more", { n: total - items.length })}
+              {t("gallery.more", { n: left })}
             </span>
           )}
         </div>
       )}
 
+      {/* ★★고르기만 해도 **아래에 빠른 줄**이 붙는다 (사용자 지시 2026-09-21). 크게 보지 않고도
+          바로 보낼 수 있어야 한다 — 위 툴바의 삭제는 이 줄과 겹쳐서 걷었다.
+          ★크게 보기가 떠 있으면 그쪽에 같은 줄이 있으므로 여기서는 안 그린다. */}
+      {!big && picked.size > 0 && (focus || [...picked][0]) && (
+        <QuickBar files={[...picked]} focus={focus && picked.has(focus) ? focus : [...picked][0]} onDelete={() => void onRemove()} />
+      )}
       </>
       )}
 
@@ -245,7 +267,6 @@ function Toolbar({
   setDest,
   onAll,
   onClear,
-  onRemove,
   onBig,
   onMove,
 }: {
@@ -258,7 +279,6 @@ function Toolbar({
   setDest: (s: string) => void;
   onAll: () => void;
   onClear: () => void;
-  onRemove: () => void;
   /** 고른 것을 크게 본다 — ★클릭이 선택이 되면서 **크게 보는 창구가 더블클릭 하나**가 되었다.
    *  단추로도 열 수 있어야 한다 (사용자 지시 2026-09-10) */
   onBig: () => void;
@@ -304,7 +324,9 @@ function Toolbar({
       )}
       {picked > 0 && (
         <>
-          <button data-gallery-big onClick={onBig} style={linkBtn}>
+          {/* ★표식이 크게 보기 판(`data-gallery-big`)과 겹치면 안 된다 — 점검이 단추를 보고
+              「열려 있다」로 읽는다 (2026-09-21 실측으로 밟았다) */}
+          <button data-gallery-bigview onClick={onBig} style={linkBtn}>
             {t("gallery.bigView")}
           </button>
           <button onClick={onClear} style={linkBtn}>
@@ -335,9 +357,6 @@ function Toolbar({
           </select>
           <button onClick={onMove} disabled={!dest} style={{ ...linkBtn, opacity: dest ? 1 : 0.4 }}>
             →
-          </button>
-          <button onClick={onRemove} style={{ ...linkBtn, color: "var(--err-ink)" }}>
-            {t("gallery.remove")}
           </button>
         </>
       )}
@@ -667,31 +686,10 @@ function Big({
             }
             /* ★★「보내기」에 **일괄 변환**도 둔다 (사용자 지시 2026-09-07: *"갤러리쪽 보내기도 복제, 일괄변환
                  선택하는거 띄워"*). 갈 곳이 하나(복제)뿐이면 메뉴가 안 열려 고를 수가 없었다.
-               ★보관함은 아웃풋 루트 밖이라 `rel` 로 못 싣는다 — 서버에 절대 경로를 물어 `path` 로 싣는다
-                 (`/api/keep/path`). 캔버스의 같은 단추와 같은 규칙: 목록에 더하고, 같은 파일은 안 겹친다. */
-            onConvert={async () => {
-              const r = await api<{ path: string }>("/api/keep/path", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ path: file }),
-              });
-              const had = new Set(useConvertQueue.getState().items.map((i) => i.rel ?? i.path ?? i.name));
-              if (!had.has(r.path)) useConvertQueue.getState().add([{ name: file.split("/").pop() ?? file, path: r.path }]);
-              useUi.getState().setMode("utility");
-              useUi.getState().setView("tab", "tools", "convert" as never);
-            }}
-            /* ★자동검열로 보내기 (사용자 지시 2026-09-07) — 보관함은 아웃풋 루트 밖이라 절대 경로(`path`)로 담는다 */
-            onCensor={async () => {
-              const r = await api<{ path: string }>("/api/keep/path", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ path: file }),
-              });
-              const { useCensor } = await import("../store/censor");
-              await useCensor.getState().addImages([{ name: file.split("/").pop() ?? file, path: r.path }]);
-              useCensor.getState().setTab("before");
-              useUi.getState().setMode("censor");
-            }}
+               ★몸통은 아래 빠른 줄과 **같은 함수**다 (`toConvert`·`toCensor`) — 자리마다 따로 쓰면
+                 한쪽만 고쳐진다. */
+            onConvert={() => toConvert([file])}
+            onCensor={() => toCensor([file])}
             /* ★★**지우는 단추가 여기 있어야 한다** (사용자 지시 2026-08-25: *"갤러리 이미지
                  보는 곳에 삭제 버튼이 없음"*). 그리드에서는 골라서 지우지만, 크게 보다가
                  「이건 아니다」 하는 자리가 바로 여기다 — 닫고 다시 골라야 했다.
@@ -788,3 +786,114 @@ const overlayBtn: React.CSSProperties = {
   color: "rgba(255,255,255,0.8)",
   fontSize: "var(--text-2xs)",
 };
+
+/** 보관함 파일들의 **절대 경로** — 보조 도구는 아웃풋 루트 기준 `rel` 을 받는데 보관함은 그
+ *  루트 밖이라 `path` 로 싣는다 (`/api/keep/path`). 크게 보기와 아래 빠른 줄이 같은 것을 쓴다. */
+async function keepPaths(files: string[]) {
+  const out: { name: string; path: string }[] = [];
+  for (const f of files) {
+    const r = await api<{ path: string }>("/api/keep/path", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: f }),
+    });
+    out.push({ name: f.split("/").pop() ?? f, path: r.path });
+  }
+  return out;
+}
+
+/** 「일괄 변환으로 보내기」 — 목록에 더하고 그 화면으로. 같은 파일은 안 겹친다 */
+async function toConvert(files: string[]) {
+  const items = await keepPaths(files);
+  const had = new Set(useConvertQueue.getState().items.map((i) => i.rel ?? i.path ?? i.name));
+  const fresh = items.filter((i) => !had.has(i.path));
+  if (fresh.length) useConvertQueue.getState().add(fresh);
+  useUi.getState().setMode("utility");
+  useUi.getState().setView("tab", "tools", "convert" as never);
+}
+
+/** 「자동검열로 보내기」 (사용자 지시 2026-09-07) */
+async function toCensor(files: string[]) {
+  const items = await keepPaths(files);
+  const { useCensor } = await import("../store/censor");
+  await useCensor.getState().addImages(items);
+  useCensor.getState().setTab("before");
+  useUi.getState().setMode("censor");
+}
+
+/** 고른 그림 아래 붙는 **빠른 줄** (사용자 지시 2026-09-21: *"갤러리에서 이미지 그냥 클릭했을 때도
+ *  하단에 빠른 메뉴 뜨게"*).
+ *
+ *  ★크게 본 그림 아래 줄과 **같은 부품**이다 (`ImageActions`) — 자리마다 따로 만들면 어디서는
+ *    되고 어디서는 안 되는 상태가 생긴다.
+ *  ★여러 장을 골랐으면 `multi` 가 그 수를 받아 **여러 장에 뜻이 있는 것만** 남긴다. 한 장 전용
+ *    (프롬프트 보기·복제·i2i·인페인트·시드·폴더 열기)은 어느 장의 것인지 애매해서 스스로 빠진다.
+ *  ★크게 보기가 떠 있는 동안에는 안 그린다 — 그쪽에 이미 같은 줄이 있다. */
+function QuickBar({
+  files,
+  focus,
+  onDelete,
+}: {
+  /** 지금 고른 것 전부 */
+  files: string[];
+  /** 그중 **마지막에 누른 한 장** — 한 장 전용 단추가 이것을 본다 */
+  focus: string;
+  onDelete: () => void;
+}) {
+  const t = useI18n((s) => s.t);
+  const base = useGen((s) => s.base);
+  const meta = useGallery((s) => s.meta);
+  const metaFor = useGallery((s) => s.metaFor);
+  const loadMeta = async () =>
+    (await api<{ meta: ImageMeta | null }>(`/api/keep/meta?file=${encodeURIComponent(focus)}`)).meta;
+  /** ★설정이 없는 그림에는 복제를 안 낸다 — 눌러야 실패하는 단추를 띄우지 않는다.
+   *  스토어가 **고른 한 장의** 메타데이터를 이미 읽어 두었다 (`setFocus`). */
+  const seen = metaFor === focus ? meta : null;
+  return (
+    <div
+      data-gallery-quickbar
+      style={{
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--sp-2)",
+        padding: "var(--sp-2) var(--sp-4)",
+        borderTop: "1px solid var(--line-soft)",
+        background: "var(--bg)",
+      }}
+    >
+      <ImageActions
+        url={keepUrl(base, focus)}
+        name={focus.split("/").pop() ?? focus}
+        seed={seen?.seed}
+        dims={seen?.width && seen?.height ? { w: seen.width, h: seen.height } : null}
+        loadMeta={loadMeta}
+        multi={files.length}
+        /* ★보관함 그림에는 워크스페이스 파일이 없다 — 되돌리는 창구는 「새 탭으로 복제」 하나다 */
+        hideSettings
+        onClone={
+          hasMeta(seen)
+            ? async () => {
+                const m = await loadMeta();
+                if (m) await cloneMetaToNewTab(m, focus);
+              }
+            : undefined
+        }
+        onConvert={() => toConvert(files)}
+        onCensor={() => toCensor(files)}
+        extra={
+          <button
+            data-gallery-quick-del
+            onClick={onDelete}
+            data-tip={t("gallery.remove")}
+            style={{ ...iconBtn, color: "var(--err-ink)" }}
+          >
+            {Icon.trash}
+          </button>
+        }
+        revealPath={focus}
+        revealApi="/api/keep/reveal"
+      />
+    </div>
+  );
+}

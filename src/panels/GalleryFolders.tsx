@@ -1,5 +1,5 @@
 import { composing } from "../lib/ime";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { useWs } from "../store/workspace";
 import { ALL, useGallery } from "../store/gallery";
@@ -9,6 +9,7 @@ import { ask } from "../store/ask";
 import { toast } from "../store/toast";
 import { Icon } from "../components/Icon";
 import { FolderOpenButton } from "../components/FolderOpenButton";
+import { filterTags } from "../lib/tagSearch";
 
 /** 갤러리의 폴더 목록 — 좌 패널.
  *
@@ -226,6 +227,8 @@ export function GalleryFolders() {
             }}
           />
         )}
+
+        <ArtistFilter />
       </div>
 
       <div
@@ -407,3 +410,206 @@ function Row({
   );
 }
 
+/** 작가 목록에 한 번에 보여 주는 줄 수 — 나머지는 검색어로 좁힌다 */
+const SHOW_ARTISTS = 60;
+
+/** 작가 거르기 — 폴더 목록 **아래 칸** (사용자 지시 2026-09-21: 갤러리에서 작가 태그로 찾고,
+ *  태그를 누르거나 검색어를 적어 그 작가가 든 그림만 본다).
+ *
+ *  ★「무엇을 골라 보나」가 이미 이 기둥에 있다 — 폴더와 같은 갈래라 같은 자리에 둔다.
+ *  ★작가 판정은 **`artist:` 접두가 있거나 사전이 작가로 아는 이름**이다 (`lib/tagSearch` 의 `isArtist`).
+ *  ★★**숫자는 지금 범위에서 센 값이다.** 「현재 폴더」로 좁혀 두고 전체 기준 숫자를 보여 주면
+ *    눌렀을 때 그보다 적게 나와 고장으로 보인다. 그래서 범위로 거른 뒤에 센다.
+ *  ★칸을 펼치는 순간 색인을 증분으로 훑는다 — 첫 훑기만 그림을 다 읽고 그 뒤로는 파일 정보뿐이다. */
+function ArtistFilter() {
+  const t = useI18n((s) => s.t);
+  const { artistOpen, artistBusy, artistStatus, artistTags, artistQuery, artist, artistScope, artistIndex,
+          folder, setArtistOpen, setArtistQuery, setArtist, setArtistScope, rescanArtists } = useGallery();
+  const [shown, setShown] = useState(SHOW_ARTISTS);
+
+  /** 지금 범위에서 센 작가들 — 한 장도 없는 작가는 뺀다 */
+  const hits = useMemo(() => {
+    const inHere = (rel: string) => {
+      if (artistScope === "all") return true;
+      const at = rel.lastIndexOf("/");
+      return (at < 0 ? "" : rel.slice(0, at)) === folder;
+    };
+    return filterTags(artistTags, artistQuery, true)
+      .map((h) => ({ t: h.t, n: h.files.filter((f) => f in artistIndex && inHere(f)).length }))
+      .filter((h) => h.n > 0)
+      .sort((a, b) => b.n - a.n || a.t.localeCompare(b.t));
+  }, [artistTags, artistQuery, artistScope, folder, artistIndex]);
+
+  const key = (tag: string) => tag.toLowerCase().replace(/_/g, " ").trim();
+  const scopeBtn = (v: "all" | "folder", label: string) => (
+    <button
+      data-artist-scope={v}
+      data-on={artistScope === v ? "" : undefined}
+      onClick={() => setArtistScope(v)}
+      style={{
+        flex: 1,
+        padding: "3px 0",
+        borderRadius: "var(--r-1)",
+        border: `1px solid ${artistScope === v ? "var(--accent)" : "var(--line)"}`,
+        background: artistScope === v ? "var(--accent-bg)" : "transparent",
+        color: artistScope === v ? "var(--ink)" : "var(--ink-dim)",
+        fontSize: "var(--text-2xs)",
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div style={{ marginTop: "var(--sp-3)", borderTop: "1px solid var(--line-soft)", paddingTop: "var(--sp-2)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+        <button
+          data-artist-toggle
+          data-on={artistOpen ? "" : undefined}
+          onClick={() => setArtistOpen(!artistOpen)}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--sp-2)",
+            padding: "4px var(--sp-2)",
+            borderRadius: "var(--r-2)",
+            color: artist ? "var(--accent)" : "var(--ink-soft)",
+            fontSize: "var(--text-xs)",
+            textAlign: "left",
+          }}
+        >
+          <span style={{ display: "grid", color: "var(--ink-faint)" }}>
+            {artistOpen ? Icon.chevronDown12 : Icon.chevronRight12}
+          </span>
+          {t("gallery.artists")}
+          {artist && (
+            <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-2xs)", opacity: 0.85,
+                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {artist}
+            </span>
+          )}
+        </button>
+        {artistOpen && (
+          <button
+            data-artist-refresh
+            onClick={() => void rescanArtists()}
+            disabled={artistBusy}
+            data-tip={t("gallery.artistRefresh")}
+            style={{ display: "grid", padding: 3, borderRadius: "var(--r-1)",
+                     color: artistBusy ? "var(--ink-ghost)" : "var(--ink-faint)" }}
+          >
+            {Icon.refresh12}
+          </button>
+        )}
+      </div>
+
+      {artistOpen && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)", padding: "var(--sp-2) 2px 0" }}>
+          {/* ★범위는 **전체 폴더가 기본**이다 (사용자 지시 2026-09-21) */}
+          <div style={{ display: "flex", gap: 2 }}>
+            {scopeBtn("all", t("gallery.artistScopeAll"))}
+            {scopeBtn("folder", t("gallery.artistScopeFolder"))}
+          </div>
+
+          <input
+            data-artist-search
+            value={artistQuery}
+            placeholder={t("gallery.artistSearch")}
+            onChange={(e) => {
+              setArtistQuery(e.target.value);
+              setShown(SHOW_ARTISTS);
+            }}
+            style={{
+              width: "100%",
+              padding: "4px var(--sp-2)",
+              borderRadius: "var(--r-1)",
+              border: "1px solid var(--line)",
+              background: "var(--panel)",
+              color: "var(--ink)",
+              fontSize: "var(--text-2xs)",
+            }}
+          />
+
+          {/* 훑는 중이거나 실패했을 때만 한 줄 — 평소에는 아무 말도 안 한다 */}
+          {artistBusy && (
+            <div data-artist-indexing style={{ fontSize: "var(--text-2xs)", color: "var(--ink-dim)" }}>
+              {t("gallery.artistIndexing", { done: artistStatus?.done ?? 0, total: artistStatus?.total ?? 0 })}
+            </div>
+          )}
+          {!artistBusy && artistStatus?.error && (
+            <div style={{ fontSize: "var(--text-2xs)", color: "var(--err-ink)" }}>
+              {t("gallery.artistError", { msg: artistStatus.error })}
+            </div>
+          )}
+
+          {artist && (
+            <button
+              data-artist-clear
+              onClick={() => setArtist(null)}
+              style={{ ...artistRow, color: "var(--accent)", border: "1px solid var(--accent)" }}
+            >
+              {Icon.close12}
+              {t("gallery.artistClear")}
+            </button>
+          )}
+
+          {!artistBusy && !artistTags.size ? (
+            <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", lineHeight: 1.5 }}>
+              {t("gallery.artistEmpty")}
+            </div>
+          ) : !hits.length ? (
+            <div style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>{t("gallery.artistNoHit")}</div>
+          ) : (
+            <>
+              {hits.slice(0, shown).map((h) => {
+                const on = artist === key(h.t);
+                return (
+                  <button
+                    key={h.t}
+                    data-artist={h.t}
+                    data-on={on ? "" : undefined}
+                    /* 누른 것을 다시 누르면 해제된다 — 폴더와 달리 「안 고른 상태」가 기본이다 */
+                    onClick={() => setArtist(on ? null : h.t)}
+                    style={{
+                      ...artistRow,
+                      border: `1px solid ${on ? "var(--accent)" : "transparent"}`,
+                      background: on ? "var(--accent-bg)" : "transparent",
+                      color: on ? "var(--ink)" : "var(--ink-soft)",
+                    }}
+                  >
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {h.t}
+                    </span>
+                    <span style={{ color: "var(--ink-faint)" }}>{t("gallery.artistCount", { n: h.n })}</span>
+                  </button>
+                );
+              })}
+              {hits.length > shown && (
+                <button
+                  data-artist-more
+                  onClick={() => setShown((v) => v + SHOW_ARTISTS)}
+                  style={{ ...artistRow, color: "var(--ink-faint)", justifyContent: "center" }}
+                >
+                  {t("gallery.artistMore", { n: hits.length - shown })}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const artistRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "var(--sp-2)",
+  width: "100%",
+  padding: "3px var(--sp-2)",
+  borderRadius: "var(--r-2)",
+  fontSize: "var(--text-2xs)",
+  textAlign: "left",
+};

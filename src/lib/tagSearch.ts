@@ -1,8 +1,10 @@
-import { makeBlock, parseSegs, type Block } from "./blocks.ts";
+import { parseSegs } from "./blocks.ts";
 import { tagType } from "./tagData.ts";
 
-/** 태그 검색 — 인덱스(`backend/tagindex.py` 의 곁파일)에서 태그를 집계하는 **순수 함수들**
- *  (사용자 지시 2026-08-31). 스토어·화면은 `store/tagsearch.ts`·`blocks/TagDrawer.tsx`.
+/** 태그 집계 — 색인(`backend/tagindex.py` 의 곁파일)에서 태그를 세는 **순수 함수들**.
+ *  지금 쓰는 자리는 **갤러리의 작가 거르기** 하나다 (`store/gallery.ts`·`panels/GalleryFolders.tsx`).
+ *  ★생성 화면 옆에 있던 태그 검색 서랍은 미완성인 채 잠겨 있다가 걷혔다 (사용자 지시 2026-09-21).
+ *   그때 쓰던 「베이스에 붙이기」(`appendToLast`·`hasTag`)도 함께 걷었다.
  *
  *  ★★쪼개는 규칙은 `parseSegs` **하나**다 — 곁파일에는 프롬프트 원문만 있고, 백엔드는 쪼개지
  *    않는다 (`tagindex.py` 머리 ★★주). 세기(`1.2::artist:foo::`)는 벗기고 이름만 센다.
@@ -47,14 +49,4 @@ export function filterTags(map: Map<string, TagHit>, query: string, artistOnly: 
     out.push(hit);
   }
   return out.sort((a, b) => b.files.length - a.files.length || a.t.localeCompare(b.t));
-}
-
-/** 베이스에 이미 있는가 (표기 차이는 같은 것으로) */
-export const hasTag = (blocks: Block[], tag: string): boolean =>
-  blocks.some((b) => b.tags.some((x) => norm(x.t) === norm(tag)));
-
-/** 베이스 **맨 아래** — 마지막 블록의 끝에 붙인다 (사용자 결정 2026-08-31). 블록이 없으면 하나 만든다. */
-export function appendToLast(blocks: Block[], tag: string): Block[] {
-  if (!blocks.length) return [makeBlock("", [tag])];
-  return blocks.map((b, i) => (i === blocks.length - 1 ? { ...b, tags: [...b.tags, { t: tag, w: null }] } : b));
 }

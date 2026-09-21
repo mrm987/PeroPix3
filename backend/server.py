@@ -3225,22 +3225,24 @@ class FilesName(BaseModel):
     name: str = ""
 
 
-# ── 태그 검색 인덱스 (backend/tagindex.py) — 아웃풋 루트의 긍정 프롬프트 원문 ──────
-@app.get("/api/tags/status")
-async def tags_status():
-    return tagindex.status(WS_ROOT)
+# ── 태그 색인 (backend/tagindex.py) — 보관함의 긍정 프롬프트 원문 ────────────────
+# ★뿌리는 **보관함 하나**다. 예전에는 아웃풋 루트를 훑는 `/api/tags/*` 도 있었는데, 그것을
+#   쓰던 생성 화면 옆 태그 서랍이 미완성인 채 잠겨 있다가 걷혔다 (사용자 지시 2026-09-21).
+@app.get("/api/keep/tags/status")
+async def keep_tags_status():
+    return tagindex.status(KEEP_DIR)
 
 
-@app.post("/api/tags/index")
-async def tags_index():
-    """아웃풋 루트를 훑어 곁파일을 갱신한다 — 백그라운드. 진행은 `/api/tags/status`."""
-    return tagindex.start(WS_ROOT)
+@app.post("/api/keep/tags/index")
+async def keep_tags_index():
+    """보관함을 훑어 곁파일을 갱신한다 — 백그라운드. 진행은 `/api/keep/tags/status`."""
+    return tagindex.start(KEEP_DIR)
 
 
-@app.get("/api/tags/data")
-async def tags_data():
+@app.get("/api/keep/tags/data")
+async def keep_tags_data():
     """곁파일 통째 — 태그 집계는 화면이 한다 (`tagindex` 머리 ★★주). 몇 MB 라 딴 실에서 읽는다."""
-    return await asyncio.to_thread(tagindex.load, WS_ROOT)
+    return await asyncio.to_thread(tagindex.load, KEEP_DIR)
 
 
 @app.get("/api/files/tree")

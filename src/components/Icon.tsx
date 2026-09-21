@@ -324,6 +324,7 @@ export const Icon = {
   /** 배너 단추(20px)에 들어가는 크기 — `close12` 와 같은 눈금 */
   chevronUp12: s(<path d="M6 15l6-6 6 6" />, 12),
   chevronDown12: s(<path d="M6 9l6 6 6-6" />, 12),
+  chevronRight12: s(<path d="M9 6l6 6-6 6" />, 12),
   chevronDown: s(<path d="M6 9l6 6 6-6" />),
   /** 카테고리 이름 줄용 — 15px 글줄 옆에 서므로 아이콘은 한 치수 작다 */
   chevronDown14: s(<path d="M6 9l6 6 6-6" />, 14),

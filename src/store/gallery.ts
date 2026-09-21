@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { api, type TrashEntry } from "../lib/backend";
 import { t } from "../i18n";
 import { toast, undoToast } from "./toast";
+import { loadTags } from "../lib/tagData";
+import { isArtist, tallyTags, type IndexEntry, type TagHit } from "../lib/tagSearch";
 
 /** 갤러리 — 워크스페이스에 쌓인 그림을 훑어 본다.
  *
@@ -58,6 +60,23 @@ export type ImageMeta = {
 /** 폴더 전체를 뜻하는 값. `null` 은 "아직 안 정함"과 구분이 안 돼 쓰지 않는다. */
 export const ALL = "";
 
+/** 색인 훑기의 진행 (`backend/tagindex.py` 의 `status`) */
+export type IndexStatus = { running: boolean; done: number; total: number; error: string; built: number };
+
+/** 작가 거르기가 볼 범위 — 전체 폴더가 기본이다 (사용자 지시 2026-09-21) */
+export type ArtistScope = "all" | "folder";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** 같은 태그의 표기 차이를 하나로 (`lib/tagSearch` 와 같은 규칙) */
+const normTag = (s: string) => s.toLowerCase().replace(/_/g, " ").trim();
+
+/** 그 파일이 이 폴더에 **바로** 놓여 있나 — 폴더 목록과 같은 판정이다 (하위는 안 센다) */
+const inFolder = (rel: string, folder: string) => {
+  const at = rel.lastIndexOf("/");
+  return (at < 0 ? "" : rel.slice(0, at)) === folder;
+};
+
 type S = {
   folders: GalleryFolder[];
   items: GalleryImage[];
@@ -91,6 +110,33 @@ type S = {
   page: number;
   total: number;
   hasMore: boolean;
+
+  /* ── 작가 거르기 (사용자 지시 2026-09-21) ──────────────────────────────
+     ★보관함 전체의 프롬프트를 서버가 곁파일에 모아 두고(`/api/keep/tags/*`), **태그로 쪼개고
+       작가인지 가르는 일은 화면이 한다** (`lib/tagSearch`). 쪼개는 규칙이 앱에 하나여야 해서다
+       (`backend/tagindex.py` 머리 ★★주).
+     ★파일마다 시각·크기가 곁파일에 함께 있어서, 걸러진 격자는 **서버에 다시 묻지 않고** 그것으로
+       그린다 (`artistItems`). */
+  /** 작가 칸이 펼쳐져 있나 — 펼치는 순간 색인을 증분으로 훑는다 */
+  artistOpen: boolean;
+  artistBusy: boolean;
+  artistStatus: IndexStatus | null;
+  /** 곁파일 통째 (파일 → 시각·크기·프롬프트 원문들) */
+  artistIndex: Record<string, IndexEntry>;
+  /** 태그 → 그 태그가 쓰인 파일들. 작가인 것만 든다 */
+  artistTags: Map<string, TagHit>;
+  artistQuery: string;
+  /** 눌러 둔 작가 (`normTag` 를 지난 열쇠). null 이면 안 거른다 */
+  artist: string | null;
+  artistScope: ArtistScope;
+  setArtistOpen: (v: boolean) => void;
+  setArtistQuery: (q: string) => void;
+  setArtist: (tag: string | null) => void;
+  setArtistScope: (v: ArtistScope) => void;
+  /** 색인을 증분으로 훑고 다시 센다 */
+  rescanArtists: () => Promise<void>;
+  /** 지금 조건으로 걸러진 목록 — 작가를 안 골랐으면 `null`(서버 목록을 그대로 쓴다) */
+  artistItems: () => GalleryImage[] | null;
 
   load: (ws: string) => Promise<void>;
   /** 다음 쪽 — 스크롤이 바닥에 가까워지면 부른다 */
@@ -151,6 +197,66 @@ export const useGallery = create<S>((set, get) => ({
   page: 1,
   total: 0,
   hasMore: false,
+
+  artistOpen: false,
+  artistBusy: false,
+  artistStatus: null,
+  artistIndex: {},
+  artistTags: new Map(),
+  artistQuery: "",
+  artist: null,
+  artistScope: "all",
+
+  setArtistOpen(v) {
+    set({ artistOpen: v });
+    if (v) void get().rescanArtists();
+  },
+  setArtistQuery: (artistQuery) => set({ artistQuery }),
+  setArtist: (tag) => set({ artist: tag ? normTag(tag) : null, picked: new Set(), focus: null, big: false }),
+  setArtistScope: (artistScope) => set({ artistScope }),
+
+  async rescanArtists() {
+    if (get().artistBusy) return;
+    set({ artistBusy: true });
+    try {
+      // 작가인지 가르려면 사전이 있어야 한다 — 한 번만 읽는다
+      await loadTags();
+      await api("/api/keep/tags/index", { method: "POST" });
+      for (;;) {
+        const st = await api<IndexStatus>("/api/keep/tags/status");
+        set({ artistStatus: st });
+        if (!st.running) break;
+        await sleep(400);
+      }
+      const d = await api<{ files: Record<string, IndexEntry> }>("/api/keep/tags/data");
+      const all = tallyTags(d.files);
+      // ★작가만 남긴다 — 이 칸의 쓸모가 그것 하나다. 나머지 태그까지 세면 목록이 수만 줄이 된다.
+      const artists = new Map<string, TagHit>();
+      for (const [key, hit] of all) if (isArtist(hit.t)) artists.set(key, hit);
+      set({ artistIndex: d.files, artistTags: artists });
+    } catch (e) {
+      toast(String(e), "warn");
+    } finally {
+      set({ artistBusy: false });
+    }
+  },
+
+  artistItems() {
+    const { artist, artistTags, artistIndex, artistScope, folder } = get();
+    if (!artist) return null;
+    const hit = artistTags.get(artist);
+    if (!hit) return [];
+    /* ★곁파일이 시각·크기를 들고 있으므로 그대로 칸을 짓는다. **최신순**은 격자의 기본 차례와
+       같아야 한다 (`keep.images` 의 ★★주) — `tallyTags` 가 이미 최신순으로 담아 준다. */
+    const out: GalleryImage[] = [];
+    for (const rel of hit.files) {
+      if (artistScope === "folder" && !inFolder(rel, folder)) continue;
+      const e = artistIndex[rel];
+      if (!e) continue;
+      out.push({ file: rel, name: rel.split("/").pop() ?? rel, size: e.s, mtime: e.m });
+    }
+    return out;
+  },
 
   async load(ws) {
     if (!ws) return;
@@ -366,6 +472,9 @@ export const useGallery = create<S>((set, get) => ({
     });
     if (!only) set({ picked: new Set() });
     await get().load(ws);
+    // ★곁파일에는 지운 그림이 아직 남아 있다 — 다시 훑어야 작가 거르기에서도 빠진다.
+    //   증분이라 바뀐 것만 읽고, 기다리지 않는다 (지우기가 그만큼 늦어질 이유가 없다).
+    if (get().artistOpen) void get().rescanArtists();
     if (r.trashed?.length)
       undoToast(t("common.trashed", { n: r.trashed.length }), t("common.undo"), async () => {
         await api(`/api/keep/restore`, {
@@ -390,6 +499,8 @@ export const useGallery = create<S>((set, get) => ({
     });
     set({ picked: new Set() });
     await get().load(ws);
+    // 옮기면 곁파일의 경로가 어긋난다 — 위 `remove` 와 같은 이유로 다시 훑는다
+    if (get().artistOpen) void get().rescanArtists();
     return r.moved.length;
   },
 }));
