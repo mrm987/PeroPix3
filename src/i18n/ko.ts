@@ -1142,6 +1142,12 @@ export const ko: Dict = {
     artistAlways: "항상 전체 작가 보이기",
     artistAlwaysTip: "작가를 고르지 않아도 썸네일에 그 그림의 작가를 전부 적습니다. 골라 둔 작가는 진하게 보입니다.",
     artistColor: "작가 색 바꾸기",
+    /** 고른 그림의 작가를 여기 보여 준다 (사용자 지시 2026-09-21) */
+    artistOf: "고른 그림의 작가",
+    artistOfNone: "작가 태그 없음",
+    artistOfUnknown: "색인에 없는 그림입니다. 색인을 갱신하면 들어옵니다.",
+    artistCopyAll: "전체 복사",
+    artistCopyOne: "눌러서 복사",
     all: "gallery",
     /** 폴더 밖(뿌리)으로 되돌리는 드롭 자리 — 끌고 있을 때만 뜬다 */
     countImages: "{n}장",

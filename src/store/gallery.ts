@@ -76,6 +76,12 @@ export type ArtistScope = "all" | "folder";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** 그 파일이 이 폴더에 **바로** 놓여 있나 — 폴더 목록과 같은 판정이다 (하위는 안 센다) */
+/* ★★**파일 → 작가들**을 한 번만 짓고 들고 있는다 (`artistsByFile`).
+   여는 열쇠는 `artistTags` **그 자체**다 — 훑고 나면 새 Map 으로 갈리므로, 같은 것이면
+   지어 둔 것을 그대로 준다. 칸마다 훑으면 수천 번을 돌고, 화면마다 따로 지으면 창구가 둘이 된다. */
+let _byFileFor: Map<string, TagHit> | null = null;
+let _byFile = new Map<string, string[]>();
+
 const inFolder = (rel: string, folder: string) => {
   const at = rel.lastIndexOf("/");
   return (at < 0 ? "" : rel.slice(0, at)) === folder;
@@ -144,6 +150,11 @@ type S = {
   rescanArtists: () => Promise<void>;
   /** 지금 조건으로 걸러진 목록 — 작가를 안 골랐으면 `null`(서버 목록을 그대로 쓴다) */
   artistItems: () => GalleryImage[] | null;
+  /** ★★**파일 → 그 그림이 가진 작가들** — 「이 그림의 작가가 누구인가」를 묻는 **하나의 창구**다.
+   *  쓰는 자리 둘: 격자 칸에 이름을 적는 곳(`panels/Gallery`)과 고른 그림의 작가를 보여 주는 곳
+   *  (`panels/GalleryFolders`). 자리마다 따로 짜면 한쪽만 고쳐져 같은 그림에 다른 작가가 뜬다.
+   *  ★색인이 바뀔 때만 다시 짓는다 (아래 `_byFile` 주석). */
+  artistsByFile: () => Map<string, string[]>;
 
   load: (ws: string) => Promise<void>;
   /** 다음 쪽 — 스크롤이 바닥에 가까워지면 부른다 */
@@ -253,6 +264,21 @@ export const useGallery = create<S>((set, get) => ({
     } finally {
       set({ artistBusy: false });
     }
+  },
+
+  artistsByFile() {
+    const { artistTags } = get();
+    if (_byFileFor !== artistTags) {
+      _byFileFor = artistTags;
+      _byFile = new Map();
+      for (const hit of artistTags.values())
+        for (const rel of hit.files) {
+          const had = _byFile.get(rel);
+          if (had) had.push(hit.t);
+          else _byFile.set(rel, [hit.t]);
+        }
+    }
+    return _byFile;
   },
 
   /* ★곁파일이 시각·크기를 들고 있으므로 서버에 다시 묻지 않고 그대로 칸을 짓는다.

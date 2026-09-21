@@ -431,8 +431,8 @@ const SHOW_ARTISTS = 60;
 function ArtistFilter() {
   const t = useI18n((s) => s.t);
   const { artistOpen, artistBusy, artistStatus, artistTags, artistQuery, artists, artistScope, artistIndex,
-          folder, setArtistOpen, setArtistQuery, toggleArtist, clearArtists, setArtistScope, rescanArtists } =
-    useGallery();
+          folder, focus, artistsByFile, setArtistOpen, setArtistQuery, toggleArtist, clearArtists,
+          setArtistScope, rescanArtists } = useGallery();
   const artistH = useUi((s) => s.artistH);
   const setArtistH = useUi((s) => s.setArtistH);
   /** 작가마다 칠해 둔 색 — 점을 누르면 다음 색으로 돌아간다 (블록 머리의 색 점과 같다) */
@@ -456,6 +456,14 @@ function ArtistFilter() {
       .filter((h) => h.n > 0)
       .sort((a, b) => b.n - a.n || a.t.localeCompare(b.t));
   }, [artistTags, artistQuery, artistScope, folder, artistIndex]);
+
+  /* ★★**고른 그림의 작가** — 격자에서 고르면 여기 뜬다 (사용자 지시 2026-09-21: 「역으로」).
+     ★대상은 **마지막에 누른 한 장**(`focus`)이다 — 오른쪽 그림 정보 패널이 보는 것과 같은 장이라,
+       두 패널이 서로 다른 그림을 말하지 않는다.
+     ★표는 저장소가 하나만 짓는다 (`artistsByFile`) — 격자 칸에 적히는 이름과 같은 것이다. */
+  const ofFocus = focus ? artistsByFile().get(focus) : undefined;
+  const copy = (text: string) =>
+    void navigator.clipboard?.writeText(text).then(() => toast(t("act.copied")));
 
   const scopeBtn = (v: "all" | "folder", label: string) => (
     <button
@@ -546,6 +554,67 @@ function ArtistFilter() {
           </button>
         )}
       </div>
+
+      {/* ★★**고른 그림의 작가** (사용자 지시 2026-09-21). 목록이 길어도 안 밀리도록 **스크롤 칸 밖**에
+          둔다 — 고른 순간 보이지 않으면 없는 것과 같다. 고른 그림이 없으면 아예 안 그린다. */}
+      {artistOpen && focus && (
+        <div
+          data-artist-of={focus}
+          style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: 3,
+                   padding: "0 var(--sp-2) var(--sp-2)" }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-3xs)", color: "var(--ink-faint)",
+                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {t("gallery.artistOf")}
+            </span>
+            {ofFocus && ofFocus.length > 0 && (
+              <button
+                data-artist-copy-all
+                onClick={() => copy(ofFocus.join(", "))}
+                data-tip={t("gallery.artistCopyAll")}
+                style={{ display: "grid", padding: 2, borderRadius: "var(--r-1)", color: "var(--ink-faint)" }}
+              >
+                {Icon.copy}
+              </button>
+            )}
+          </div>
+          {!ofFocus || !ofFocus.length ? (
+            <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-ghost)" }}>
+              {t(artistIndex[focus] ? "gallery.artistOfNone" : "gallery.artistOfUnknown")}
+            </span>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, maxHeight: 92, overflowY: "auto" }}>
+              {ofFocus.map((tag) => {
+                const hex = artistColor[normTag(tag)] ? COLOR_HEX[artistColor[normTag(tag)]!] : null;
+                return (
+                  <button
+                    key={tag}
+                    data-artist-of-tag={tag}
+                    /* ★누르면 **그 하나만 복사**한다 — 거르는 것은 아래 목록의 일이다 */
+                    onClick={() => copy(tag)}
+                    data-tip={t("gallery.artistCopyOne")}
+                    style={{
+                      maxWidth: "100%",
+                      padding: "1px 6px",
+                      borderRadius: "var(--r-1)",
+                      border: `1px solid ${hex ?? "var(--line)"}`,
+                      background: hex ? `${hex}26` : "var(--bg)",
+                      color: hex ?? "var(--ink-soft)",
+                      fontSize: "var(--text-2xs)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {artistOpen && (
         <div

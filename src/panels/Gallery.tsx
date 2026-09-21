@@ -50,7 +50,8 @@ export function Gallery() {
   /** ★별표는 **보관함이 든다** — 워크스페이스가 아니다 (store/gallery.ts `starred` 주석) */
   const { items, folders, picked, focus, big, meta, loading, total, hasMore, load, more, setFocus, setBig,
           togglePick, setPicked, pickAll, clearPick, remove, moveTo, isStarred, toggleStar, rename, vibeMode,
-          artists, artistScope, folder, artistItems, artistTags, artistBusy, rescanArtists } = useGallery();
+          artists, artistScope, folder, artistItems, artistTags, artistBusy, rescanArtists,
+          artistsByFile } = useGallery();
   /** ★작가를 안 골랐어도 칸마다 작가를 적나 (사용자 지시 2026-09-21) */
   const artistAlways = useUi((s) => s.artistAlways);
   const [dest, setDest] = useState("");
@@ -65,20 +66,10 @@ export function Gallery() {
   useEffect(() => setArtistShown(PAGE), [artists, artistScope, folder, starOnly]);
 
   /* ★★「항상 전체 작가 보이기」를 켜면 **고르지 않은 작가까지** 칸에 적는다 (사용자 지시 2026-09-21).
-     `artistItems` 가 실어 주는 것은 **고른 작가**뿐이라, 여기서 곁파일을 뒤집어 파일마다 제
-     작가를 모아 둔다. ★색인이 바뀔 때만 다시 짓는다 — 칸마다 훑으면 수천 번을 돈다. */
-  const byFile = useMemo(() => {
-    if (!artistAlways) return null;
-    const m = new Map<string, string[]>();
-    for (const hit of artistTags.values()) {
-      for (const rel of hit.files) {
-        const had = m.get(rel);
-        if (had) had.push(hit.t);
-        else m.set(rel, [hit.t]);
-      }
-    }
-    return m;
-  }, [artistAlways, artistTags]);
+     `artistItems` 가 실어 주는 것은 **고른 작가**뿐이라, 파일마다 제 작가를 모아 둔 표를 쓴다.
+     ★그 표는 **저장소가 하나만 짓는다** (`artistsByFile`) — 작가 칸의 「고른 그림의 작가」도
+       같은 것을 본다. 화면마다 따로 지으면 같은 그림에 다른 작가가 뜬다. */
+  const byFile = artistAlways ? artistsByFile() : null;
   /** 골라 둔 작가 — 칸에서 이것만 진하게 보인다 */
   const onSet = useMemo(() => new Set(artists), [artists]);
 
