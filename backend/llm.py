@@ -206,6 +206,7 @@ CURATED = {
         "openai/gpt-5.6-sol",
         "x-ai/grok-4.6",   # ★4.5 → 4.6 (사용자 지시 2026-08-30: 목록에 4.6 이 떠서 올렸다)
         "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4.1-flash",   # ★사용자 지시 2026-09-22
         "qwen/qwen3.8-max",
     ],
 }
@@ -439,7 +440,15 @@ async def models(llm: dict) -> dict:
                 # 제미나이는 추론이 필수다 — 사실상 끄기는 `minimal` 이다
                 row["reasoningLocked"] = True
             out.append(row)
-        attach_windows("vertex", out, await or_windows())
+        # ★★**상위 버전은 오픈라우터 공개 목록에서 찾는다** (사용자 지적 2026-09-22: 3.7 Flash 가 있는데 3.8 이 안 떴다).
+        #   Vertex 는 목록 API 가 API 키를 안 받아(`publishers/google/models` 는 OAuth 만, 실측 401) 고정 목록뿐인데,
+        #   그러면 `newer_than` 이 볼 상대가 없어 새 판이 영영 안 뜬다. 오픈라우터의 `google/…` 이 같은 이름을 쓰므로
+        #   그것을 상대로 삼는다 (`:batch` 같은 변종은 뺀다).
+        #   ★오픈라우터에 있다고 Vertex 에도 반드시 있는 것은 아니다 — `new` 표시로 뜨고, 없으면 그 모델의 404 가 그대로 보인다.
+        win = await or_windows()
+        cands = [{"id": i.split("/", 1)[1]} for i in win if i.startswith("google/gemini-") and ":" not in i]
+        out += newer_than(VERTEX_MODELS, cands)
+        attach_windows("vertex", out, win)
         return {"models": out, "fixed": True}
     key = llm.get("key", "")
     if pid == "local":
