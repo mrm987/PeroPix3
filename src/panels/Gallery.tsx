@@ -54,6 +54,8 @@ export function Gallery() {
           artistsByFile } = useGallery();
   /** ★작가를 안 골랐어도 칸마다 작가를 적나 (사용자 지시 2026-09-21) */
   const artistAlways = useUi((s) => s.artistAlways);
+  /** ★작가 칸을 펼쳐 두었나 — 펼친 채로 앱을 켜면 색인을 여기서 당긴다 */
+  const artistOpen = useUi((s) => s.artistOpen);
   const [dest, setDest] = useState("");
   /** ★별표는 **거르는 장치**다 — 큰 그림에 별표 버튼을 두지 않는다 (사용자 지시 2026-08-05) */
   const [starOnly, setStarOnly] = useState(false);
@@ -73,12 +75,13 @@ export function Gallery() {
   /** 골라 둔 작가 — 칸에서 이것만 진하게 보인다 */
   const onSet = useMemo(() => new Set(artists), [artists]);
 
-  /* ★★**켜 둔 채로 앱을 켜면 색인이 비어 있다** — 작가 칸은 접힌 채로 시작하므로 훑을 일이
-     없어, 「항상 보이기」가 켜져 있어도 칸에 아무것도 안 뜬다. 그래서 여기서 한 번 당긴다.
-     ★중앙이라서 여기 둔다 — 좌우 패널은 접으면 언마운트된다 (`CLAUDE.md` 의 그 함정). */
+  /* ★★**켜 둔 채로 앱을 켜면 색인이 비어 있다** — 색인은 파일에 안 남고 앱이 켜질 때 비어 있어서,
+     「항상 보이기」나 펼쳐 둔 작가 칸이 살아 돌아와도 보여 줄 것이 없다. 그래서 여기서 한 번 당긴다.
+     ★중앙이라서 여기 둔다 — 좌우 패널은 접으면 언마운트된다 (`CLAUDE.md` 의 그 함정).
+     ★비어 있을 때만이다. 펼칠 때마다 훑는 것은 그 단추가 한다 (`panels/GalleryFolders`). */
   useEffect(() => {
-    if (artistAlways && !artistTags.size && !artistBusy) void rescanArtists();
-  }, [artistAlways, artistTags, artistBusy, rescanArtists]);
+    if ((artistAlways || artistOpen) && !artistTags.size && !artistBusy) void rescanArtists();
+  }, [artistAlways, artistOpen, artistTags, artistBusy, rescanArtists]);
 
   const source = filtered ?? items;
   const all = starOnly ? source.filter((i) => isStarred(i.file)) : source;

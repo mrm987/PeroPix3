@@ -90,6 +90,11 @@ type Persisted = {
    *  ★작가 목록이 길어 폴더 목록을 밀어 버렸다 (사용자 지적 2026-09-21) — 어느 쪽을 넓게
    *    볼지는 그때그때 다르므로 값 하나로 두고 사람이 정한다. */
   artistH: number;
+  /** 작가 필터를 **펼쳐 두었나** (사용자 지시 2026-09-21: 다시 켜도 펼친 채로).
+   *  ★여기 사는 이유: 패널 접힘은 화면 상태라 저장하는 자리가 여기다 (`leftCollapsed`·`view.fold`
+   *    와 같은 갈래). 갤러리 저장소에 두면 앱을 켤 때마다 접힌 채로 시작한다.
+   *  ★펼칠 때 색인을 훑는 일은 그대로 갤러리 저장소가 한다 (`rescanArtists`). */
+  artistOpen: boolean;
   /** 작가마다 칠해 둔 색 — 열쇠는 `normTag` 를 지난 태그다 (사용자 지시 2026-09-21).
    *  ★색은 **블록과 같은 일곱 가지**다 (`lib/blocks` 의 `COLORS`) — 같은 점을 누르는 조작이라
    *    고를 수 있는 색이 다르면 같은 장치로 안 읽힌다.
@@ -231,6 +236,7 @@ const DEFAULTS: Persisted = {
   laneHeadW: 286,
   laneHeight: 302,
   artistH: 240,
+  artistOpen: false,
   artistColor: {},
   artistAlways: false,
   curated: false,
@@ -310,6 +316,7 @@ type S = Persisted & {
   /** 작가의 색을 **다음 색으로 돌린다** — 블록 머리의 색 점과 같은 조작이다 */
   cycleArtistColor: (tag: string) => void;
   setArtistAlways: (v: boolean) => void;
+  setArtistOpen: (v: boolean) => void;
   setLeftWidth: (w: number) => void;
   setAiWidth: (w: number) => void;
   toggleAi: () => void;
@@ -415,6 +422,10 @@ export const useUi = create<S>((set, get) => ({
   },
   setArtistAlways: (v) => {
     set({ artistAlways: v });
+    get().commitLayout();
+  },
+  setArtistOpen: (v) => {
+    set({ artistOpen: v });
     get().commitLayout();
   },
   /** 세로 모드의 씬 폭 — ★**칸 하나만 남을 만큼까지 줄인다** (사용자 지시 2026-08-22).
@@ -581,7 +592,7 @@ export const useUi = create<S>((set, get) => ({
     //   `notifyDone`·`perSlot`·`curated` 가 빠져 있어, 켜 놓아도 껐다 켜면 기본값으로
     //   돌아갔다 (감사 2026-08-16). 필드를 늘리면 **여기에도 더할 것.**
     const { leftWidth, rightWidth, leftCollapsed, rightCollapsed, cols, laneSize, laneHeadW,
-      laneHeight, artistH, artistColor, artistAlways, font, textScale, importPick, aiWidth, aiCollapsed,
+      laneHeight, artistH, artistOpen, artistColor, artistAlways, font, textScale, importPick, aiWidth, aiCollapsed,
       notifyDone, notifySound, notifyVolume, perSlot, curated, agentAuto, agentAskHard,
       tagSuggest, artistPrefix, weightHl, fmView, streamPreview, focusNewPending, enhanceLast, maskBrush, convertLast, sizeLast,
       laneSide, laneWidth, laneHeadH, view } = get();
@@ -598,6 +609,7 @@ export const useUi = create<S>((set, get) => ({
           laneHeadW,
           laneHeight,
           artistH,
+          artistOpen,
           artistColor,
           artistAlways,
           font,

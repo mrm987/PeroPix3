@@ -430,9 +430,12 @@ const SHOW_ARTISTS = 60;
  *    경계를 끌면 이 칸이 자라고 폴더 목록이 그만큼 줄어든다 (`useUi.artistH`). */
 function ArtistFilter() {
   const t = useI18n((s) => s.t);
-  const { artistOpen, artistBusy, artistStatus, artistTags, artistQuery, artists, artistScope, artistIndex,
-          folder, focus, artistsByFile, setArtistOpen, setArtistQuery, toggleArtist, clearArtists,
+  const { artistBusy, artistStatus, artistTags, artistQuery, artists, artistScope, artistIndex,
+          folder, focus, artistsByFile, setArtistQuery, toggleArtist, clearArtists,
           setArtistScope, rescanArtists } = useGallery();
+  /** ★펼침은 **저장되는 화면 상태**다 (`useUi`) — 다시 켜도 펼친 채로 (사용자 지시 2026-09-21) */
+  const artistOpen = useUi((s) => s.artistOpen);
+  const setArtistOpen = useUi((s) => s.setArtistOpen);
   const artistH = useUi((s) => s.artistH);
   const setArtistH = useUi((s) => s.setArtistH);
   /** 작가마다 칠해 둔 색 — 점을 누르면 다음 색으로 돌아간다 (블록 머리의 색 점과 같다) */
@@ -516,7 +519,12 @@ function ArtistFilter() {
         <button
           data-artist-toggle
           data-on={artistOpen ? "" : undefined}
-          onClick={() => setArtistOpen(!artistOpen)}
+          /* ★펼치는 순간 색인을 증분으로 훑는다 — 그 사이 늘어난 그림이 목록에 들어온다.
+             (켜 둔 채로 앱을 켠 경우는 중앙이 당긴다, `panels/Gallery` 의 그 effect) */
+          onClick={() => {
+            setArtistOpen(!artistOpen);
+            if (!artistOpen) void rescanArtists();
+          }}
           style={{
             flex: 1,
             minWidth: 0,

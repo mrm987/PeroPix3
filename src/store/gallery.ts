@@ -4,6 +4,7 @@ import { t } from "../i18n";
 import { toast, undoToast } from "./toast";
 import { loadTags } from "../lib/tagData";
 import { isArtist, normTag, tallyTags, type IndexEntry, type TagHit } from "../lib/tagSearch";
+import { useUi } from "./ui";
 
 /** 갤러리 — 워크스페이스에 쌓인 그림을 훑어 본다.
  *
@@ -75,13 +76,13 @@ export type ArtistScope = "all" | "folder";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** 그 파일이 이 폴더에 **바로** 놓여 있나 — 폴더 목록과 같은 판정이다 (하위는 안 센다) */
 /* ★★**파일 → 작가들**을 한 번만 짓고 들고 있는다 (`artistsByFile`).
    여는 열쇠는 `artistTags` **그 자체**다 — 훑고 나면 새 Map 으로 갈리므로, 같은 것이면
    지어 둔 것을 그대로 준다. 칸마다 훑으면 수천 번을 돌고, 화면마다 따로 지으면 창구가 둘이 된다. */
 let _byFileFor: Map<string, TagHit> | null = null;
 let _byFile = new Map<string, string[]>();
 
+/** 그 파일이 이 폴더에 **바로** 놓여 있나 — 폴더 목록과 같은 판정이다 (하위는 안 센다) */
 const inFolder = (rel: string, folder: string) => {
   const at = rel.lastIndexOf("/");
   return (at < 0 ? "" : rel.slice(0, at)) === folder;
@@ -127,8 +128,6 @@ type S = {
        (`backend/tagindex.py` 머리 ★★주).
      ★파일마다 시각·크기가 곁파일에 함께 있어서, 걸러진 격자는 **서버에 다시 묻지 않고** 그것으로
        그린다 (`artistItems`). */
-  /** 작가 칸이 펼쳐져 있나 — 펼치는 순간 색인을 증분으로 훑는다 */
-  artistOpen: boolean;
   artistBusy: boolean;
   artistStatus: IndexStatus | null;
   /** 곁파일 통째 (파일 → 시각·크기·프롬프트 원문들) */
@@ -140,7 +139,6 @@ type S = {
    *  ★여럿이면 **하나라도 들었으면** 보여 준다 (사용자 지시 2026-09-21). */
   artists: string[];
   artistScope: ArtistScope;
-  setArtistOpen: (v: boolean) => void;
   setArtistQuery: (q: string) => void;
   /** 누를 때마다 켜고 끈다 */
   toggleArtist: (tag: string) => void;
@@ -216,7 +214,6 @@ export const useGallery = create<S>((set, get) => ({
   total: 0,
   hasMore: false,
 
-  artistOpen: false,
   artistBusy: false,
   artistStatus: null,
   artistIndex: {},
@@ -225,10 +222,6 @@ export const useGallery = create<S>((set, get) => ({
   artists: [],
   artistScope: "all",
 
-  setArtistOpen(v) {
-    set({ artistOpen: v });
-    if (v) void get().rescanArtists();
-  },
   setArtistQuery: (artistQuery) => set({ artistQuery }),
   toggleArtist(tag) {
     const key = normTag(tag);
@@ -528,7 +521,7 @@ export const useGallery = create<S>((set, get) => ({
     await get().load(ws);
     // ★곁파일에는 지운 그림이 아직 남아 있다 — 다시 훑어야 작가 거르기에서도 빠진다.
     //   증분이라 바뀐 것만 읽고, 기다리지 않는다 (지우기가 그만큼 늦어질 이유가 없다).
-    if (get().artistOpen) void get().rescanArtists();
+    if (useUi.getState().artistOpen) void get().rescanArtists();
     if (r.trashed?.length)
       undoToast(t("common.trashed", { n: r.trashed.length }), t("common.undo"), async () => {
         await api(`/api/keep/restore`, {
@@ -554,7 +547,7 @@ export const useGallery = create<S>((set, get) => ({
     set({ picked: new Set() });
     await get().load(ws);
     // 옮기면 곁파일의 경로가 어긋난다 — 위 `remove` 와 같은 이유로 다시 훑는다
-    if (get().artistOpen) void get().rescanArtists();
+    if (useUi.getState().artistOpen) void get().rescanArtists();
     return r.moved.length;
   },
 }));
