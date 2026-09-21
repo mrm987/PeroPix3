@@ -55,20 +55,25 @@ export function capToolResult(s: string, max = TOOL_MAX): string {
     "Call again with narrower arguments (e.g. one tab, fewer records) to see the rest.]";
 }
 
-/** 압축 문턱 (입력 토큰). 창 크기를 알면 그 60%, 몰라도 12만을 안 넘는다.
- *  ★12만인 이유: 지금 모델들의 창이 20만~50만이고, Grok 4.6 은 입력 20만을 넘으면 단가가 두 배다.
- *    페로데스크의 50만/100만과 같은 비율(절반 언저리)이다. */
+/** 압축 문턱 (입력 토큰). **모델마다 다르다** (사용자 지시 2026-09-22: 창을 받아와 유동으로).
+ *   · 창(`ctx`)을 알면 그 60% (페로데스크의 50만/100만과 같은 비율 언저리).
+ *   · 단가가 오르는 경계(`tier`, 오픈라우터 `pricing.overrides[].min_prompt_tokens`)를 알면 **그 경계의 90%** 까지만.
+ *     문턱을 경계에 딱 맞추면 넘은 뒤에야 접혀 한 번은 두 배 단가를 낸다.
+ *   · 창을 모르면 12만 (앤트로픽·OpenAI 직접 연결은 목록 API 가 창을 안 준다).
+ *  ★한때 12만을 **상한**으로 두어 100만짜리 모델도 12만에서 접혔다 (창의 12% 만 쓰는 셈이었다). */
 export const COMPACT_AT = 120_000;
 export const COMPACT_RATIO = 0.6;
+export const TIER_MARGIN = 0.9;
 
-export function compactAt(ctx?: number | null): number {
+export function compactAt(ctx?: number | null, tier?: number | null): number {
   if (!ctx || ctx <= 0) return COMPACT_AT;
-  return Math.min(COMPACT_AT, Math.floor(ctx * COMPACT_RATIO));
+  const byWindow = Math.floor(ctx * COMPACT_RATIO);
+  return tier && tier > 0 ? Math.min(byWindow, Math.floor(tier * TIER_MARGIN)) : byWindow;
 }
 
 /** 압축이 필요한가 — 마지막 응답의 입력 토큰으로 판정한다 (재지 못했으면 안 한다: 틀린 수치로 접지 않는다) */
-export function needsCompact(usage: Usage | null | undefined, ctx?: number | null): boolean {
-  return !!usage && usage.in >= compactAt(ctx);
+export function needsCompact(usage: Usage | null | undefined, ctx?: number | null, tier?: number | null): boolean {
+  return !!usage && usage.in >= compactAt(ctx, tier);
 }
 
 /** 무엇을 접나 — 마지막 턴 앞의 전부. 접을 것이 두 메시지도 안 되면 null.

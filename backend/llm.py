@@ -420,7 +420,11 @@ async def models(llm: dict) -> dict:
         for m in d.get("models", []):
             if "generateContent" not in (m.get("supportedGenerationMethods") or []):
                 continue
-            out.append({"id": m["name"].split("/")[-1], "label": m.get("displayName") or ""})
+            row = {"id": m["name"].split("/")[-1], "label": m.get("displayName") or ""}
+            # ★창 크기 — 제미나이 목록은 `inputTokenLimit` 으로 준다 (압축 문턱이 본다)
+            if m.get("inputTokenLimit"):
+                row["ctx"] = int(m["inputTokenLimit"])
+            out.append(row)
     elif pid == "openai":
         for m in d.get("data", []):
             mid = m.get("id", "")
@@ -442,6 +446,12 @@ async def models(llm: dict) -> dict:
             # ★창 크기 — 화면의 대화 압축 문턱이 이것으로 접는다 (`lib/chatContext.ts`). 없으면 기본값
             if m.get("context_length"):
                 row["ctx"] = int(m["context_length"])
+            # ★단가가 오르는 경계 (`pricing.overrides[].min_prompt_tokens`, 예: Grok 4.6 은 20만부터 두 배).
+            #   문턱이 이 아래에 잡히도록 화면에 준다. 여럿이면 가장 낮은 것.
+            tiers = [int(o["min_prompt_tokens"]) for o in (pr.get("overrides") or [])
+                     if isinstance(o, dict) and o.get("min_prompt_tokens")]
+            if tiers:
+                row["tier"] = min(tiers)
             # ★추론 단계는 **모델이 알려 준다** — 코드에 박으면 모델마다 다른 것을 못 맞춘다
             #   (문서: "Use this when building client UIs"). `mandatory` 면 끌 수 없다.
             rs = m.get("reasoning") or {}

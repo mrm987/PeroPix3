@@ -98,6 +98,8 @@ export type ModelInfo = {
   new?: boolean;
   /** 창 크기 (토큰) — 오픈라우터가 준다. 압축 문턱이 이것으로 접는다 (`lib/chatContext.compactAt`) */
   ctx?: number;
+  /** 단가가 오르는 입력 토큰 경계 (오픈라우터 `pricing.overrides`). 있으면 문턱을 이 아래로 잡는다 */
+  tier?: number;
 };
 export type LlmConfig = {
   provider: string;
@@ -635,7 +637,7 @@ export const useLlm = create<S>((set, get) => ({
        앞 대화를 요약으로 접는다 — 페로데스크가 턴 끝에 `/compact` 를 흘려 넣는 것과 같은 자리다.
        ★못 접어도 턴은 간다 (오류는 대화에 한 줄 남는다). */
     const cur = get().models.find((m) => m.id === get().cfg?.model);
-    if (needsCompact(get().ctx, cur?.ctx)) await get().compact();
+    if (needsCompact(get().ctx, cur?.ctx, cur?.tier)) await get().compact();
     /* ★이 턴의 시작 — 앞 턴이 본 그림은 이름 한 줄로 바뀌어 나간다 (`stripOldImages`). 압축 뒤에 잰다 */
     const turnStart = turnStartOf(get().wire);
     try {

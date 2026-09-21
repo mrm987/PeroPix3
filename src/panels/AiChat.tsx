@@ -81,7 +81,8 @@ export function AiChat({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { engine, exe, scanning, detect } = useCli();
   /* ★머리의 「맥락 45k · 캐시 88%」 — 마지막 응답의 입력 토큰과 캐시 적중 (2026-09-22). API 엔진에만 있다
      (CLI 는 저쪽이 잰다). 문턱은 모델의 창 크기로 접는다 (`lib/chatContext.compactAt`). */
-  const ctxAt = compactAt(models.find((m) => m.id === cfg?.model)?.ctx);
+  const curModel = models.find((m) => m.id === cfg?.model);
+  const ctxAt = compactAt(curModel?.ctx, curModel?.tier);
   const ctxShown = ctx && engine !== "cli" ? fmtUsage(ctx) : null;
   const ws = useWs((s) => s.current);
   const tab = useWs((s) => s.activeSceneGroup());
