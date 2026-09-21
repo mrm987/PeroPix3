@@ -20,6 +20,10 @@ import { api } from "../lib/backend";
 export type Vibe = {
   /** 원본 그림 (base64, 접두어 없음) */
   image: string;
+  /** ★★**이 한 장을 쓰나** (사용자 지시 2026-09-21: 프롬프트 블록처럼 하나씩 켜고 끈다).
+   *  ★**없으면 켜진 것**이다 — 심어 둔 그림의 메타데이터·NAI 바이브 파일·캐시에서 되살릴 때는
+   *    이 칸이 없다. 그것들을 꺼진 것으로 보면 넣었는데 안 나가는 상태가 된다. */
+  on?: boolean;
   name: string;
   /** 0.01~1. ★바뀌면 인코딩을 다시 구워야 한다 (유료) — `vibe.reuse_ok` 가 판정한다 */
   info_extracted: number;
@@ -33,6 +37,8 @@ export type Vibe = {
 export type PreciseRef = {
   /** ★캔버스로 이미 다듬은 그림 (1472² · 1536×1024 · 1024×1536 중 하나, 검은 레터박스) */
   image: string;
+  /** 이 한 장을 쓰나 — 바이브와 같은 규칙이다 (없으면 켜진 것) */
+  on?: boolean;
   /** 미리보기용 원본 */
   preview: string;
   name: string;
@@ -154,6 +160,11 @@ let syncSeq = 0;
  *  화면의 예상 Anlas 가 실제 청구와 어긋난다. */
 const maskRides = (s: S) =>
   s.baseMode === "inpaint" && !!s.baseImage && (!!s.baseMask || (s.focused && !!s.tileRect));
+
+/** ★★**한 장이 켜져 있나** — 바이브·레퍼런스가 같은 규칙을 쓴다.
+ *  ★보내는 자리(`payload`)와 요금을 세는 자리(`lib/costNow`·생성 푸터)가 **같은 판정**을 써야
+ *    한다 — 갈리면 화면은 공짜라고 하는데 실제로는 Anlas 가 나간다. */
+export const inputOn = (x: { on?: boolean }) => x.on !== false;
 
 /** ★조각만 잘라 보내는가 (Focused Inpainting). **서버가 자르는 조건과 같은 식**이어야 한다
  *  (`server.py`: `if body.inpaint_rect and req.base_image`).
@@ -383,8 +394,9 @@ export const useImageInput = create<S>((set, get) => ({
         ? wholeRectMask(s.tileRect!, s.baseSize.w, s.baseSize.h)
         : s.baseMask;
     return {
-      vibe_transfer: s.vibeOn ? s.vibes : [],
-      precise_references: s.refOn ? s.refs.map((r) => ({
+      // ★꺼 둔 한 장은 안 나간다 (사용자 지시 2026-09-21)
+      vibe_transfer: s.vibeOn ? s.vibes.filter(inputOn) : [],
+      precise_references: s.refOn ? s.refs.filter(inputOn).map((r) => ({
         image: r.image, mode: r.mode, strength: r.strength, fidelity: r.fidelity,
       })) : [],
       // ★사용자 토글이다 (8절). 꺼 두면 합이 1을 넘어도 값을 그대로 보낸다

@@ -432,6 +432,8 @@ export const ko: Dict = {
     noise: "Noise",
     mask: "마스크 편집",
     maskUndo: "되돌리기 (Ctrl+Z)",
+    itemOn: "이 한 장 켜기",
+    itemOff: "이 한 장 끄기",
     cached: "구워 둠",
     drop: "여기에 그림을 놓으세요",
     normalize: "Normalize Reference Strength Values",

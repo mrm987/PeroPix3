@@ -420,6 +420,8 @@ export const ja: Dict = {
     noise: "Noise",
     mask: "マスク編集",
     maskUndo: "元に戻す (Ctrl+Z)",
+    itemOn: "この1枚をオン",
+    itemOff: "この1枚をオフ",
     cached: "キャッシュ済",
     drop: "ここに画像をドロップ",
     normalize: "Normalize Reference Strength Values",

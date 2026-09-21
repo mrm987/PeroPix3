@@ -128,6 +128,8 @@ export function ImageInputPanel() {
             src={`data:image/png;base64,${v.image}`}
             name={v.name}
             badge={v.encoded ? t("imgIn.cached") : ""}
+            on={v.on !== false}
+            onToggle={() => s.patchVibe(i, { on: v.on === false })}
             onRemove={() => s.removeVibe(i)}
             data-vibe={i}
           >
@@ -186,6 +188,8 @@ export function ImageInputPanel() {
             key={i}
             src={`data:image/png;base64,${r.preview}`}
             name={r.name}
+            on={r.on !== false}
+            onToggle={() => s.patchRef(i, { on: r.on === false })}
             onRemove={() => s.removeRef(i)}
             data-ref={i}
           >
@@ -544,6 +548,8 @@ function Card({
   name,
   badge,
   mask,
+  on,
+  onToggle,
   onRemove,
   children,
   ...rest
@@ -554,10 +560,15 @@ function Card({
   /** 칠해 둔 마스크 (base64). 있으면 **썸네일 위에 그대로 겹쳐** 보여 준다
    *  (사용자 지시 2026-08-19) — 「마스크 있음」 같은 글자보다 어디를 칠했는지가 중요하다 */
   mask?: string;
+  /** ★★**이 한 장을 쓰나** (사용자 지시 2026-09-21). 안 주면 켜고 끄는 자리가 없다
+   *  (베이스 그림은 한 장뿐이라 끄는 것이 곧 빼는 것이다). */
+  on?: boolean;
+  onToggle?: () => void;
   onRemove: () => void;
   children: React.ReactNode;
 } & Record<string, unknown>) {
   const t = useI18n((s) => s.t);
+  const off = onToggle && on === false;
   return (
     <div
       style={{
@@ -568,6 +579,8 @@ function Card({
         flexDirection: "column",
         gap: "var(--sp-2)",
         background: "var(--surface)",
+        // ★꺼진 것은 **흐리게** — 프롬프트 블록과 같은 표시다 (`blocks/BlockRow`)
+        opacity: off ? 0.45 : 1,
       }}
       {...rest}
     >
@@ -595,6 +608,19 @@ function Card({
         </span>
         {badge && (
           <span style={{ fontSize: "var(--text-3xs, 10px)", color: "var(--ok, var(--accent))" }}>{badge}</span>
+        )}
+        {/* ★★**프롬프트 블록과 같은 점 단추**다 (`blocks/BlockRow` 의 `data-block-on`) —
+            같은 「하나씩 켜고 끄기」라 생김새도 조작도 같아야 한다.
+            ★차례도 앱 전체와 같다: 켜고끄기 다음이 삭제다. */}
+        {onToggle && (
+          <button
+            data-input-on={on === false ? undefined : ""}
+            onClick={onToggle}
+            data-tip={on === false ? t("imgIn.itemOn") : t("imgIn.itemOff")}
+            style={{ color: "var(--ink-faint)", display: "grid" }}
+          >
+            {on === false ? Icon.dotOff : Icon.dotOn}
+          </button>
         )}
         <button onClick={onRemove} data-tip={t("imgIn.baseClear")} style={{ color: "var(--ink-faint)", display: "grid" }}>
           {Icon.close}

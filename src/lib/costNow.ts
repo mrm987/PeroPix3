@@ -11,7 +11,7 @@
 
 import { anlasCost, type Cost } from "./anlas.ts";
 import { modelCaps, useGen } from "../store/gen";
-import { useImageInput } from "../store/imageInput";
+import { inputOn, useImageInput } from "../store/imageInput";
 import { useSub } from "../store/sub";
 import { allScenes, useWs } from "../store/workspace";
 import { useUi } from "../store/ui";
@@ -59,9 +59,9 @@ export function costNow(rounds = 1): Cost {
     opus: (sub?.tier ?? 0) >= 3,
     opusExhausted: !!usage?.isNegative,
     // ★그 모델이 지원하지 않으면 안 나간다 — 능력표로 막아야 보내는 것과 표시가 같아진다
-    uncachedVibes: cap.vibe && img.vibeOn ? img.vibes.filter((v) => !v.encoded).length : 0,
-    activeVibes: cap.vibe && img.vibeOn ? img.vibes.length : 0,
-    refCount: cap.char_ref && img.refOn ? img.refs.length : 0,
+    uncachedVibes: cap.vibe && img.vibeOn ? img.vibes.filter((v) => inputOn(v) && !v.encoded).length : 0,
+    activeVibes: cap.vibe && img.vibeOn ? img.vibes.filter(inputOn).length : 0,
+    refCount: cap.char_ref && img.refOn ? img.refs.filter(inputOn).length : 0,
     inpaint: img.costInpaint(),
     strength: img.costStrength(),
     count: countNow(rounds),

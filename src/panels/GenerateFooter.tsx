@@ -8,7 +8,7 @@ const SEED_HINTS = ["options.seedFixedHint", "options.seedRoundHint", "options.s
 import { SEED_MODES, modelCaps, randomSeed, useGen } from "../store/gen";
 import { useQueue } from "../store/queue";
 import { allScenes, useWs } from "../store/workspace";
-import { useImageInput } from "../store/imageInput";
+import { inputOn, useImageInput } from "../store/imageInput";
 import { useUi } from "../store/ui";
 import { toast } from "../store/toast";
 import { MAX_PER_IMAGE } from "../lib/anlas";
@@ -174,8 +174,8 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
       height: size.height,
       steps: params.steps,
       opus: (sub?.tier ?? 0) >= 3,
-      refs: cap.char_ref && img.refOn ? img.refs.length : 0,
-      vibes: cap.vibe && img.vibeOn ? img.vibes.length : 0,
+      refs: cap.char_ref && img.refOn ? img.refs.filter(inputOn).length : 0,
+      vibes: cap.vibe && img.vibeOn ? img.vibes.filter(inputOn).length : 0,
       inpaint: img.costInpaint(),
       count,
       from: "generate",

@@ -422,6 +422,8 @@ export const en = {
     noise: "Noise",
     mask: "Edit mask",
     maskUndo: "Undo (Ctrl+Z)",
+    itemOn: "Turn this one on",
+    itemOff: "Turn this one off",
     cached: "Cached",
     drop: "Drop an image here",
     normalize: "Normalize Reference Strength Values",
