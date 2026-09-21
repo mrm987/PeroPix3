@@ -1083,8 +1083,8 @@ export const ja: Dict = {
     folderDelConfirm: "'{name}' フォルダを削除します",
     folderNotEmpty: "画像が入っているフォルダは削除できません。先に移動するか削除してください。",
     folders: "フォルダ",
-    /** 作家タグの絞り込み — フォルダ一覧の下の欄 */
-    artists: "作家",
+    /** 作家フィルタ — フォルダ一覧の下の欄 */
+    artists: "作家フィルタ",
     artistSearch: "作家を検索…",
     artistScopeAll: "全フォルダ",
     artistScopeFolder: "このフォルダ",
@@ -1094,7 +1094,9 @@ export const ja: Dict = {
     artistEmpty: "作家タグがありません。プロンプト付きの画像を保管するとここに集まります。",
     artistNoHit: "該当なし",
     artistMore: "あと {n} 件。検索語で絞ってください",
-    artistClear: "作家の絞り込みを解除",
+    artistClear: "作家フィルタを解除",
+    /** 何人オンかをヘッダーに出す */
+    artistOn: "{n} 人オン",
     artistCount: "{n} 枚",
     all: "gallery",
     countImages: "{n}枚",

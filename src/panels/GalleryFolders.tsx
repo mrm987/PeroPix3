@@ -10,6 +10,7 @@ import { toast } from "../store/toast";
 import { Icon } from "../components/Icon";
 import { FolderOpenButton } from "../components/FolderOpenButton";
 import { filterTags } from "../lib/tagSearch";
+import { useUi } from "../store/ui";
 
 /** 갤러리의 폴더 목록 — 좌 패널.
  *
@@ -227,9 +228,10 @@ export function GalleryFolders() {
             }}
           />
         )}
-
-        <ArtistFilter />
       </div>
+
+      {/* ★스크롤 칸 **밖**이다 — 폴더 목록과 경계를 나눠 갖고, 그 경계를 끌어 높이를 정한다 */}
+      <ArtistFilter />
 
       <div
         style={{
@@ -413,19 +415,28 @@ function Row({
 /** 작가 목록에 한 번에 보여 주는 줄 수 — 나머지는 검색어로 좁힌다 */
 const SHOW_ARTISTS = 60;
 
-/** 작가 거르기 — 폴더 목록 **아래 칸** (사용자 지시 2026-09-21: 갤러리에서 작가 태그로 찾고,
+/** 작가 필터 — 폴더 목록 **아래 칸** (사용자 지시 2026-09-21: 갤러리에서 작가 태그로 찾고,
  *  태그를 누르거나 검색어를 적어 그 작가가 든 그림만 본다).
  *
  *  ★「무엇을 골라 보나」가 이미 이 기둥에 있다 — 폴더와 같은 갈래라 같은 자리에 둔다.
  *  ★작가 판정은 **`artist:` 접두가 있거나 사전이 작가로 아는 이름**이다 (`lib/tagSearch` 의 `isArtist`).
  *  ★★**숫자는 지금 범위에서 센 값이다.** 「현재 폴더」로 좁혀 두고 전체 기준 숫자를 보여 주면
  *    눌렀을 때 그보다 적게 나와 고장으로 보인다. 그래서 범위로 거른 뒤에 센다.
- *  ★칸을 펼치는 순간 색인을 증분으로 훑는다 — 첫 훑기만 그림을 다 읽고 그 뒤로는 파일 정보뿐이다. */
+ *  ★★**누를 때마다 켜고 끈다** (사용자 지시 2026-09-21). 여럿을 켜면 **하나라도 든 그림**을
+ *    보여 주고, 격자는 작가별로 모아 준다 (`store/gallery.artistItems`).
+ *  ★칸을 펼치는 순간 색인을 증분으로 훑는다 — 첫 훑기만 그림을 다 읽고 그 뒤로는 파일 정보뿐이다.
+ *  ★★**높이는 사람이 정한다** (사용자 지적 2026-09-21: 작가 목록이 길어 폴더 목록을 밀어냈다).
+ *    경계를 끌면 이 칸이 자라고 폴더 목록이 그만큼 줄어든다 (`useUi.artistH`). */
 function ArtistFilter() {
   const t = useI18n((s) => s.t);
-  const { artistOpen, artistBusy, artistStatus, artistTags, artistQuery, artist, artistScope, artistIndex,
-          folder, setArtistOpen, setArtistQuery, setArtist, setArtistScope, rescanArtists } = useGallery();
+  const { artistOpen, artistBusy, artistStatus, artistTags, artistQuery, artists, artistScope, artistIndex,
+          folder, setArtistOpen, setArtistQuery, toggleArtist, clearArtists, setArtistScope, rescanArtists } =
+    useGallery();
+  const artistH = useUi((s) => s.artistH);
+  const setArtistH = useUi((s) => s.setArtistH);
   const [shown, setShown] = useState(SHOW_ARTISTS);
+  /** 경계를 잡은 자리 — 잡을 때의 커서 y 와 그때의 높이 */
+  const grip = useRef<{ y: number; h: number } | null>(null);
 
   /** 지금 범위에서 센 작가들 — 한 장도 없는 작가는 뺀다 */
   const hits = useMemo(() => {
@@ -461,8 +472,34 @@ function ArtistFilter() {
   );
 
   return (
-    <div style={{ marginTop: "var(--sp-3)", borderTop: "1px solid var(--line-soft)", paddingTop: "var(--sp-2)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+    <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
+      {/* ★경계를 끌어 이 칸의 높이를 정한다. 접혀 있으면 끌 것이 없다 */}
+      {artistOpen ? (
+        <div
+          data-artist-grip
+          onPointerDown={(e) => {
+            grip.current = { y: e.clientY, h: artistH };
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            if (grip.current) setArtistH(grip.current.h + (grip.current.y - e.clientY));
+          }}
+          onPointerUp={() => {
+            grip.current = null;
+            useUi.getState().commitLayout();
+          }}
+          onPointerCancel={() => {
+            grip.current = null;
+          }}
+          style={{ flexShrink: 0, height: 7, cursor: "row-resize", display: "grid", alignItems: "center" }}
+        >
+          <span style={{ height: 1, background: "var(--line)" }} />
+        </div>
+      ) : (
+        <span style={{ height: 1, background: "var(--line-soft)" }} />
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "2px var(--sp-2)" }}>
         <button
           data-artist-toggle
           data-on={artistOpen ? "" : undefined}
@@ -473,9 +510,9 @@ function ArtistFilter() {
             display: "flex",
             alignItems: "center",
             gap: "var(--sp-2)",
-            padding: "4px var(--sp-2)",
+            padding: "4px var(--sp-1)",
             borderRadius: "var(--r-2)",
-            color: artist ? "var(--accent)" : "var(--ink-soft)",
+            color: artists.length ? "var(--accent)" : "var(--ink-soft)",
             fontSize: "var(--text-xs)",
             textAlign: "left",
           }}
@@ -484,10 +521,10 @@ function ArtistFilter() {
             {artistOpen ? Icon.chevronDown12 : Icon.chevronRight12}
           </span>
           {t("gallery.artists")}
-          {artist && (
+          {artists.length > 0 && (
             <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-2xs)", opacity: 0.85,
                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {artist}
+              {t("gallery.artistOn", { n: artists.length })}
             </span>
           )}
         </button>
@@ -506,9 +543,13 @@ function ArtistFilter() {
       </div>
 
       {artistOpen && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)", padding: "var(--sp-2) 2px 0" }}>
+        <div
+          data-artist-body
+          style={{ height: artistH, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column",
+                   gap: "var(--sp-2)", padding: "0 var(--sp-2) var(--sp-2)" }}
+        >
           {/* ★범위는 **전체 폴더가 기본**이다 (사용자 지시 2026-09-21) */}
-          <div style={{ display: "flex", gap: 2 }}>
+          <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
             {scopeBtn("all", t("gallery.artistScopeAll"))}
             {scopeBtn("folder", t("gallery.artistScopeFolder"))}
           </div>
@@ -522,6 +563,7 @@ function ArtistFilter() {
               setShown(SHOW_ARTISTS);
             }}
             style={{
+              flexShrink: 0,
               width: "100%",
               padding: "4px var(--sp-2)",
               borderRadius: "var(--r-1)",
@@ -544,11 +586,11 @@ function ArtistFilter() {
             </div>
           )}
 
-          {artist && (
+          {artists.length > 0 && (
             <button
               data-artist-clear
-              onClick={() => setArtist(null)}
-              style={{ ...artistRow, color: "var(--accent)", border: "1px solid var(--accent)" }}
+              onClick={clearArtists}
+              style={{ ...artistRow, flexShrink: 0, color: "var(--accent)", border: "1px solid var(--accent)" }}
             >
               {Icon.close12}
               {t("gallery.artistClear")}
@@ -564,16 +606,17 @@ function ArtistFilter() {
           ) : (
             <>
               {hits.slice(0, shown).map((h) => {
-                const on = artist === key(h.t);
+                const on = artists.includes(key(h.t));
                 return (
                   <button
                     key={h.t}
                     data-artist={h.t}
                     data-on={on ? "" : undefined}
-                    /* 누른 것을 다시 누르면 해제된다 — 폴더와 달리 「안 고른 상태」가 기본이다 */
-                    onClick={() => setArtist(on ? null : h.t)}
+                    /* 누를 때마다 켜고 끈다 — 여럿을 켜면 하나라도 든 그림을 본다 */
+                    onClick={() => toggleArtist(h.t)}
                     style={{
                       ...artistRow,
+                      flexShrink: 0,
                       border: `1px solid ${on ? "var(--accent)" : "transparent"}`,
                       background: on ? "var(--accent-bg)" : "transparent",
                       color: on ? "var(--ink)" : "var(--ink-soft)",
@@ -590,7 +633,7 @@ function ArtistFilter() {
                 <button
                   data-artist-more
                   onClick={() => setShown((v) => v + SHOW_ARTISTS)}
-                  style={{ ...artistRow, color: "var(--ink-faint)", justifyContent: "center" }}
+                  style={{ ...artistRow, flexShrink: 0, color: "var(--ink-faint)", justifyContent: "center" }}
                 >
                   {t("gallery.artistMore", { n: hits.length - shown })}
                 </button>

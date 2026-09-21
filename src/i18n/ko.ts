@@ -1123,8 +1123,8 @@ export const ko: Dict = {
     folderDelConfirm: "'{name}' 폴더를 지웁니다",
     folderNotEmpty: "그림이 든 폴더는 지울 수 없습니다. 먼저 옮기거나 지우세요.",
     folders: "폴더",
-    /** 작가 태그 거르기 — 폴더 목록 아래 칸 (사용자 지시 2026-09-21) */
-    artists: "작가",
+    /** 작가 필터 — 폴더 목록 아래 칸 (사용자 지시 2026-09-21) */
+    artists: "작가 필터",
     artistSearch: "작가 검색…",
     artistScopeAll: "전체 폴더",
     artistScopeFolder: "현재 폴더",
@@ -1134,7 +1134,9 @@ export const ko: Dict = {
     artistEmpty: "작가 태그가 없습니다. 프롬프트가 든 그림을 보관하면 여기 모입니다.",
     artistNoHit: "검색 결과 없음",
     artistMore: "{n}명 더 있음, 검색어로 좁히세요",
-    artistClear: "작가 거르기 해제",
+    artistClear: "작가 필터 해제",
+    /** 머리줄에 몇 명을 켜 두었나 */
+    artistOn: "{n}명 켬",
     artistCount: "{n}장",
     all: "gallery",
     /** 폴더 밖(뿌리)으로 되돌리는 드롭 자리 — 끌고 있을 때만 뜬다 */

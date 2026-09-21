@@ -48,7 +48,7 @@ export function Gallery() {
   /** ★별표는 **보관함이 든다** — 워크스페이스가 아니다 (store/gallery.ts `starred` 주석) */
   const { items, folders, picked, focus, big, meta, loading, total, hasMore, load, more, setFocus, setBig,
           togglePick, setPicked, pickAll, clearPick, remove, moveTo, isStarred, toggleStar, rename, vibeMode,
-          artist, artistScope, folder, artistItems } = useGallery();
+          artists, artistScope, folder, artistItems } = useGallery();
   const [dest, setDest] = useState("");
   /** ★별표는 **거르는 장치**다 — 큰 그림에 별표 버튼을 두지 않는다 (사용자 지시 2026-08-05) */
   const [starOnly, setStarOnly] = useState(false);
@@ -58,7 +58,7 @@ export function Gallery() {
      폴더 목록용이라 걸러진 결과와 맞지 않는다. */
   const filtered = artistItems();
   const [artistShown, setArtistShown] = useState(PAGE);
-  useEffect(() => setArtistShown(PAGE), [artist, artistScope, folder, starOnly]);
+  useEffect(() => setArtistShown(PAGE), [artists, artistScope, folder, starOnly]);
 
   const source = filtered ?? items;
   const all = starOnly ? source.filter((i) => isStarred(i.file)) : source;
@@ -203,6 +203,8 @@ export function Gallery() {
               name={it.name}
               starred={isStarred(it.file)}
               picked={picked.has(it.file)}
+              /* 작가 필터로 보고 있으면 **그 그림이 가진 그 작가들**을 칸에 적는다 */
+              artists={it.artists}
               onStar={() => void toggleStar(it.file)}
               onPick={(mod) => onPick(it.file, mod)}
               onOpen={() => openBig(it.file)}
@@ -398,6 +400,7 @@ function Cell({
   name,
   starred,
   picked,
+  artists,
   onStar,
   onPick,
   onOpen,
@@ -407,6 +410,8 @@ function Cell({
   name: string;
   starred: boolean;
   picked: boolean;
+  /** 작가 필터가 걸렸을 때 이 그림이 가진 그 작가들 — 없으면 안 그린다 */
+  artists?: string[];
   onStar: () => void;
   /** 한 번 눌렀다 — 고르기 (수식키를 함께 넘긴다) */
   onPick: (mod: { ctrl: boolean; shift: boolean }) => void;
@@ -495,6 +500,32 @@ function Cell({
           style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: 0.28,
                    pointerEvents: "none" }}
         />
+      )}
+      {/* ★★**작가 필터로 볼 때는 어느 작가인지 칸에 적는다** (사용자 지시 2026-09-21).
+          여럿을 켜 두면 격자가 작가별로 모여 서는데, 어느 무리를 보고 있는지 칸에 없으면
+          경계가 안 보인다. ★`pointer-events: none` 이 필수다 — 덧그림이 커서를 가로채면
+          그 위의 누름이 칸에 안 닿는다. */}
+      {artists && artists.length > 0 && (
+        <span
+          data-cell-artists={artists.join(", ")}
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            padding: "2px 4px",
+            background: "linear-gradient(transparent, rgba(8,10,14,0.78) 45%)",
+            color: "rgba(255,255,255,0.92)",
+            fontSize: "var(--text-2xs)",
+            lineHeight: 1.35,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+          }}
+        >
+          {artists.join(" · ")}
+        </span>
       )}
       {/* ★여기서 **켜고 끈다** (페로픽스파이 `.thumb-star`). 큰 그림에는 별표를 두지 않는다 —
           견주며 고르는 일은 격자에서 일어난다. */}

@@ -84,6 +84,10 @@ type Persisted = {
   laneHeadW: number;
   /** 씬 칸 높이 — 사용자가 손잡이로 정한다 */
   laneHeight: number;
+  /** 갤러리 좌 패널에서 **작가 필터가 쓰는 높이**(px). 폴더 목록과의 경계를 끌어 바꾼다.
+   *  ★작가 목록이 길어 폴더 목록을 밀어 버렸다 (사용자 지적 2026-09-21) — 어느 쪽을 넓게
+   *    볼지는 그때그때 다르므로 값 하나로 두고 사람이 정한다. */
+  artistH: number;
   /** 생성 화면을 끄고 **슬롯만 모아 본다** — 선별 뒤 확인용 (사용자 결정 2026-08-04) */
   curated: boolean;
   /** ★슬롯당 몇 장 만드나 (페로픽스파이 `countPerSlot`). 한 번에 여러 장을 뽑아
@@ -215,6 +219,7 @@ const DEFAULTS: Persisted = {
   laneSize: 96,
   laneHeadW: 286,
   laneHeight: 302,
+  artistH: 240,
   curated: false,
   perSlot: 1,
   // ★★기본 켬 (사용자 결정 2026-09-07: 자유도 우선, `CLAUDE.md`). 되돌릴 수 없는 것만 묻는다.
@@ -288,6 +293,7 @@ type S = Persisted & {
   setLaneSize: (n: number) => void;
   setLaneHeadW: (n: number) => void;
   setLaneHeight: (n: number) => void;
+  setArtistH: (n: number) => void;
   setLeftWidth: (w: number) => void;
   setAiWidth: (w: number) => void;
   toggleAi: () => void;
@@ -377,6 +383,8 @@ export const useUi = create<S>((set, get) => ({
   setLaneSize: (n) => set({ laneSize: Math.min(LANE_MAX, Math.max(LANE_MIN, Math.round(n))) }),
   setLaneHeadW: (n) => set({ laneHeadW: Math.min(HEAD_MAX, Math.max(HEAD_MIN, Math.round(n))) }),
   setLaneHeight: (n) => set({ laneHeight: Math.max(84, Math.round(n)) }),
+  // ★아래로는 머리 한 줄, 위로는 패널을 다 먹지 않을 만큼만
+  setArtistH: (n) => set({ artistH: Math.min(720, Math.max(96, Math.round(n))) }),
   /** 세로 모드의 씬 폭 — ★**칸 하나만 남을 만큼까지 줄인다** (사용자 지시 2026-08-22).
    *  머리가 좁아지면 글이 줄바꿈으로 접히고, 그래도 모자라면 잘린다 — 큰 그림을 넓게 쓰려고
    *  줄이는 것이라 여기서 막지 않는다. */
@@ -541,7 +549,7 @@ export const useUi = create<S>((set, get) => ({
     //   `notifyDone`·`perSlot`·`curated` 가 빠져 있어, 켜 놓아도 껐다 켜면 기본값으로
     //   돌아갔다 (감사 2026-08-16). 필드를 늘리면 **여기에도 더할 것.**
     const { leftWidth, rightWidth, leftCollapsed, rightCollapsed, cols, laneSize, laneHeadW,
-      laneHeight, font, textScale, importPick, aiWidth, aiCollapsed,
+      laneHeight, artistH, font, textScale, importPick, aiWidth, aiCollapsed,
       notifyDone, notifySound, notifyVolume, perSlot, curated, agentAuto, agentAskHard,
       tagSuggest, artistPrefix, weightHl, fmView, streamPreview, focusNewPending, enhanceLast, maskBrush, convertLast, sizeLast,
       laneSide, laneWidth, laneHeadH, view } = get();
@@ -557,6 +565,7 @@ export const useUi = create<S>((set, get) => ({
           laneSize,
           laneHeadW,
           laneHeight,
+          artistH,
           font,
           textScale,
           importPick,

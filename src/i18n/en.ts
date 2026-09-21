@@ -1084,8 +1084,8 @@ export const en = {
     folderDelConfirm: "Delete the folder '{name}'",
     folderNotEmpty: "This folder still has images. Move or delete them first.",
     folders: "Folders",
-    /** Artist tag filter — the section under the folder list */
-    artists: "Artists",
+    /** Artist filter — the section under the folder list */
+    artists: "Artist filter",
     artistSearch: "Search artists…",
     artistScopeAll: "All folders",
     artistScopeFolder: "This folder",
@@ -1096,6 +1096,8 @@ export const en = {
     artistNoHit: "No matches",
     artistMore: "{n} more, narrow with a search",
     artistClear: "Clear artist filter",
+    /** How many are on, shown in the header */
+    artistOn: "{n} on",
     artistCount: "{n}",
     all: "gallery",
     countImages: "{n} images",

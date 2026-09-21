@@ -14,7 +14,14 @@ import { isArtist, tallyTags, type IndexEntry, type TagHit } from "../lib/tagSea
 
 /** ★칸 이름은 **서버가 주는 그대로**다 (`size`). 예전엔 `bytes` 로 적어 두고 서버는
  *  `size` 를 줘서 값이 언제나 undefined 였다 (`docs/v2-port-audit.md` F절). */
-export type GalleryImage = { file: string; name: string; size: number; mtime: number };
+export type GalleryImage = {
+  file: string;
+  name: string;
+  size: number;
+  mtime: number;
+  /** 작가 필터가 걸렸을 때 **이 그림이 가진 그 작가들** (고른 차례대로). 썸네일에 적는다. */
+  artists?: string[];
+};
 export type GalleryFolder = { path: string; count: number };
 
 export type ImageMeta = {
@@ -126,12 +133,15 @@ type S = {
   /** 태그 → 그 태그가 쓰인 파일들. 작가인 것만 든다 */
   artistTags: Map<string, TagHit>;
   artistQuery: string;
-  /** 눌러 둔 작가 (`normTag` 를 지난 열쇠). null 이면 안 거른다 */
-  artist: string | null;
+  /** 눌러 둔 작가들 (`normTag` 를 지난 열쇠, **고른 차례대로**). 비면 안 거른다.
+   *  ★여럿이면 **하나라도 들었으면** 보여 준다 (사용자 지시 2026-09-21). */
+  artists: string[];
   artistScope: ArtistScope;
   setArtistOpen: (v: boolean) => void;
   setArtistQuery: (q: string) => void;
-  setArtist: (tag: string | null) => void;
+  /** 누를 때마다 켜고 끈다 */
+  toggleArtist: (tag: string) => void;
+  clearArtists: () => void;
   setArtistScope: (v: ArtistScope) => void;
   /** 색인을 증분으로 훑고 다시 센다 */
   rescanArtists: () => Promise<void>;
@@ -204,7 +214,7 @@ export const useGallery = create<S>((set, get) => ({
   artistIndex: {},
   artistTags: new Map(),
   artistQuery: "",
-  artist: null,
+  artists: [],
   artistScope: "all",
 
   setArtistOpen(v) {
@@ -212,7 +222,14 @@ export const useGallery = create<S>((set, get) => ({
     if (v) void get().rescanArtists();
   },
   setArtistQuery: (artistQuery) => set({ artistQuery }),
-  setArtist: (tag) => set({ artist: tag ? normTag(tag) : null, picked: new Set(), focus: null, big: false }),
+  toggleArtist(tag) {
+    const key = normTag(tag);
+    const now = get().artists;
+    // ★고른 차례를 지킨다 — 그 차례가 곧 격자에서 무리가 서는 차례다
+    set({ artists: now.includes(key) ? now.filter((x) => x !== key) : [...now, key],
+          picked: new Set(), focus: null, big: false });
+  },
+  clearArtists: () => set({ artists: [], picked: new Set(), focus: null, big: false }),
   setArtistScope: (artistScope) => set({ artistScope }),
 
   async rescanArtists() {
@@ -241,19 +258,33 @@ export const useGallery = create<S>((set, get) => ({
     }
   },
 
+  /* ★곁파일이 시각·크기를 들고 있으므로 서버에 다시 묻지 않고 그대로 칸을 짓는다.
+     ★★차례는 **작가별로 모은다** (사용자 지시 2026-09-21). 무리가 서는 차례는 **고른 차례**이고,
+       한 그림에 고른 작가가 여럿이면 **맨 앞 것**의 무리에 든다. 무리 안은 최신순이다. */
   artistItems() {
-    const { artist, artistTags, artistIndex, artistScope, folder } = get();
-    if (!artist) return null;
-    const hit = artistTags.get(artist);
-    if (!hit) return [];
-    /* ★곁파일이 시각·크기를 들고 있으므로 그대로 칸을 짓는다. **최신순**은 격자의 기본 차례와
-       같아야 한다 (`keep.images` 의 ★★주) — `tallyTags` 가 이미 최신순으로 담아 준다. */
+    const { artists, artistTags, artistIndex, artistScope, folder } = get();
+    if (!artists.length) return null;
+    /** 파일 → 그 파일이 가진 고른 작가들 (고른 차례대로 쌓인다) */
+    const got = new Map<string, string[]>();
+    for (const key of artists) {
+      const hit = artistTags.get(key);
+      if (!hit) continue;
+      for (const rel of hit.files) {
+        if (artistScope === "folder" && !inFolder(rel, folder)) continue;
+        if (!artistIndex[rel]) continue;
+        const had = got.get(rel);
+        if (had) had.push(hit.t);
+        else got.set(rel, [hit.t]);
+      }
+    }
     const out: GalleryImage[] = [];
-    for (const rel of hit.files) {
-      if (artistScope === "folder" && !inFolder(rel, folder)) continue;
-      const e = artistIndex[rel];
-      if (!e) continue;
-      out.push({ file: rel, name: rel.split("/").pop() ?? rel, size: e.s, mtime: e.m });
+    for (const key of artists) {
+      const rels = [...got.keys()].filter((rel) => normTag(got.get(rel)![0]) === key);
+      rels.sort((a, b) => artistIndex[b].m - artistIndex[a].m);
+      for (const rel of rels) {
+        const e = artistIndex[rel];
+        out.push({ file: rel, name: rel.split("/").pop() ?? rel, size: e.s, mtime: e.m, artists: got.get(rel) });
+      }
     }
     return out;
   },
