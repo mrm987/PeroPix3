@@ -9,10 +9,20 @@
 ★★여기서는 **태그로 쪼개지 않는다.** 쪼개는 규칙(`N::` 세기, 따옴표·`text:` 보호, 줄바꿈 경계)은
   프런트 `lib/blocks.ts` 의 `parseSegs` 하나다 — 같은 규칙을 파이썬으로 옮겨 두면 창구가 둘이 되고,
   한쪽만 고쳐진다. 그래서 곁파일에는 프롬프트 **원문**만 두고, 태그 집계는 화면이 그 함수로 한다.
-★메타 읽기는 `meta.read_raw` 를 그대로 쓰되 **알파 스테가노(7단계)는 건너뛴다** (`stealth=False`) —
-  픽셀을 전부 훑는 느린 폴백이라 수천 장에는 못 쓴다. 그런 그림은 「프롬프트 없음」으로 남는다.
+★★메타 읽기는 `meta.read_raw` 를 **끝까지** 쓴다 — 알파 스테가노(7단계)를 포함한다.
+  ★★2026-09-21 까지는 `stealth=False` 로 건너뛰었다. 사용자 지적(*"작가를 못읽어오는 이미지가
+    많음"*)으로 실제 보관함 226장을 재어 보니 **못 읽은 36장 가운데 33장이 그것 때문**이었다 —
+    남이 공유한 그림은 업로드·재저장에서 PNG tEXt 가 날아가고 알파 채널만 남는다. 「남의 그림체」
+    같은 폴더가 통째로 비었다.
+  ★건너뛰던 이유(「픽셀을 전부 훑어 수천 장에는 못 쓴다」)는 실측과 맞지 않았다. 7단계는
+    **앞의 여섯이 전부 실패했을 때만** 돌고, 알파가 불투명하면 시그니처에서 곧바로 빠진다:
+    메타가 있는 그림 1ms/장, 없는 그림 26ms/장(끄면 16ms/장)이다. 첫 훑기에만 드는 값이고,
+    메타 없는 그림이 4천 장이어도 40초쯤 는다.
 ★증분이다: mtime·크기가 같은 파일은 다시 읽지 않는다. 옮기거나 지운 파일은 다음 훑기에서 빠진다.
   첫 훑기만 파일 전체를 읽고(실측 규모 4천 장·2.2GB), 그 뒤로는 stat 뿐이다.
+  ★★**읽는 방식을 바꾸면 `VERSION` 을 올린다.** 증분이라 옛 곁파일에 캐시된 「프롬프트 없음」이
+    그대로 살아남아, 고쳐도 그 그림들은 영영 안 읽힌다 (위 33장이 그렇게 될 뻔했다).
+    번호가 다르면 캐시를 통째로 버리고 한 번 다시 읽는다.
 ★곁파일은 `<루트>/.index/prompts.json` — 점 폴더라 파일 관리 트리에 안 나온다 (`files.tree`).
   네거티브는 넣지 않는다 (사용자 결정 2026-08-31: 긍정 프롬프트 전부, 네거티브 제외).
 """
@@ -29,6 +39,9 @@ from files import IMG_EXT
 
 INDEX_DIR = ".index"
 INDEX_FILE = "prompts.json"
+#: 읽는 방식의 판 번호 — 올리면 다음 훑기가 캐시를 버리고 전부 다시 읽는다 (머리 ★★주).
+#: 2 = 알파 스테가노까지 읽는다 (2026-09-21).
+VERSION = 2
 
 _lock = threading.Lock()
 #: 훑기 상태 — 백그라운드 스레드가 갱신한다 (`tagger._dl` 과 같은 꼴)
@@ -40,12 +53,17 @@ def index_path(root: Path) -> Path:
 
 
 def load(root: Path) -> dict:
-    """곁파일 통째. 없거나 깨졌으면 빈 것 — 예외로 만들지 않는다 (훑기가 새로 만든다)."""
+    """곁파일 통째. 없거나 깨졌으면 빈 것 — 예외로 만들지 않는다 (훑기가 새로 만든다).
+
+    ★★판 번호가 다른 것도 **빈 것으로 본다.** 증분이라 옛 캐시가 살아남으면 읽는 방식을
+      고쳐도 그 그림들은 다시 안 읽힌다 (머리 ★★주)."""
     try:
         d = json.loads(index_path(root).read_text("utf-8"))
     except Exception:
         return {"files": {}}
-    return d if isinstance(d, dict) and isinstance(d.get("files"), dict) else {"files": {}}
+    if not (isinstance(d, dict) and isinstance(d.get("files"), dict)):
+        return {"files": {}}
+    return d if d.get("v") == VERSION else {"files": {}}
 
 
 def status(root: Path) -> dict:
@@ -96,7 +114,8 @@ def prompts_of(path: Path) -> list[str]:
     except OSError:
         return []
     try:
-        m = meta.normalize(meta.read_raw(data, stealth=False)) or {}
+        # ★알파 스테가노까지 간다 — 남이 공유한 그림은 그것만 남아 있다 (머리 ★★주)
+        m = meta.normalize(meta.read_raw(data)) or {}
     except Exception:
         return []
     out = [m.get("prompt") or ""] + [c.get("prompt") or "" for c in (m.get("characters") or [])]
@@ -124,7 +143,7 @@ def build(root: Path, read: Callable[[Path], list[str]] = prompts_of) -> dict:
             files[rel] = {"m": st.st_mtime, "s": st.st_size, "p": read(p)}
         with _lock:
             _st["done"] += 1
-    out = {"files": files}
+    out = {"v": VERSION, "files": files}
     save(root, out)
     return out
 
