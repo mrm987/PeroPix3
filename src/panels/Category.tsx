@@ -24,6 +24,7 @@ import { Icon } from "../components/Icon";
 export function Category({
   id,
   label,
+  badge,
   right,
   defaultFolded,
   flashKey,
@@ -34,6 +35,11 @@ export function Category({
   /** 접힘을 기억하는 열쇠 */
   id: string;
   label: string;
+  /** ★★이름 **바로 옆**의 작은 딱지 — 접어 둔 채로도 안에 무엇이 들었는지 알린다
+   *  (사용자 지시 2026-09-21: *"'베이스 이미지' 섹션에 하나라도 들어있으면 뭔가 작게 표시해줘"*).
+   *  ★`right` 가 아니라 **누르는 span 안**에 넣는다 — 이름 줄 아무 데나 눌러도 접혀야 하는데,
+   *    딱지만 바깥에 두면 거기를 눌렀을 때 혼자 아무 일도 안 한다. */
+  badge?: React.ReactNode;
   /** 이름 줄 오른쪽 — 그 카테고리에 딸린 창구 (예: 블록 저장소) */
   right?: React.ReactNode;
   defaultFolded?: boolean;
@@ -114,6 +120,7 @@ export function Category({
             {Icon.chevronDown14}
           </span>
           {label}
+          {badge}
         </span>
         {right}
       </div>

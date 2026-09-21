@@ -5,6 +5,7 @@ import { Help } from "../components/Tip";
 import {
   MAX_VIBES,
   fileToBase64,
+  inputOn,
   processReference,
   pushVibe,
   useImageInput,
@@ -879,4 +880,70 @@ function Pick({
       />
     </>
   );
+}
+
+/** ★★「베이스 이미지」 묶음 이름 옆의 **작은 딱지** — 무언가 걸려 있으면 뜬다
+ *  (사용자 지시 2026-09-21: *"'베이스 이미지' 섹션에 하나라도 들어있으면 뭔가 작게 표시해줘.
+ *  호버하면 뭐가 들어있는지 보여주고"*).
+ *
+ *  ★★**접혀 있어도 보여야 한다**는 것이 이 딱지의 전부다. 이 묶음은 접히면 언마운트돼서
+ *    (`Category` 의 `{!folded && children}`), 넣어 둔 베이스 그림이 화면 어디에도 안 보인 채
+ *    생성에 실려 나갔다 (사용자 신고 2026-09-21). 그래서 **패널 밖**에 산다 — `OptionsPanel`
+ *    이 `Category` 의 `badge` 로 넘기고, 접힘과 무관하게 그려진다.
+ *  ★세는 것은 **걸려 있는 수**다 (꺼 둔 것까지). 꺼 둔 것은 지금 안 나갈 뿐 넣어 둔 것이라,
+ *    빼면 "표시가 없는데 들어 있다"가 그대로 남는다. 켜짐과 꺼짐은 툴팁이 말한다. */
+export function ImageInputBadge() {
+  const t = useI18n((s) => s.t);
+  const s = useImageInput();
+  const n = (s.baseImage ? 1 : 0) + s.vibes.length + s.refs.length;
+  if (!n) return null;
+  return (
+    <span
+      data-input-badge={n}
+      data-tip={inputTip(s, t)}
+      style={{
+        flexShrink: 0,
+        minWidth: 16,
+        padding: "0 5px",
+        borderRadius: 999,
+        background: "var(--accent)",
+        color: "var(--accent-on)",
+        fontSize: "var(--text-3xs)",
+        fontWeight: "var(--w-semi)",
+        lineHeight: "16px",
+        textAlign: "center",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      {n}
+    </span>
+  );
+}
+
+/** 목록은 여섯 줄에서 끊는다 — 바이브는 16장까지 들어가는데 다 적으면 툴팁이 화면을 덮는다 */
+const TIP_MAX = 6;
+
+/** 딱지의 툴팁 — 걸려 있는 것을 한 줄씩 적는다.
+ *  ★★**조각을 코드에서 잇지 않는다** (`lib/tipText.test.ts` ⑤번 판정). 괄호도 가운뎃점도
+ *    세는 말도 번역 문구 안에 넣고, 여기서는 **줄바꿈으로만** 잇는다. */
+function inputTip(
+  s: ReturnType<typeof useImageInput.getState>,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  const out = [t("imgIn.sumTitle")];
+  const group = (label: string, on: boolean, list: { name: string; on?: boolean }[]) => {
+    if (!list.length) return;
+    out.push(t(on ? "imgIn.sumGroup" : "imgIn.sumGroupOff", { label, n: list.length }));
+    for (const it of list.slice(0, TIP_MAX))
+      out.push(t(on && inputOn(it) ? "imgIn.sumItem" : "imgIn.sumItemOff", { name: it.name }));
+    if (list.length > TIP_MAX) out.push(t("imgIn.sumMore", { n: list.length - TIP_MAX }));
+  };
+  if (s.baseImage) {
+    // ★베이스 그림에는 켜고 끄는 스위치가 없다 — 걸려 있으면 언제나 나간다
+    out.push(t("imgIn.sumBase", { mode: t(s.baseMode === "inpaint" ? "imgIn.inpaint" : "imgIn.i2i") }));
+    if (s.baseName) out.push(t("imgIn.sumItem", { name: s.baseName }));
+  }
+  group(t("imgIn.vibe"), s.vibeOn, s.vibes);
+  group(t("imgIn.ref"), s.refOn, s.refs);
+  return out.join("\n");
 }

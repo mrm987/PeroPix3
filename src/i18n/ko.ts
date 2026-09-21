@@ -434,6 +434,15 @@ export const ko: Dict = {
     maskUndo: "되돌리기 (Ctrl+Z)",
     itemOn: "이 한 장 켜기",
     itemOff: "이 한 장 끄기",
+    /** 묶음 이름 옆 딱지의 툴팁 — 접어 둔 채로 무엇이 걸렸는지 본다 (`ImageInputBadge`).
+     *  ★조각을 코드에서 잇지 않는다. 끼움쇠까지 문구에 넣어 어순을 번역이 정한다. */
+    sumTitle: "이 탭에 걸린 그림",
+    sumBase: "베이스 이미지 ({mode})",
+    sumGroup: "{label} {n}장",
+    sumGroupOff: "{label} {n}장 (꺼짐)",
+    sumItem: "· {name}",
+    sumItemOff: "· {name} (꺼짐)",
+    sumMore: "· 외 {n}장",
     cached: "구워 둠",
     drop: "여기에 그림을 놓으세요",
     normalize: "Normalize Reference Strength Values",
