@@ -81,7 +81,7 @@ jobs:
             --arg dl "$DL" \
             --arg repo "https://github.com/${{ github.repository }}" \
             '"🚀 **PeroPix \($tag)** 릴리즈!" as $head
-             | "\n\n📥 [내려받기](\($dl))  ·  🔗 [깃허브](\($repo))" as $tail
+             | "\n\n📥 [Download](\($dl))  ·  🔗 [GitHub](\($repo))" as $tail
              | (2000 - ($head | length) - ($tail | length) - 3) as $room
              | ($body | if length > $room then .[0:$room] + "…" else . end) as $b
              | (if ($b | gsub("\\s"; "")) == "" then "" else "\n\n" + $b end) as $mid
