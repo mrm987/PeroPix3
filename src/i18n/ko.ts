@@ -977,6 +977,11 @@ export const ko: Dict = {
     compact: "대화 압축 (마지막 턴만 남기고 앞을 요약)",
     compactNote: "압축: 앞 메시지 {n}개를 요약으로 접었습니다",
     compactFail: "압축하지 못했습니다: {e}",
+    /** 줄 지우기·되감기 (2026-09-22) — 지운 것은 다음 요청부터 맥락에 안 간다 */
+    dropLine: "이 줄 지우기",
+    rewindHere: "여기서부터 다시 (이 말과 그 뒤를 지우고 입력칸에 되돌림)",
+    cutAfter: "이 답변 뒤를 지우기",
+    removedN: "메시지 {n}개를 지웠습니다",
     noHistory: "아직 지난 대화가 없습니다.",
     untitled: "(제목 없음)",
     pickN: "이걸로 ({n})",

@@ -108,14 +108,60 @@ export function summaryInput(head: Wire[]): string {
   return lines.join("\n");
 }
 
+/** 요약 조각의 첫 줄. 되감기가 사용자의 글과 요약을 가르는 표식이기도 하다 (`rewindPlan`) */
+export const SUMMARY_HEAD = "[Summary of the earlier conversation]";
+
 /** 요약을 대화에 적용한다 — `tail` 의 첫 사용자 메시지 앞에 요약 글 조각을 끼우고, 그 앞에 화면용 `note` 를 둔다.
  *  ★요약을 **따로 메시지로 두지 않는다**: 사용자 메시지 둘이 잇따르면 규격에 따라 합쳐지거나(앤트로픽) 거절된다(제미나이).
  *    첫 사용자 메시지의 조각으로 넣으면 세 규격 모두 그대로 간다. */
 export function applySummary(tail: Wire[], summary: string, note: string): Wire[] {
   const [first, ...rest] = tail;
-  const prefix: Part = { type: "text", text: `[Summary of the earlier conversation]\n${summary.trim()}\n[End of summary]` };
+  const prefix: Part = { type: "text", text: `${SUMMARY_HEAD}\n${summary.trim()}\n[End of summary]` };
   const marker: Wire = { role: "assistant", content: [{ type: "note", text: note }] };
   return [marker, { ...first, content: [prefix, ...first.content] }, ...rest];
+}
+
+/** 화면의 줄이 저장된 대화의 어느 메시지(`i`)·조각(`p`)에서 왔는지. 지우기·되감기가 쓴다 (사용자 지시 2026-09-22) */
+export type LineAt = { i: number; p: number };
+
+/** 되감기가 자를 자리. 사용자 말 줄은 **그 말부터**(`i`), 턴을 끝낸 조수 답은 **그 다음부터**(`i + 1`). 자를 수 없으면 null.
+ *  ★되감기는 언제나 **턴 경계**에서만 자른다. 도구 호출과 결과가 짝이라 낱개로 빼면 공급자가 요청을 거절한다.
+ *   · 턴 중간의 조수 말(같은 메시지에 `tool_use` 가 있다)은 안 된다.
+ *   · 사용자 말도 **턴을 여는 것**만 된다. 조수가 본 그림도 사용자 메시지로 실리는데(`store/llm` 의 shots) 그 앞은
+ *     도구 결과라, 거기서 자르면 도구 결과로 끝나는 대화가 남는다. 앞 메시지가 없거나 도구를 안 부른 조수 메시지여야 한다. */
+export function cutFor(wire: Wire[], i: number): number | null {
+  const m = wire[i];
+  if (!m) return null;
+  const hasTool = (x: Wire) => x.content.some((b) => b.type === "tool_use");
+  if (m.role === "user") {
+    const said = m.content.some((b) => b.type === "text" && !b.hidden && b.text.trim());
+    const prev = wire[i - 1];
+    return said && (!prev || (prev.role === "assistant" && !hasTool(prev))) ? i : null;
+  }
+  const hasText = m.content.some((b) => b.type === "text" && b.text.trim());
+  return hasText && !hasTool(m) ? i + 1 : null;
+}
+
+/** 조각 하나를 뺀다 (오류·압축 줄). 조각이 다 빠진 메시지는 통째로 뺀다. 저장된 대화가 바뀌는 자리다 */
+export function dropPart(wire: Wire[], at: LineAt): Wire[] {
+  const m = wire[at.i];
+  if (!m || !m.content[at.p]) return wire;
+  const content = m.content.filter((_, k) => k !== at.p);
+  return content.length ? wire.map((x, k) => (k === at.i ? { ...x, content } : x)) : wire.filter((_, k) => k !== at.i);
+}
+
+/** 되감기 — `i` 번째 줄에서 시작해 `cutFor` 가 정한 자리 앞만 남긴다. 자를 수 없으면 null.
+ *  ★되돌려 줄 글(`restore`)은 **사용자 말 줄에서 되감았을 때만** 그 말이다 (보이는 글만). 조수 답 뒤를 지웠을 때는
+ *    비어 있다. 그 뒤에 있던 사용자 말을 입력칸에 올려 두면 「뒤를 지웠다」가 아니라 「다시 보내려 한다」로 읽힌다 (실측 2026-09-22).
+ *  ★압축 요약 조각(`SUMMARY_HEAD`)은 사용자가 쓴 글이 아니라 되돌리지 않는다. */
+export function rewindPlan(wire: Wire[], i: number): { cut: number; keep: Wire[]; dropped: Wire[]; restore: string } | null {
+  const cut = cutFor(wire, i);
+  if (cut === null) return null;
+  const m = wire[i];
+  const restore = m.role === "user"
+    ? m.content.flatMap((b) => (b.type === "text" && !b.hidden && !b.text.startsWith(SUMMARY_HEAD) ? [b.text] : [])).join("\n")
+    : "";
+  return { cut, keep: wire.slice(0, cut), dropped: wire.slice(cut), restore };
 }
 
 /** 마지막 응답의 사용량 — 대화를 열 때 `ctx` 를 되살린다 */

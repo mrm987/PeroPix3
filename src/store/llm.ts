@@ -10,8 +10,8 @@ import { noteCliRun } from "../lib/cliCursor";
 import type { AgentAt } from "../lib/agentAt";
 import type { Addr } from "../lib/promptEdit";
 import {
-  applySummary, capToolResult, compactPlan, lastUsage, needsCompact, stripOldImages, summaryInput,
-  SUMMARY_SYSTEM, turnStartOf,
+  applySummary, capToolResult, compactPlan, dropPart, lastUsage, needsCompact, rewindPlan, stripOldImages,
+  summaryInput, SUMMARY_SYSTEM, turnStartOf, type LineAt,
 } from "../lib/chatContext";
 
 /** LLM 채팅 — **반복 작업을 대신 시키는 창구** (3.0 의 목표 중 하나, ui-guide 7절).
@@ -64,14 +64,16 @@ export type Usage = { in: number; out: number; cached: number };
 export type Wire = { role: "user" | "assistant"; content: Part[]; usage?: Usage };
 
 /** 화면에 그리는 한 줄 */
+/** ★`from` 은 그 줄이 저장된 대화의 어느 메시지·조각에서 왔는지다 — 지우기·되감기가 쓴다 (`lib/chatContext.cutFor`).
+ *  화면이 스스로 만든 줄(세션 없음 안내)에는 없다. */
 export type Line =
-  | { kind: "user"; text: string }
-  | { kind: "ai"; text: string }
+  | { kind: "user"; text: string; from?: LineAt }
+  | { kind: "ai"; text: string; from?: LineAt }
   /** ★`at` 이 있으면 **고친 줄**이다 — 읽기 줄과 다른 얼굴로 그리고, 누르면 그 자리를 연다
    *  (`lib/agentAt.ts`). 없으면 읽기만 한 것이다. */
   | { kind: "tool"; name: string; note: string; ok: boolean; at?: AgentAt }
-  | { kind: "error"; text: string }
-  | { kind: "note"; text: string };
+  | { kind: "error"; text: string; from?: LineAt }
+  | { kind: "note"; text: string; from?: LineAt };
 
 /** ★공급자는 **정확한 이름**으로 고른다 (사용자 지시 2026-08-08: "호환은 적을 필요 없음").
  *  목록·라벨·호출명 예시는 **백엔드가 정본**이다 — 규격을 아는 쪽이 거기라서. */
@@ -185,6 +187,22 @@ function noteError(text: string) {
   useLlm.setState({ wire, lines: linesOf(wire), error: "" });
 }
 
+/** 저장된 대화를 `wire` 로 갈아 끼우고 토스트로 되돌릴 수 있게 한다 (줄 지우기·되감기).
+ *  ★잰 맥락 값을 버린다 — 지운 뒤의 크기는 다음 응답이 새로 잰다. 옛 값을 두면 문턱 판정이 틀린 수치로 돈다.
+ *  ★되돌리기는 **그 사이 대화가 안 바뀌었을 때만** 듣는다 (같은 대화이고 길이가 그대로). 새 말을 보낸 뒤에 되살리면
+ *    지운 조각이 새 대화 뒤에 붙어 순서가 뒤집힌다. */
+function replaceWire(before: Wire[], wire: Wire[], n: number) {
+  const id = useLlm.getState().id;
+  useLlm.setState({ wire, lines: linesOf(wire), ctx: null });
+  void save(useLlm.getState());
+  undoToast(t("ai.removedN", { n }), t("common.undo"), () => {
+    const s = useLlm.getState();
+    if (s.id !== id || s.wire.length !== wire.length || s.sending) return;
+    useLlm.setState({ wire: before, lines: linesOf(before), ctx: lastUsage(before) });
+    void save(useLlm.getState());
+  });
+}
+
 /** 공급자에게 보낼 대화 — 오류 조각을 뺀다 (그것만 든 메시지는 통째로) */
 /** 첫 턴의 「이름부터 지어라」를 **마지막 사용자 말**에 얹는다 — 보내는 사본에만, 대화 기록에는 안 남긴다.
  *  시스템 지침을 건드리지 않아야 프롬프트 캐시가 산다 (`NAME_FIRST` 의 ★★주). */
@@ -222,16 +240,17 @@ export function lastUserAddr(wire: Wire[]): string {
 export function linesOf(wire: Wire[]): Line[] {
   const out: Line[] = [];
   const names = new Map<string, string>(); // tool_use id → 도구 이름
-  for (const m of wire) {
-    for (const b of m.content) {
+  wire.forEach((m, i) => {
+    m.content.forEach((b, p) => {
+      const from: LineAt = { i, p };
       // ★빈 글은 안 그린다 — 조수의 말은 **시작할 때 자리만 잡고** 내용은 나중에 채운다
       //   (`codexStream.ts` 의 `slot`). 그 사이의 빈 줄이 화면에 보이면 안 된다.
       if (b.type === "text") {
         // ★숨은 글(화면 주소)은 안 그린다 — 사용자가 보고 있는 자리라 되풀이할 것이 없다
-        if (b.text.trim() && !b.hidden) out.push({ kind: m.role === "user" ? "user" : "ai", text: b.text });
+        if (b.text.trim() && !b.hidden) out.push({ kind: m.role === "user" ? "user" : "ai", text: b.text, from });
       }
-      else if (b.type === "error") out.push({ kind: "error", text: b.text });
-      else if (b.type === "note") out.push({ kind: "note", text: b.text });
+      else if (b.type === "error") out.push({ kind: "error", text: b.text, from });
+      else if (b.type === "note") out.push({ kind: "note", text: b.text, from });
       else if (b.type === "tool_use") names.set(b.id, b.name);
       else if (b.type === "tool_result") {
         let ok = true;
@@ -266,8 +285,8 @@ export function linesOf(wire: Wire[]): Line[] {
         }
         out.push({ kind: "tool", name: names.get(b.tool_use_id) ?? "tool", note, ok, at });
       }
-    }
-  }
+    });
+  });
   return out;
 }
 
@@ -343,6 +362,12 @@ type S = {
   /** ★★**대화 압축** — 마지막 턴만 남기고 앞을 요약 하나로 접는다 (2026-09-22, 페로데스크의 `/compact` 와 같은 자리).
    *  문턱을 넘으면 `run` 이 보내기 전에 스스로 부르고, 머리의 단추로도 부른다. 접었으면 true. */
   compact: () => Promise<boolean>;
+  /** ★★**줄 지우기·되감기** (사용자 지시 2026-09-22). 저장된 대화에서 실제로 빠지므로 다음 요청부터 맥락에 안 간다.
+   *  `dropLine` 은 오류·압축 줄 하나를, `rewind` 는 그 자리부터 뒤를 전부 (자리는 `lib/chatContext.cutFor`).
+   *  `rewind` 는 입력칸에 되돌려 놓을 글을 돌려준다 (사용자 말부터 잘랐을 때). 자를 수 없거나 턴이 도는 중이면 null.
+   *  둘 다 토스트의 「되돌리기」로 되살린다 (앱의 되돌리기 창구 하나, `store/toast.undoToast`). */
+  dropLine: (at: LineAt) => void;
+  rewind: (i: number) => string | null;
 
   /** 지금 공급자가 주는 모델 목록. ★설정 화면과 채팅 칩이 **같은 것**을 본다 —
    *  두 곳에서 따로 받아 오면 한쪽만 갱신돼 서로 다른 목록을 보여 준다 */
@@ -739,6 +764,23 @@ export const useLlm = create<S>((set, get) => ({
       void save(get());
       drain();
     }
+  },
+
+  dropLine(at) {
+    if (get().sending || get().compacting) return;
+    const before = get().wire;
+    const wire = dropPart(before, at);
+    if (wire === before) return;
+    replaceWire(before, wire, 1);
+  },
+
+  rewind(i) {
+    if (get().sending || get().compacting) return null;
+    const before = get().wire;
+    const plan = rewindPlan(before, i);
+    if (!plan || !plan.dropped.length) return null;
+    replaceWire(before, plan.keep, plan.dropped.length);
+    return plan.restore;
   },
 
   async compact() {

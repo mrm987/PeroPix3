@@ -1,6 +1,6 @@
 import { composing } from "../lib/ime";
 import { TYPE } from "../styles/type";
-import { compactAt, fmtUsage } from "../lib/chatContext";
+import { compactAt, cutFor, fmtUsage } from "../lib/chatContext";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { useLlm, type Ask, type Confirm, type Line } from "../store/llm";
@@ -61,7 +61,7 @@ function Working({ last }: { last?: string }) {
 export function AiChat({ onOpenSettings }: { onOpenSettings: () => void }) {
   const t = useI18n((s) => s.t);
   // `id` = 지금 열려 있는 대화 (목록에서 어느 줄이 지금 것인지 표시)
-  const { cfg, lines, wire, sending, error, ask, confirm, list, id: cur, title: chatTitle, cliSessionGone,
+  const { cfg, lines, wire, sending, error, ask, confirm, list, id: cur, title: chatTitle, cliSessionGone, dropLine, rewind,
           ctx, compacting, compact, models,
           loadConfig, restore, send, stop, newChat, open, remove } = useLlm();
   const [showList, setShowList] = useState(false);
@@ -399,7 +399,22 @@ export function AiChat({ onOpenSettings }: { onOpenSettings: () => void }) {
           </div>
         )}
         {lines.map((l, i) => (
-          <Row key={i} line={l} />
+          <Row
+            key={i}
+            line={l}
+            locked={sending || compacting}
+            /* ★오류·압축 줄은 그 줄만 지운다. 사용자 말·조수 답은 그 자리부터 뒤를 되감는다 (턴 경계에서만, `cutFor`).
+               CLI 엔진은 대화가 저쪽 세션 안에 있어 되감을 수 없다 — 지우기만 둔다. */
+            onDrop={(l.kind === "error" || l.kind === "note") && l.from ? () => dropLine(l.from!) : undefined}
+            onRewind={
+              (l.kind === "user" || l.kind === "ai") && l.from && engine !== "cli" && cutFor(wire, l.from.i) !== null
+                ? () => {
+                    const back = rewind(l.from!.i);
+                    if (back) { setText(back); box.current?.focus({ preventScroll: true }); }
+                  }
+                : undefined
+            }
+          />
         ))}
         {ask && <AskCard ask={ask} />}
         {confirm && <ConfirmCard c={confirm} />}
@@ -963,14 +978,37 @@ function AskCard({ ask }: { ask: Ask }) {
   );
 }
 
-function Row({ line }: { line: Line }) {
+/** 줄 옆의 지우기·되감기 단추 — 커서를 댈 때만 보인다 (`globals.css` 의 `.ai-row`). 턴이 도는 중에는 잠긴다 */
+function RowAct({ kind, locked, onClick }: { kind: "drop" | "rewind" | "cut"; locked: boolean; onClick: () => void }) {
+  const t = useI18n((s) => s.t);
+  const tip = kind === "drop" ? t("ai.dropLine") : kind === "rewind" ? t("ai.rewindHere") : t("ai.cutAfter");
+  return (
+    <button
+      className="ai-row-act"
+      data-ai-drop={kind === "drop" ? "" : undefined}
+      data-ai-rewind={kind !== "drop" ? "" : undefined}
+      disabled={locked}
+      data-locked={locked ? "" : undefined}
+      onClick={onClick}
+      data-tip={locked ? t("ai.busyLock") : tip}
+      style={{ flexShrink: 0, color: locked ? "var(--ink-ghost)" : "var(--ink-faint)", display: "grid", marginTop: 2 }}
+    >
+      {kind === "drop" ? Icon.close12 : Icon.undo}
+    </button>
+  );
+}
+
+function Row({ line, locked = false, onDrop, onRewind }: {
+  line: Line; locked?: boolean; onDrop?: () => void; onRewind?: () => void;
+}) {
   const t = useI18n((s) => s.t);
   if (line.kind === "user")
     return (
-      <div
+      <div className="ai-row" style={{ alignSelf: "flex-end", maxWidth: "92%", display: "flex", gap: "var(--sp-1)", alignItems: "flex-start" }}>
+        {onRewind && <RowAct kind="rewind" locked={locked} onClick={onRewind} />}
+        <div
         style={{
-          alignSelf: "flex-end",
-          maxWidth: "92%",
+          minWidth: 0,
           background: "var(--accent-bg)",
           border: "1px solid var(--accent-line)",
           borderRadius: "var(--r-2)",
@@ -983,13 +1021,17 @@ function Row({ line }: { line: Line }) {
         }}
       >
         {line.text}
+        </div>
       </div>
     );
 
   if (line.kind === "ai")
     return (
-      <div
+      <div className="ai-row" style={{ display: "flex", gap: "var(--sp-1)", alignItems: "flex-start" }}>
+        <div
         style={{
+          flex: 1,
+          minWidth: 0,
           fontSize: "var(--text-chat)",
           color: "var(--ink)",
           /* ★★굵기를 **명시**한다 (사용자 지적 2026-08-25: *"응답 전체가 볼드처럼 두꺼워서
@@ -1004,23 +1046,28 @@ function Row({ line }: { line: Line }) {
         }}
       >
         <Md text={line.text} />
+        </div>
+        {onRewind && <RowAct kind="cut" locked={locked} onClick={onRewind} />}
       </div>
     );
 
   if (line.kind === "note")
     return (
-      <div
-        data-ai-note
-        style={{ alignSelf: "center", ...TYPE.eyebrow, color: "var(--ink-ghost)", padding: "2px 0" }}
-      >
-        {line.text}
+      <div className="ai-row" style={{ alignSelf: "center", display: "flex", gap: "var(--sp-1)", alignItems: "center" }}>
+        <div data-ai-note style={{ ...TYPE.eyebrow, color: "var(--ink-ghost)", padding: "2px 0" }}>
+          {line.text}
+        </div>
+        {onDrop && <RowAct kind="drop" locked={locked} onClick={onDrop} />}
       </div>
     );
 
   if (line.kind === "error")
     return (
-      <div
+      <div className="ai-row" style={{ display: "flex", gap: "var(--sp-1)", alignItems: "flex-start" }}>
+        <div
         style={{
+          flex: 1,
+          minWidth: 0,
           fontSize: "var(--text-2xs)",
           color: "var(--err-ink)",
           background: "color-mix(in srgb, var(--err) 10%, transparent)",
@@ -1033,6 +1080,8 @@ function Row({ line }: { line: Line }) {
         }}
       >
         {line.text}
+        </div>
+        {onDrop && <RowAct kind="drop" locked={locked} onClick={onDrop} />}
       </div>
     );
 

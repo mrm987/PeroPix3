@@ -162,6 +162,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .keep-folder-row:hover .keep-folder-del { opacity: 1; }
 .keep-folder-del:hover { color: var(--err); }
 
+/* 조수 대화 줄의 지우기·되감기 단추 — 커서를 댄 줄에서만 보인다 (갤러리 폴더 줄과 같은 요령, 2026-09-22).
+   늘 보이면 대화가 단추 줄로 읽힌다. 키보드로 간 것은 보인다. */
+.ai-row-act { opacity: 0; transition: opacity 120ms; }
+.ai-row:hover .ai-row-act, .ai-row-act:focus-visible { opacity: 1; }
+.ai-row-act:not(:disabled):hover { color: var(--ink); }
+
 /* 씬 가로/세로 전환 — 자주 쓰는 버튼인데 눌리는 것으로 안 보였다 (사용자 지시 2026-08-29).
    올리면 강조색이 돌아 「눌리는 것」임이 읽힌다. */
 .lane-side-btn:hover { border-color: var(--accent) !important; background: var(--accent-bg) !important; }
