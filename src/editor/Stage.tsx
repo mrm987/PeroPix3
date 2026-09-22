@@ -4,7 +4,7 @@ import { toast } from "../store/toast";
 import { useUi } from "../store/ui";
 import { canPan, centerPan, clampPan, drawSize, keepCenter, stepZoom, zoomFrom, ZOOM_MAX, ZOOM_MIN, type Pan, type Size } from "../lib/zoomView";
 import { brushScale, centerOf, cornersOf, docToLayer, hitLayer, normRect, rad } from "./model";
-import { composite, fontOf, hitPixel, makeCanvas, strokeTo, textLayout, type Layer, type Stroke } from "./pixels";
+import { composite, fontOf, makeCanvas, strokeTo, textLayout, type Layer, type Stroke } from "./pixels";
 import { useEditor, type Doc } from "./store";
 
 /** 무대 — 캔버스 한 장을 합성해 보여 주고, 도구에 따라 **누르고 끄는 것**을 받는다.
@@ -120,11 +120,12 @@ export function Stage({ doc }: { doc: Doc }) {
     for (const x of h.list) if (Math.hypot(x.p.x - p.x, x.p.y - p.y) <= tol) return { handle: x };
     return null;
   };
-  /** 그 자리의 맨 앞 레이어 (켜진 것만, **픽셀이 있는 자리**로 — 빈 자리는 지나친다). `only` 로 종류를 거른다 */
+  /** 그 자리의 맨 앞 레이어 (켜진 것만). ★판정은 화면에 보이는 **상자**다 — 픽셀로 보면 투명한 배경을 누를 때 선택이 풀려
+   *  버린다 (사용자 지적 2026-09-22). `only` 로 종류를 거른다 */
   const topLayerAt = (p: { x: number; y: number }, only?: (l: Layer) => boolean) => {
     for (let i = doc.layers.length - 1; i >= 0; i--) {
       const l = doc.layers[i];
-      if (l.on && (!only || only(l)) && hitPixel(l, p.x, p.y)) return l;
+      if (l.on && (!only || only(l)) && hitLayer(l, p.x, p.y)) return l;
     }
     return null;
   };
@@ -178,9 +179,9 @@ export function Stage({ doc }: { doc: Doc }) {
       return;
     }
 
-    // 선택 도구 — 고른 레이어의 손잡이 → **누른 자리의 맨 앞 레이어**(픽셀이 있는 것) → 아무것도 없으면 선택을 푼다
+    // 선택 도구 — 고른 레이어의 손잡이 → **누른 자리의 맨 앞 레이어**(상자 기준) → 아무 상자도 없으면 선택을 푼다
     // ★사용자 결정 2026-09-22: 앞의 레이어를 누르면 곧바로 그것이 골라진다 (한때 「고른 레이어 안이면 고른 것을 끈다」로
-    //   두었다가 되돌렸다). 빈 자리는 상자가 아니라 픽셀로 본다 — 캔버스 크기의 빈 레이어가 위에 있어도 아래 그림이 골라진다.
+    //   두었다가 되돌렸다). 판정은 화면에 보이는 상자다 — 픽셀로 봤더니 투명한 배경을 누를 때 선택이 풀렸다.
     if (sel) {
       const h = hitHandle(sel, p);
       if (h && "rotate" in h) {
