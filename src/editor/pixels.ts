@@ -130,6 +130,23 @@ export function renderText(t: TextMeta): HTMLCanvasElement {
   return cv;
 }
 
+/** 글자 레이어를 **원문·글꼴에서 다시 굽는다** — 상자를 늘려 둔 비율(`w / sw`)은 글꼴 크기로 옮기고 가운데는 그 자리에 둔다.
+ *  손잡이를 놓을 때(`store.settleText`)와 켜서 되살릴 때(`persist.loadDocs`)가 **같은 것**을 쓴다 — 굽는 셈이 바뀌면 남겨 둔
+ *  레이어도 다시 켤 때 새 셈을 따른다 (사용자 지적 2026-09-22: 기준선을 고친 뒤에도 전에 구운 픽셀이 그대로 보였다).
+ *  글자 레이어가 아니면 null */
+export function rebakeText(l: Layer): Pick<Layer, "text" | "cv" | "sw" | "sh" | "w" | "h" | "x" | "y"> | null {
+  if (!l.text) return null;
+  const text: TextMeta = { ...l.text, size: Math.max(1, Math.round(l.text.size * (l.w / l.sw))) };
+  const cv = renderText(text);
+  const c = centerOf(l);
+  return { text, cv, sw: cv.width, sh: cv.height, w: cv.width, h: cv.height, x: c.x - cv.width / 2, y: c.y - cv.height / 2 };
+}
+
+/** 그 글을 그 글꼴로 그릴 수 있게 글꼴을 **먼저 싣는다** — 캔버스는 안 실린 글꼴을 기다리지 않고 대체 글꼴로 그려 버린다.
+ *  번들 글꼴 둘(Gothic A1·Noto Sans KR)은 유니코드 구간별로 쪼개져 있어 **그 글의 글자**로 불러야 필요한 조각이 실린다 */
+export const ensureFont = (t: TextMeta): Promise<void> =>
+  document.fonts.load(fontOf(t), t.value || " ").then(() => undefined, () => undefined);
+
 /** 획을 레이어에 **굽는다** → 새 캔버스 */
 export function bakeStroke(l: Layer, st: Stroke): HTMLCanvasElement {
   const cv = cloneCanvas(l.cv);

@@ -14,11 +14,11 @@ import { useUi } from "../store/ui";
 import { ask } from "../store/ask";
 import type { Dropped } from "../lib/dropImages";
 import {
-  FILL_COLOR, NO_ADJUST, canvasShift, centerOf, cropShift, destOf, dirOf, docToLayer, emptyHist, growsBeyond, hasAdjust, nextName, placeNew, pushHist,
+  FILL_COLOR, NO_ADJUST, canvasShift, cropShift, destOf, dirOf, docToLayer, emptyHist, growsBeyond, hasAdjust, nextName, placeNew, pushHist,
   redoHist, rotate90 as rot90, saveNameOf, scaleXform, textLayerName, undoHist,
   type Adjust, type Anchor, type Fill, type Hist, type Rect, type TextMeta,
 } from "./model";
-import { bakeStroke, bucketFill, cloneCanvas, exportDataUrl, fillAround, makeCanvas, mergeInto, renderText, type Layer, type Stroke } from "./pixels";
+import { bakeStroke, bucketFill, cloneCanvas, exportDataUrl, fillAround, makeCanvas, mergeInto, rebakeText, renderText, type Layer, type Stroke } from "./pixels";
 import { loadItem, saveImage } from "./io";
 import { loadDocs, scheduleFlush } from "./persist";
 
@@ -431,13 +431,9 @@ export const useEditor = create<S>((set, get) => {
       const d = get().docs.find((x) => x.layers.some((l) => l.id === id));
       const l = d?.layers.find((x) => x.id === id);
       if (!d || !l?.text || (l.w === l.sw && l.h === l.sh)) return;
-      const text: TextMeta = { ...l.text, size: Math.max(1, Math.round(l.text.size * (l.w / l.sw))) };
-      const cv = renderText(text);
-      const c = centerOf(l);
-      patchDoc(d.id, {
-        layers: d.layers.map((x) => (x.id === id ? { ...x, text, cv, sw: cv.width, sh: cv.height, w: cv.width, h: cv.height, x: c.x - cv.width / 2, y: c.y - cv.height / 2 } : x)),
-        dirty: true,
-      });
+      const p = rebakeText(l);
+      if (!p) return;
+      patchDoc(d.id, { layers: d.layers.map((x) => (x.id === id ? { ...x, ...p } : x)), dirty: true });
     },
     fillAt(at) {
       const l = get().layer();
