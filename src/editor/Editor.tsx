@@ -89,6 +89,7 @@ export default function Editor() {
     <div
       {...zone}
       data-editor
+      onPointerDownCapture={dropTrappedFocus}
       style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "var(--sp-3)", padding: "var(--sp-4)", outline: over ? "2px solid var(--accent)" : undefined, outlineOffset: -2 }}
     >
       {/* ── 머리: 문서 탭 · 저장 자리 ── */}
@@ -196,6 +197,16 @@ export default function Editor() {
     </div>
   );
 }
+
+/** 편집기 안을 누르면 **글자 칸에 갇힌 초점을 푼다.** 도구·단추가 `dropFocus`(mousedown 기본 동작 막기)라, 숫자 칸·select 에
+ *  남은 초점이 단추를 눌러도 안 풀린다 — 그러면 단축키가 그 칸에 먹혀 죽는다 (사용자 지적 2026-09-22: Del·Ctrl+Z 가 안 먹었다).
+ *  글자 칸·select 를 누른 것은 그대로 두고, 이름 고치기의 연필 단추도 뺀다 (그 단추는 일부러 입력칸의 초점을 지킨다, `useRename`). */
+const dropTrappedFocus = (e: React.PointerEvent) => {
+  const t = e.target as HTMLElement | null;
+  if (t?.closest("input, textarea, select, [contenteditable=true], [data-editor-layer-rename]")) return;
+  const a = document.activeElement as HTMLElement | null;
+  if (a && a !== document.body && a.matches("input, textarea, select, [contenteditable=true]")) a.blur();
+};
 
 const TOOLS: { id: Tool; icon: React.ReactNode; key: "editor.toolSelect" | "editor.toolBrush" | "editor.toolEraser" | "editor.toolText" | "editor.toolCrop" | "editor.toolPan" }[] = [
   { id: "select", icon: Icon.cursor, key: "editor.toolSelect" },
