@@ -760,7 +760,6 @@ export const en = {
     untitledN: "New canvas {n}",
     closeDoc: "Close",
     empty: "Drop an image here, or use Send › Send to image editor.",
-    openFolder: "Open save folder",
     openFail: "Could not open {name}: {e}",
     unsavedClose: "Close \"{name}\"?",
     unsavedBody: "There are unsaved edits. Closing discards them.",

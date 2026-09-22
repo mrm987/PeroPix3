@@ -758,7 +758,6 @@ export const ja: Dict = {
     untitledN: "新規キャンバス {n}",
     closeDoc: "閉じる",
     empty: "画像をドロップするか、「送る › 画像編集に送る」で開いてください。",
-    openFolder: "保存フォルダを開く",
     openFail: "{name} を開けませんでした: {e}",
     unsavedClose: "「{name}」を閉じますか?",
     unsavedBody: "保存していない編集があります。閉じると失われます。",

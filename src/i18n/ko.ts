@@ -783,7 +783,6 @@ export const ko: Dict = {
     untitledN: "새 캔버스 {n}",
     closeDoc: "닫기",
     empty: "그림을 떨구거나 「보내기 › 이미지 편집으로 보내기」로 여세요.",
-    openFolder: "저장 폴더 열기",
     openFail: "{name}을(를) 열지 못했습니다: {e}",
     unsavedClose: "「{name}」을 닫을까요?",
     unsavedBody: "저장하지 않은 편집이 있습니다. 닫으면 사라집니다.",

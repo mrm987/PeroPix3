@@ -3,10 +3,12 @@ import { useI18n } from "../i18n";
 import { Icon } from "../components/Icon";
 import { EditableName } from "../components/EditableName";
 import { DropLine } from "../components/DropLine";
+import { FolderOpenButton } from "../components/FolderOpenButton";
 import { Help } from "../components/Tip";
 import { api } from "../lib/backend";
 import { moveTo } from "../lib/moveTo";
 import { useReorder } from "../lib/useReorder";
+import { useFiles } from "../store/files";
 import { toast } from "../store/toast";
 import { useUi } from "../store/ui";
 import { Hint, Line, Sec, box, dropFocus, num, on } from "../panels/censor/ui";
@@ -41,8 +43,34 @@ export function Side({ doc }: { doc: Doc }) {
   };
   /** 원본 자리가 없는 문서 — 저장 자리 셈(`whereOf`)이 「저장 폴더 지정」으로 고정한다 */
   const noHome = !doc.src;
-  const mode = whereOf(doc, editLast).mode;
+  const where = whereOf(doc, editLast);
+  const mode = where.mode;
+  const whereDest = "dest" in where ? where.dest : "";
   const needDest = mode === "folder";
+  /** 지금 옵션으로 **저장될 폴더** — 일괄 변환과 같은 창구(`/api/tools/convert-dest`, 변환이 쓰는 함수)에 물어 절대 경로로
+   *  보여 준다 (사용자 지시 2026-09-22: 일괄 변환과 같은 모양). 자리를 모르면 비운다 — 틀린 자리를 보여 주는 것보다 낫다 */
+  const [saveDir, setSaveDir] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    if (mode !== "overwrite" && !whereDest) {
+      setSaveDir(null);
+      return;
+    }
+    void api<{ dir: string | null }>("/api/tools/convert-dest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: doc.src ? [{ name: doc.src.name, rel: doc.src.rel, path: doc.src.path }] : [],
+        mode,
+        dest: mode === "folder" ? whereDest : "",
+      }),
+    })
+      .then((r) => alive && setSaveDir(r.dir))
+      .catch(() => alive && setSaveDir(null));
+    return () => {
+      alive = false;
+    };
+  }, [doc.src, mode, whereDest]);
 
   return (
     <div
@@ -162,8 +190,19 @@ export function Side({ doc }: { doc: Doc }) {
         </Sec>
       </div>
 
-      {/* ── 저장 (스크롤 밖, 맨 아래 고정) ── */}
+      {/* ── 저장 (스크롤 밖, 맨 아래 고정) ──
+          ★일괄 변환의 오른쪽 기둥과 **같은 차례·모양**이다 (사용자 지시 2026-09-22): 형식이 위, 저장 위치 아래에 저장될 폴더와 「폴더 열기」 */}
       <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--sp-3)", borderTop: "1px solid var(--line)", paddingTop: "var(--sp-3)" }}>
+        <Sec label={t("tools.format")}>
+          <div style={{ display: "flex", gap: "var(--sp-2)" }}>
+            {(["png", "webp"] as const).map((f) => (
+              <button key={f} data-editor-fmt={f} onMouseDown={dropFocus} onClick={() => setEditLast({ fmt: f })} style={{ ...box, flex: 1, ...(editLast.fmt === f ? on : {}) }}>
+                {f === "png" ? "PNG" : "WebP (Lossless)"}
+              </button>
+            ))}
+          </div>
+          <Hint><span data-editor-save-name>{t("tools.preview", { s: saveName(doc, editLast.fmt) })}</span></Hint>
+        </Sec>
         <Sec label={t("tools.dest")} help={t("tools.destHint")}>
           <select
             data-editor-dest-mode
@@ -185,22 +224,23 @@ export function Side({ doc }: { doc: Doc }) {
             </button>
           )}
           {needDest && !editLast.dest && <Hint>{t("editor.needDest")}</Hint>}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-2)" }}>
-            {(["png", "webp"] as const).map((f) => (
-              <button
-                key={f}
-                data-editor-fmt={f}
-                onMouseDown={dropFocus}
-                onClick={() => setEditLast({ fmt: f })}
-                style={{ ...box, ...(editLast.fmt === f ? on : {}), padding: "3px 0", textAlign: "center", whiteSpace: "nowrap" }}
+          {/* 지금 옵션으로 저장될 폴더 + 「폴더 열기」 — 일괄 변환의 `data-convert-save-dir` 와 같은 줄 */}
+          {saveDir && (
+            <div data-editor-save-dir style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", minWidth: 0 }}>
+              <span
+                data-tip={saveDir}
+                style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                         fontSize: "var(--text-2xs)", color: "var(--ink-soft)", direction: "rtl", textAlign: "left" }}
               >
-                {f === "png" ? "PNG" : "WebP (Lossless)"}
-              </button>
-            ))}
-          </div>
-          <span data-editor-save-name style={{ fontSize: "var(--text-3xs)", color: "var(--ink-faint)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {saveName(doc, editLast.fmt)}
-          </span>
+                {saveDir}
+              </span>
+              <FolderOpenButton
+                data-editor-open-dir
+                tip={t("tools.openFolder")}
+                onClick={() => void useFiles.getState().openDir(saveDir).catch((e) => toast(String(e), "warn"))}
+              />
+            </div>
+          )}
         </Sec>
         <button
           data-editor-save

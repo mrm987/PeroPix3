@@ -1,18 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { Icon } from "../components/Icon";
-import { FolderOpenButton } from "../components/FolderOpenButton";
 import { useImageDrop } from "../lib/dropImages";
 import { percent } from "../lib/zoomView";
-import { useFiles } from "../store/files";
-import { toast } from "../store/toast";
 import { FONTS, useUi } from "../store/ui";
 import { isAbsPath } from "../store/censor";
 import { box, card, dropFocus, num, on } from "../panels/censor/ui";
 import { ImageActions } from "../panels/ImageActions";
 import { useConvertQueue } from "../panels/tools/ConvertTool";
-import { dirOf } from "./model";
-import { saveName, useEditor, whereOf, type Tool } from "./store";
+import { saveName, useEditor, type Tool } from "./store";
 import { Stage } from "./Stage";
 import { Side } from "./Side";
 import { sendToEditor } from "./sendTo";
@@ -63,20 +59,6 @@ export default function Editor() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  /* ── 저장 자리 표시 (검열 머리 줄과 같은 어법: 읽기만, 정하는 창구는 오른쪽 기둥) ── */
-  const srcDir = dirOf(doc?.src?.rel ?? doc?.src?.path);
-  const where = doc ? whereOf(doc, editLast) : null;
-  const saveLabel = !where ? "" : where.mode === "overwrite" ? t("tools.destOverwrite") : where.dest || t("tools.needDest");
-  const openTarget = !where ? "" : where.mode === "overwrite" ? srcDir : where.dest;
-  const openSaveDir = async () => {
-    try {
-      if (isAbsPath(openTarget)) await useFiles.getState().openDir(openTarget);
-      else await useFiles.getState().reveal(openTarget);
-    } catch (e) {
-      toast(String(e), "warn");
-    }
-  };
 
   /** 보내기 — 먼저 저장하고 그 파일을 넘긴다 (일괄 변환·검열은 파일을 받는다) */
   const savedItem = async () => {
@@ -133,15 +115,7 @@ export default function Editor() {
         <button data-editor-new onClick={() => s.newDoc()} data-tip={t("editor.newDoc")} style={{ display: "grid", placeItems: "center", width: 30, height: 30, color: "var(--ink-faint)" }}>
           {Icon.plus}
         </button>
-        <span style={{ flex: 1 }} />
-        {doc && (
-          <>
-            <span data-editor-save-path title={openTarget} style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {saveLabel}
-            </span>
-            <FolderOpenButton data-editor-open-folder tip={t("editor.openFolder")} disabled={!openTarget} onClick={() => void openSaveDir()} />
-          </>
-        )}
+        {/* 저장 자리는 오른쪽 기둥의 「저장 위치」 아래에만 있다 (일괄 변환과 같은 모양, 사용자 지시 2026-09-22) — 여기 두 번 적지 않는다 */}
       </div>
 
       {hydrated && !doc && (
