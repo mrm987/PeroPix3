@@ -77,7 +77,7 @@ select:focus {
   border-color: var(--accent);
 }
 
-button:disabled, input:disabled, textarea:disabled {
+button:disabled, input:disabled, select:disabled, textarea:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }

@@ -11,12 +11,10 @@ import { useUi } from "../store/ui";
 import { ask } from "../store/ask";
 import type { Dropped } from "../lib/dropImages";
 import {
-  canvasShift, cropShift, destOf, dirOf, emptyHist, nextName, placeNew, pushHist, redoHist, rotate90 as rot90,
-  saveNameOf, scaleXform, undoHist, type Anchor, type Hist, type Rect,
+  FILL_COLOR, NO_ADJUST, canvasShift, cropShift, destOf, dirOf, emptyHist, growsBeyond, hasAdjust, nextName, placeNew, pushHist,
+  redoHist, rotate90 as rot90, saveNameOf, scaleXform, undoHist, type Adjust, type Anchor, type Fill, type Hist, type Rect,
 } from "./model";
-import {
-  NO_ADJUST, bakeFilter, bakeStroke, cloneCanvas, exportDataUrl, filterOf, makeCanvas, mergeInto, type Adjust, type Layer, type Stroke,
-} from "./pixels";
+import { bakeStroke, cloneCanvas, exportDataUrl, fillAround, makeCanvas, mergeInto, type Layer, type Stroke } from "./pixels";
 import { loadItem, saveImage } from "./io";
 
 export type Tool = "select" | "brush" | "eraser" | "crop" | "pan";
@@ -47,8 +45,6 @@ type S = {
   cur: string | null;
   tool: Tool;
   brush: Brush;
-  /** 고른 레이어에 미리 보이는 보정 — 「적용」이 픽셀에 굽고 0 으로 돌아온다 */
-  adjust: Adjust;
   ratioLock: boolean;
   /** 자르기 상자 (문서 좌표). 자르기 도구에서 끄는 동안 */
   crop: Rect | null;
@@ -67,8 +63,9 @@ type S = {
   setCur: (id: string) => void;
   setTool: (t: Tool) => void;
   setBrush: (p: Partial<Brush>) => void;
-  setAdjust: (p: Partial<Adjust>) => void;
-  applyAdjust: () => void;
+  /** 고른 레이어의 보정 — 불투명도와 같은 규칙이다 (`live` 면 이력을 안 적는다, 끌기 전에 `markBefore`) */
+  setAdjust: (p: Partial<Adjust>, live?: boolean) => void;
+  /** 고른 레이어의 보정을 전부 0 으로 (한 걸음) */
   resetAdjust: () => void;
   setRatioLock: (v: boolean) => void;
   setView: (v: Partial<Doc["view"]>) => void;
@@ -82,7 +79,8 @@ type S = {
   dupLayer: () => void;
   mergeDown: () => void;
   removeLayer: () => void;
-  moveLayer: (id: string, to: number) => void;
+  /** 레이어 차례를 통째로 (아래가 먼저인 id 목록). 화면 목록의 끌기(`useReorder`)가 새 차례를 셈해 넘긴다 */
+  orderLayers: (ids: string[]) => void;
   toggleLayer: (id: string) => void;
   renameLayer: (id: string, name: string) => void;
   /** 획이 끝났다 — 굽고 한 걸음 적는다 */
@@ -90,7 +88,8 @@ type S = {
 
   undo: () => void;
   redo: () => void;
-  setCanvasSize: (w: number, h: number, a: Anchor) => void;
+  /** 캔버스 크기 — 기준점 쪽은 붙어 있고 반대쪽이 늘거나 준다. `fill` 이 색이면 **넓어진 자리만** 칠한 레이어를 맨 아래에 깐다 */
+  setCanvasSize: (w: number, h: number, a: Anchor, fill?: Fill) => void;
   setImageSize: (w: number, h: number) => void;
   setCrop: (r: Rect | null) => void;
   applyCrop: () => void;
@@ -128,7 +127,7 @@ export const useEditor = create<S>((set, get) => {
     set((s) => ({ docs: s.docs.map((x) => (x.id === id ? { ...x, ...p } : x)), rev: s.rev + 1 }));
 
   const mkLayer = (cv: HTMLCanvasElement, name: string, at: Rect): Layer => ({
-    id: newId("l"), name, on: true, opacity: 100, sw: cv.width, sh: cv.height, cv,
+    id: newId("l"), name, on: true, opacity: 100, adj: NO_ADJUST, sw: cv.width, sh: cv.height, cv,
     x: at.x, y: at.y, w: at.w, h: at.h, rot: 0, flipH: false, flipV: false,
   });
   const layerName = (d: Doc | { layers: Layer[] }) => nextName(d.layers.map((l) => l.name), (n) => t("editor.layerN", { n }));
@@ -138,7 +137,6 @@ export const useEditor = create<S>((set, get) => {
     cur: null,
     tool: "brush",
     brush: { size: 24, hard: 0.8, opacity: 100, color: "#ff5a6e" },
-    adjust: NO_ADJUST,
     ratioLock: true,
     crop: null,
     rev: 0,
@@ -194,7 +192,7 @@ export const useEditor = create<S>((set, get) => {
           id: newId("d"), name: first.name.replace(/\.[^.]+$/, ""), w, h, layers,
           sel: layers[layers.length - 1].id, src, hist: emptyHist(), dirty: false, view: { fit: true, zoom: 1 },
         };
-        set((s) => ({ docs: [...s.docs, doc], cur: doc.id, crop: null, adjust: NO_ADJUST }));
+        set((s) => ({ docs: [...s.docs, doc], cur: doc.id, crop: null }));
       } finally {
         set({ busy: false });
       }
@@ -206,7 +204,7 @@ export const useEditor = create<S>((set, get) => {
       const cv = makeCanvas(w, h);
       const l = mkLayer(cv, t("editor.layerN", { n: 1 }), { x: 0, y: 0, w, h });
       const doc: Doc = { id: newId("d"), name, w, h, layers: [l], sel: l.id, src: null, hist: emptyHist(), dirty: false, view: { fit: true, zoom: 1 } };
-      set((s) => ({ docs: [...s.docs, doc], cur: doc.id, crop: null, adjust: NO_ADJUST }));
+      set((s) => ({ docs: [...s.docs, doc], cur: doc.id, crop: null }));
     },
 
     async closeDoc(id) {
@@ -218,25 +216,23 @@ export const useEditor = create<S>((set, get) => {
         const docs = s.docs.filter((x) => x.id !== id);
         const i = s.docs.findIndex((x) => x.id === id);
         const cur = s.cur === id ? (docs[Math.min(i, docs.length - 1)]?.id ?? null) : s.cur;
-        return { docs, cur, crop: null, adjust: NO_ADJUST };
+        return { docs, cur, crop: null };
       });
     },
 
-    setCur: (id) => set({ cur: id, crop: null, adjust: NO_ADJUST }),
+    setCur: (id) => set({ cur: id, crop: null }),
     setTool: (tool) => set({ tool, crop: tool === "crop" ? get().crop : null }),
     setBrush: (p) => set((s) => ({ brush: { ...s.brush, ...p } })),
-    setAdjust: (p) => set((s) => ({ adjust: { ...s.adjust, ...p }, rev: s.rev + 1 })),
-    applyAdjust() {
-      const f = filterOf(get().adjust);
-      if (!f) return;
-      commit((d) => {
-        const l = d.layers.find((x) => x.id === d.sel);
-        if (!l) return null;
-        return { layers: d.layers.map((x) => (x.id === l.id ? { ...x, cv: bakeFilter(x.cv, f) } : x)) };
-      });
-      set({ adjust: NO_ADJUST });
+    setAdjust(p, live = false) {
+      const l = get().layer();
+      if (!l) return;
+      get().patchLayer(l.id, { adj: { ...l.adj, ...p } }, live);
     },
-    resetAdjust: () => set((s) => ({ adjust: NO_ADJUST, rev: s.rev + 1 })),
+    resetAdjust() {
+      const l = get().layer();
+      if (!l || !hasAdjust(l.adj)) return;
+      get().patchLayer(l.id, { adj: NO_ADJUST });
+    },
     setRatioLock: (v) => set({ ratioLock: v }),
     setView(v) {
       const d = docOf(get());
@@ -246,7 +242,6 @@ export const useEditor = create<S>((set, get) => {
     selectLayer(id) {
       const d = docOf(get());
       if (d && d.sel !== id) patchDoc(d.id, { sel: id });
-      set({ adjust: NO_ADJUST });
     },
     patchLayer(id, p, live = false) {
       const d = docOf(get());
@@ -299,13 +294,12 @@ export const useEditor = create<S>((set, get) => {
         return { layers, sel };
       });
     },
-    moveLayer(id, to) {
+    orderLayers(ids) {
       commit((d) => {
-        const from = d.layers.findIndex((x) => x.id === id);
-        if (from < 0 || to < 0 || to >= d.layers.length || from === to) return null;
-        const layers = [...d.layers];
-        const [l] = layers.splice(from, 1);
-        layers.splice(to, 0, l);
+        if (ids.length !== d.layers.length) return null;
+        const by = new Map(d.layers.map((l) => [l.id, l]));
+        const layers = ids.map((id) => by.get(id)).filter((l): l is Layer => !!l);
+        if (layers.length !== d.layers.length || layers.every((l, i) => l === d.layers[i])) return null;
         return { layers };
       });
     },
@@ -331,7 +325,7 @@ export const useEditor = create<S>((set, get) => {
       const r = undoHist(d.hist, { w: d.w, h: d.h, layers: d.layers, sel: d.sel });
       if (!r) return;
       patchDoc(d.id, { ...r.snap, hist: r.h, dirty: true });
-      set({ crop: null, adjust: NO_ADJUST });
+      set({ crop: null });
     },
     redo() {
       const d = docOf(get());
@@ -339,12 +333,18 @@ export const useEditor = create<S>((set, get) => {
       const r = redoHist(d.hist, { w: d.w, h: d.h, layers: d.layers, sel: d.sel });
       if (!r) return;
       patchDoc(d.id, { ...r.snap, hist: r.h, dirty: true });
-      set({ crop: null, adjust: NO_ADJUST });
+      set({ crop: null });
     },
-    setCanvasSize(w, h, a) {
+    setCanvasSize(w, h, a, fill = "transparent") {
       commit((d) => {
         const { dx, dy } = canvasShift(d, { w, h }, a);
-        return { w, h, layers: d.layers.map((l) => ({ ...l, x: l.x + dx, y: l.y + dy })) };
+        const layers = d.layers.map((l) => ({ ...l, x: l.x + dx, y: l.y + dy }));
+        // ★「빈 자리」— 넓어진 자리**만** 색으로 채운 레이어를 맨 아래에 깐다 (지금 캔버스 자리는 비워 두므로 투명 그림의 안쪽은 안 덮는다)
+        if (fill !== "transparent" && growsBeyond(d, { w, h }, a)) {
+          const cv = fillAround(w, h, FILL_COLOR[fill], { x: dx, y: dy, w: d.w, h: d.h });
+          layers.unshift(mkLayer(cv, t("editor.fillLayer"), { x: 0, y: 0, w, h }));
+        }
+        return { w, h, layers };
       });
     },
     setImageSize(w, h) {
@@ -371,15 +371,10 @@ export const useEditor = create<S>((set, get) => {
     async save() {
       const d = docOf(get());
       if (!d || get().busy) return null;
-      const { mode, dest, fmt } = useUi.getState().editLast;
-      const srcDir = dirOf(d.src?.rel ?? d.src?.path);
-      const where = destOf(mode, dest, srcDir);
+      const editLast = useUi.getState().editLast;
+      const where = whereOf(d, editLast);
       if (where.mode !== "overwrite" && !where.dest) {
-        toast(t("tools.needDest"), "warn");
-        return null;
-      }
-      if (where.mode === "overwrite" && !d.src) {
-        toast(t("editor.needSrc"), "warn");
+        toast(t("editor.needDest"), "warn");
         return null;
       }
       set({ busy: true });
@@ -387,7 +382,7 @@ export const useEditor = create<S>((set, get) => {
         const r = await saveImage({
           image: get().dataUrl(),
           name: d.src?.name ?? `${d.name}.png`,
-          fmt,
+          fmt: editLast.fmt,
           mode: where.mode,
           dest: "dest" in where ? where.dest : undefined,
           rel: d.src?.rel,
@@ -412,3 +407,8 @@ export const useEditor = create<S>((set, get) => {
 
 /** 저장 파일 이름 미리보기 (오른쪽 기둥) */
 export const saveName = (d: Doc | null, fmt: "png" | "webp") => saveNameOf(d?.src?.name ?? (d ? `${d.name}.png` : null), fmt);
+
+/** 저장 자리 — **화면(오른쪽 기둥·머리 줄)과 저장이 같은 셈**을 쓴다. 원본 자리가 없는 문서(새 문서·떨군 바이트)는
+ *  덮어쓰기·하위 output 이 성립하지 않아 설정이 무엇이든 「저장 폴더 지정」이다 */
+export const whereOf = (d: Doc, e: { mode: "overwrite" | "sub" | "folder"; dest: string }) =>
+  destOf(d.src ? e.mode : "folder", e.dest, dirOf(d.src?.rel ?? d.src?.path));

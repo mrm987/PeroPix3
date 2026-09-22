@@ -333,6 +333,8 @@ export const Icon = {
   chevronUp: s(<path d="M6 15l6-6 6 6" />),
   /** 배너 단추(20px)에 들어가는 크기 — `close12` 와 같은 눈금 */
   chevronUp12: s(<path d="M6 15l6-6 6 6" />, 12),
+  /** 위 화살표 — 캔버스 크기 창의 기준점 칸이 `rotate` 로 여덟 방향을 만든다 */
+  arrowUp12: s(<path d="M12 19V5M6 11l6-6 6 6" />, 12),
   chevronDown12: s(<path d="M6 9l6 6 6-6" />, 12),
   chevronRight12: s(<path d="M9 6l6 6-6 6" />, 12),
   chevronDown: s(<path d="M6 9l6 6 6-6" />),

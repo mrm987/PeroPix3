@@ -11,8 +11,8 @@ import { isAbsPath } from "../store/censor";
 import { box, card, dropFocus, num, on } from "../panels/censor/ui";
 import { ImageActions } from "../panels/ImageActions";
 import { useConvertQueue } from "../panels/tools/ConvertTool";
-import { destOf, dirOf } from "./model";
-import { saveName, useEditor, type Tool } from "./store";
+import { dirOf } from "./model";
+import { saveName, useEditor, whereOf, type Tool } from "./store";
 import { Stage } from "./Stage";
 import { Side } from "./Side";
 import { sendToEditor } from "./sendTo";
@@ -62,7 +62,7 @@ export default function Editor() {
 
   /* ── 저장 자리 표시 (검열 머리 줄과 같은 어법: 읽기만, 정하는 창구는 오른쪽 기둥) ── */
   const srcDir = dirOf(doc?.src?.rel ?? doc?.src?.path);
-  const where = doc ? destOf(doc.src ? editLast.mode : "folder", editLast.dest, srcDir) : null;
+  const where = doc ? whereOf(doc, editLast) : null;
   const saveLabel = !where ? "" : where.mode === "overwrite" ? t("tools.destOverwrite") : where.dest || t("tools.needDest");
   const openTarget = !where ? "" : where.mode === "overwrite" ? srcDir : where.dest;
   const openSaveDir = async () => {

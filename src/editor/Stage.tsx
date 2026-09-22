@@ -4,7 +4,7 @@ import { toast } from "../store/toast";
 import { useUi } from "../store/ui";
 import { canPan, centerPan, clampPan, drawSize, keepCenter, stepZoom, zoomFrom, ZOOM_MAX, ZOOM_MIN, type Pan, type Size } from "../lib/zoomView";
 import { brushScale, centerOf, cornersOf, docToLayer, hitLayer, normRect, rad } from "./model";
-import { composite, filterOf, makeCanvas, strokeTo, type Layer, type Stroke } from "./pixels";
+import { composite, makeCanvas, strokeTo, type Layer, type Stroke } from "./pixels";
 import { useEditor, type Doc } from "./store";
 
 /** 무대 — 문서 한 장을 합성해 보여 주고, 도구에 따라 **누르고 끄는 것**을 받는다.
@@ -18,7 +18,6 @@ export function Stage({ doc }: { doc: Doc }) {
   const t = useI18n((s) => s.t);
   const tool = useEditor((s) => s.tool);
   const brush = useEditor((s) => s.brush);
-  const adjust = useEditor((s) => s.adjust);
   const ratioLock = useEditor((s) => s.ratioLock);
   const crop = useEditor((s) => s.crop);
   const rev = useEditor((s) => s.rev);
@@ -80,11 +79,11 @@ export function Stage({ doc }: { doc: Doc }) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const kk = (cv.clientWidth / d.w) * dpr || 1;
     const st = strokeRef.current?.st ?? null;
-    composite(d, cv, kk, { sel: d.sel, filter: filterOf(s.adjust), stroke: st });
+    composite(d, cv, kk, { sel: d.sel, stroke: st });
   }, []);
   useEffect(() => {
     paint();
-  }, [doc, rev, fitted.w, fitted.h, adjust, paint]);
+  }, [doc, rev, fitted.w, fitted.h, paint]);
 
   /* ── 좌표 ── */
   const toDoc = (e: { clientX: number; clientY: number }) => {
@@ -161,7 +160,9 @@ export function Stage({ doc }: { doc: Doc }) {
       return;
     }
 
-    // 선택 도구 — 손잡이 → 고른 레이어 안 → 다른 레이어 고르기
+    // 선택 도구 — 손잡이 → **고른 레이어 안이면 그 레이어** → 아니면 그 자리의 맨 앞 레이어
+    // ★★고른 레이어 위에 다른 레이어가 겹쳐 있어도 고른 것을 끈다 (사용자 지적 2026-09-22: 목록에서 골라 두고 무대를
+    //   누르면 앞의 레이어로 선택이 바뀌어 버렸다). 꺼진 레이어는 안 보이므로 예외다 — 그때는 보이는 것 중 맨 앞을 고른다.
     if (sel) {
       const h = hitHandle(sel, p);
       if (h && "rotate" in h) {
@@ -172,6 +173,11 @@ export function Stage({ doc }: { doc: Doc }) {
       }
       if (h && "handle" in h) {
         dragRef.current = { kind: "scale", start: p, layer: sel, handle: h.handle };
+        (e.currentTarget as Element).setPointerCapture(e.pointerId);
+        return;
+      }
+      if (sel.on && hitLayer(sel, p.x, p.y)) {
+        dragRef.current = { kind: "move", start: p, layer: sel };
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
         return;
       }

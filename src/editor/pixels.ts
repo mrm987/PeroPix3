@@ -3,7 +3,7 @@
  *  ★레이어 픽셀은 **불변**으로 다룬다: 획 하나·보정 적용·합치기는 언제나 **새 캔버스**를 만든다. 이력(`Hist`)이
  *    옛 캔버스를 그대로 들고 있으므로 되돌리기는 참조를 바꾸는 것으로 끝난다.
  *  ★합성은 **문서 좌표계**에서 한다 — 레이어의 변형(자리·크기·회전·반전)은 그릴 때 `ctx` 변환으로 건다 (비파괴). */
-import { centerOf, rad, type LayerMeta, type Size, type Xform } from "./model";
+import { centerOf, filterOf, rad, type LayerMeta, type Rect, type Size, type Xform } from "./model";
 
 export type Layer = LayerMeta & { cv: HTMLCanvasElement };
 
@@ -26,12 +26,14 @@ export function canvasFrom(img: ImageBitmap): HTMLCanvasElement {
   return cv;
 }
 
-/** 보정 값 → CSS 필터 문자열. 전부 0 이면 빈 문자열 (필터 없음) */
-export type Adjust = { bri: number; con: number; sat: number; hue: number };
-export const NO_ADJUST: Adjust = { bri: 0, con: 0, sat: 0, hue: 0 };
-export function filterOf(a: Adjust): string {
-  if (!a.bri && !a.con && !a.sat && !a.hue) return "";
-  return `brightness(${1 + a.bri / 100}) contrast(${1 + a.con / 100}) saturate(${1 + a.sat / 100}) hue-rotate(${a.hue}deg)`;
+/** 캔버스를 넓힐 때의 「빈 자리」 — 새 크기를 색으로 채우고 **지금 캔버스 자리(`hole`)만 비운** 캔버스 */
+export function fillAround(w: number, h: number, color: string, hole: Rect): HTMLCanvasElement {
+  const cv = makeCanvas(w, h);
+  const g = cv.getContext("2d")!;
+  g.fillStyle = color;
+  g.fillRect(0, 0, cv.width, cv.height);
+  g.clearRect(hole.x, hole.y, hole.w, hole.h);
+  return cv;
 }
 
 /** 긋는 중인 획 — 레이어 원본 크기의 캔버스에 **불투명 100%** 로 모아 두고, 그릴 때 한 번에 불투명도를 건다.
@@ -46,11 +48,13 @@ function applyXform(ctx: CanvasRenderingContext2D, l: Xform) {
   ctx.scale(l.flipH ? -1 : 1, l.flipV ? -1 : 1);
 }
 
-/** 레이어 하나를 문서 좌표계의 `ctx` 에 그린다 (불투명도·필터·긋는 중인 획까지) */
-export function drawLayer(ctx: CanvasRenderingContext2D, l: Layer, opt?: { filter?: string; stroke?: Stroke | null }) {
+/** 레이어 하나를 문서 좌표계의 `ctx` 에 그린다 (불투명도·보정·긋는 중인 획까지).
+ *  ★보정(`l.adj`)은 레이어의 속성이라 **언제나** 건다 — 합치기·저장이 이 함수를 거치므로 그때 픽셀에 굽힌다 */
+export function drawLayer(ctx: CanvasRenderingContext2D, l: Layer, opt?: { stroke?: Stroke | null }) {
   ctx.save();
   ctx.globalAlpha = l.opacity / 100;
-  if (opt?.filter) ctx.filter = opt.filter;
+  const f = filterOf(l.adj);
+  if (f) ctx.filter = f;
   applyXform(ctx, l);
   const st = opt?.stroke;
   if (st?.erase) {
@@ -71,12 +75,12 @@ export function drawLayer(ctx: CanvasRenderingContext2D, l: Layer, opt?: { filte
   ctx.restore();
 }
 
-/** 문서를 통째로 합성한다. `scale` 은 화면 배율 (저장은 1). `sel` 레이어에만 필터·획을 얹는다 */
+/** 문서를 통째로 합성한다. `scale` 은 화면 배율 (저장은 1). `sel` 레이어에만 긋는 중인 획을 얹는다 */
 export function composite(
   doc: Size & { layers: Layer[] },
   out: HTMLCanvasElement,
   scale = 1,
-  opt?: { sel?: string | null; filter?: string; stroke?: Stroke | null },
+  opt?: { sel?: string | null; stroke?: Stroke | null },
 ) {
   const w = Math.max(1, Math.round(doc.w * scale));
   const h = Math.max(1, Math.round(doc.h * scale));
@@ -91,7 +95,7 @@ export function composite(
   ctx.scale(w / doc.w, h / doc.h);
   for (const l of doc.layers) {
     if (!l.on) continue;
-    drawLayer(ctx, l, l.id === opt?.sel ? { filter: opt?.filter, stroke: opt?.stroke } : undefined);
+    drawLayer(ctx, l, l.id === opt?.sel ? { stroke: opt?.stroke } : undefined);
   }
   ctx.restore();
 }
@@ -103,15 +107,6 @@ export function bakeStroke(l: Layer, st: Stroke): HTMLCanvasElement {
   g.globalCompositeOperation = st.erase ? "destination-out" : "source-over";
   g.globalAlpha = st.alpha;
   g.drawImage(st.cv, 0, 0);
-  return cv;
-}
-
-/** 필터를 픽셀에 굽는다 → 새 캔버스 (「보정 › 적용」) */
-export function bakeFilter(src: HTMLCanvasElement, filter: string): HTMLCanvasElement {
-  const cv = makeCanvas(src.width, src.height);
-  const g = cv.getContext("2d")!;
-  g.filter = filter;
-  g.drawImage(src, 0, 0);
   return cv;
 }
 

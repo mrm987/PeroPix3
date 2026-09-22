@@ -9,12 +9,24 @@ export type Rect = { x: number; y: number; w: number; h: number };
  *  ★비파괴다: 픽셀은 그대로 두고 그릴 때만 적용한다. 합칠 때(`mergeDown`)와 저장할 때 굽는다. */
 export type Xform = { x: number; y: number; w: number; h: number; rot: number; flipH: boolean; flipV: boolean };
 
+/** 보정 — **레이어의 속성**이다 (사용자 지시 2026-09-22: 「적용」 단추 없이 슬라이더 값이 언제나 걸린다).
+ *  불투명도처럼 비파괴로 들고 있다가 그릴 때 CSS 필터로 걸고, 저장·합치기 때 픽셀에 굽힌다. 전부 0 이면 없음 */
+export type Adjust = { bri: number; con: number; sat: number; hue: number };
+export const NO_ADJUST: Adjust = { bri: 0, con: 0, sat: 0, hue: 0 };
+export const hasAdjust = (a: Adjust) => !!(a.bri || a.con || a.sat || a.hue);
+/** 보정 값 → CSS 필터 문자열. 전부 0 이면 빈 문자열 (필터 없음) */
+export function filterOf(a: Adjust): string {
+  if (!hasAdjust(a)) return "";
+  return `brightness(${1 + a.bri / 100}) contrast(${1 + a.con / 100}) saturate(${1 + a.sat / 100}) hue-rotate(${a.hue}deg)`;
+}
+
 export type LayerMeta = Xform & {
   id: string;
   name: string;
   on: boolean;
   /** 0~100 */
   opacity: number;
+  adj: Adjust;
   /** 원본 픽셀 크기 */
   sw: number;
   sh: number;
@@ -82,6 +94,34 @@ export function placeNew(doc: Size, img: Size): Rect {
 export type Anchor = { ax: 0 | 0.5 | 1; ay: 0 | 0.5 | 1 };
 export function canvasShift(from: Size, to: Size, a: Anchor): { dx: number; dy: number } {
   return { dx: Math.round((to.w - from.w) * a.ax), dy: Math.round((to.h - from.h) * a.ay) };
+}
+
+/** 캔버스를 넓혔을 때 생기는 **빈 자리**를 무엇으로 두나 (목업 ③의 「빈 자리」). 투명이면 비워 둔다 (인페인트로 보낸다) */
+export type Fill = "transparent" | "white" | "black";
+export const FILL_COLOR: Record<Exclude<Fill, "transparent">, string> = { white: "#ffffff", black: "#000000" };
+
+/** 새 크기가 지금 캔버스 밖으로 **한 자리라도** 나가나 — 빈 자리를 칠할 레이어가 필요한가 */
+export function growsBeyond(from: Size, to: Size, a: Anchor): boolean {
+  const { dx, dy } = canvasShift(from, to, a);
+  return dx > 0 || dy > 0 || dx + from.w < to.w || dy + from.h < to.h;
+}
+
+/** 캔버스 크기 창의 **미리보기** — 새 캔버스(`next`)와 지금 캔버스(`cur`)를 둘 다 담기게 `box` 안에 맞춰 놓은 자리.
+ *  줄일 때는 지금 캔버스가 새 캔버스 밖으로 나가므로 둘을 합친 상자를 기준으로 잰다 */
+export function sizePreview(from: Size, to: Size, a: Anchor, box: Size, pad = 6): { k: number; next: Rect; cur: Rect } {
+  const { dx, dy } = canvasShift(from, to, a);
+  const x0 = Math.min(0, dx);
+  const y0 = Math.min(0, dy);
+  const uw = Math.max(to.w, dx + from.w) - x0;
+  const uh = Math.max(to.h, dy + from.h) - y0;
+  const k = Math.min((box.w - pad * 2) / uw, (box.h - pad * 2) / uh);
+  const ox = (box.w - uw * k) / 2 - x0 * k;
+  const oy = (box.h - uh * k) / 2 - y0 * k;
+  return {
+    k,
+    next: { x: ox, y: oy, w: to.w * k, h: to.h * k },
+    cur: { x: ox + dx * k, y: oy + dy * k, w: from.w * k, h: from.h * k },
+  };
 }
 
 /** 이미지 크기 바꾸기 — 문서와 레이어 전부를 같은 비로 (원본 픽셀은 그대로, 변형만 커진다) */

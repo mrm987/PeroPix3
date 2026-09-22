@@ -1,14 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { Icon } from "../components/Icon";
 import { EditableName } from "../components/EditableName";
+import { DropLine } from "../components/DropLine";
+import { Help } from "../components/Tip";
+import { DragGhost } from "../cards/DragGhost";
 import { api } from "../lib/backend";
+import { moveTo } from "../lib/moveTo";
+import { useReorder } from "../lib/useReorder";
 import { toast } from "../store/toast";
 import { useUi } from "../store/ui";
 import { Hint, Line, Sec, box, dropFocus, num, on } from "../panels/censor/ui";
-import { withRatio } from "./model";
+import { NO_ADJUST, hasAdjust, withRatio } from "./model";
 import { thumbOf, type Layer } from "./pixels";
-import { saveName, useEditor, type Doc } from "./store";
+import { saveName, useEditor, whereOf, type Doc } from "./store";
 import { CanvasSizeDialog, ImageSizeDialog } from "./dialogs";
 
 /** 오른쪽 기둥 — 레이어 · 변형 · 보정 · 캔버스 · 저장 위치. 검열의 오른쪽 기둥과 같은 조각(`Sec`·`Line`·`box`)으로 그린다 */
@@ -16,6 +21,7 @@ export function Side({ doc }: { doc: Doc }) {
   const t = useI18n((s) => s.t);
   const s = useEditor();
   const sel = doc.layers.find((l) => l.id === doc.sel) ?? null;
+  const adj = sel?.adj ?? NO_ADJUST;
   const [dlg, setDlg] = useState<"canvas" | "image" | null>(null);
   const editLast = useUi((st) => st.editLast);
   const setEditLast = useUi((st) => st.setEditLast);
@@ -32,8 +38,9 @@ export function Side({ doc }: { doc: Doc }) {
       toast(String(e), "warn");
     }
   };
+  /** 원본 자리가 없는 문서 — 저장 자리 셈(`whereOf`)이 「저장 폴더 지정」으로 고정한다 */
   const noHome = !doc.src;
-  const mode = noHome ? "folder" : editLast.mode;
+  const mode = whereOf(doc, editLast).mode;
   const needDest = mode === "folder";
 
   return (
@@ -104,15 +111,13 @@ export function Side({ doc }: { doc: Doc }) {
           )}
         </Sec>
 
-        {/* ── 보정 ── */}
+        {/* ── 보정 — 레이어의 속성이라 슬라이더 값이 **언제나** 걸린다 (사용자 지시 2026-09-22: 「적용」 없음, 초기화만) ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
           <span style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", fontSize: "var(--text-xs)", fontWeight: "var(--w-semi)", color: "var(--ink-soft)" }}>
             {t("editor.adjust")}
+            <Help tip={t("editor.adjustHint")} />
             <span style={{ flex: 1 }} />
-            <button data-editor-adjust-apply disabled={!sel || !hasAdjust(s.adjust)} onClick={() => s.applyAdjust()} style={{ ...box, padding: "1px 8px", fontSize: "var(--text-3xs)" }}>
-              {t("editor.apply")}
-            </button>
-            <button data-editor-adjust-reset disabled={!hasAdjust(s.adjust)} onClick={() => s.resetAdjust()} style={{ ...box, padding: "1px 8px", fontSize: "var(--text-3xs)", color: "var(--ink-faint)" }}>
+            <button data-editor-adjust-reset disabled={!sel || !hasAdjust(adj)} onClick={() => s.resetAdjust()} style={{ ...box, padding: "1px 8px", fontSize: "var(--text-3xs)", color: "var(--ink-faint)" }}>
               {t("editor.reset")}
             </button>
           </span>
@@ -130,15 +135,15 @@ export function Side({ doc }: { doc: Doc }) {
                 data-editor-adjust={key}
                 min={lo}
                 max={hi}
-                value={s.adjust[key]}
+                value={adj[key]}
                 disabled={!sel}
-                onChange={(e) => s.setAdjust({ [key]: Number(e.target.value) })}
+                onPointerDown={() => s.markBefore()}
+                onChange={(e) => s.setAdjust({ [key]: Number(e.target.value) }, true)}
                 style={{ flex: 1 }}
               />
-              <span style={num}>{s.adjust[key]}</span>
+              <span style={num}>{adj[key]}</span>
             </Line>
           ))}
-          {!!sel && <Hint>{t("editor.adjustHint")}</Hint>}
         </div>
 
         {/* ── 캔버스 ── */}
@@ -160,20 +165,23 @@ export function Side({ doc }: { doc: Doc }) {
           <select
             data-editor-dest-mode
             value={mode}
+            disabled={noHome}
             onChange={(e) => setEditLast({ mode: e.target.value as "overwrite" | "sub" | "folder" })}
             style={{ ...box, width: "100%" }}
           >
-            <option value="overwrite" disabled={noHome}>{t("tools.destOverwrite")}</option>
-            <option value="sub" disabled={noHome}>{t("tools.destSub")}</option>
+            <option value="overwrite">{t("tools.destOverwrite")}</option>
+            <option value="sub">{t("tools.destSub")}</option>
             <option value="folder">{t("tools.destFolder")}</option>
           </select>
+          {/* ★막힌 이유는 막힌 칸 **바로 아래** (사용자 지적 2026-09-22: 멀리 적혀 있어 왜 안 바뀌는지 알 수 없었다) */}
+          {noHome && <Hint>{t("editor.noHome")}</Hint>}
           {mode === "overwrite" && <Hint>{t("tools.destOverwriteHint")}</Hint>}
           {needDest && (
             <button data-editor-dest-pick onClick={() => void pick()} style={{ ...box, width: "100%", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {editLast.dest || t("tools.destPick")}
             </button>
           )}
-          {needDest && !editLast.dest && <Hint>{noHome ? t("editor.needDestNew") : t("tools.needDest")}</Hint>}
+          {needDest && !editLast.dest && <Hint>{t("editor.needDest")}</Hint>}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-2)" }}>
             {(["png", "webp"] as const).map((f) => (
               <button
@@ -221,105 +229,92 @@ export function Side({ doc }: { doc: Doc }) {
   );
 }
 
-const hasAdjust = (a: { bri: number; con: number; sat: number; hue: number }) => !!(a.bri || a.con || a.sat || a.hue);
-
-/** 레이어 목록 — **위가 앞**이다 (스토어는 아래가 먼저). 끌어서 차례를 바꾼다 */
+/** 레이어 목록 — **위가 앞**이다 (스토어는 아래가 먼저). 차례 바꾸기는 앱의 것 하나(`useReorder`)다 — 탭·블록과 같은 끌기라
+ *  끼움선(`DropLine`)·잔상(`DragGhost`)도 같은 부품이다 (사용자 지시 2026-09-22).
+ *  ★줄은 눌러서 고르는 자리이기도 해서 `tapSafe` 로 잡는다 — 문턱을 넘기 전에는 클릭(고르기)·더블클릭(이름 고치기)이 산다 */
 function LayerList({ doc }: { doc: Doc }) {
   const t = useI18n((s) => s.t);
   const s = useEditor();
   const rows = [...doc.layers].reverse();
   const listRef = useRef<HTMLDivElement | null>(null);
-  const drag = useRef<{ id: string; y0: number; moved: boolean } | null>(null);
-  const [ghost, setGhost] = useState<{ id: string; over: number } | null>(null);
-
-  const indexAt = (clientY: number) => {
-    const els = [...(listRef.current?.querySelectorAll<HTMLElement>("[data-editor-layer]") ?? [])];
-    for (let i = 0; i < els.length; i++) {
-      const r = els[i].getBoundingClientRect();
-      if (clientY < r.top + r.height / 2) return i;
-    }
-    return els.length - 1;
-  };
-
-  useEffect(() => {
-    const move = (e: PointerEvent) => {
-      const d = drag.current;
-      if (!d) return;
-      if (!d.moved && Math.abs(e.clientY - d.y0) < 5) return;
-      d.moved = true;
-      setGhost({ id: d.id, over: indexAt(e.clientY) });
-    };
-    const up = (e: PointerEvent) => {
-      const d = drag.current;
-      drag.current = null;
-      if (!d) return;
-      if (d.moved) {
-        const over = indexAt(e.clientY);          // 화면 차례 (위가 0)
-        const to = doc.layers.length - 1 - over;  // 스토어 차례로
-        s.moveLayer(d.id, to);
-      }
-      setGhost(null);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    return () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-  }, [doc.layers.length, s]);
+  /** 화면 차례(위가 0)의 틈 번호로 받아 스토어 차례(아래가 먼저)로 넘긴다 — 셈은 앱 공통 `moveTo` */
+  const move = (from: number, to: number) => s.orderLayers(moveTo(rows, from, to).map((l) => l.id).reverse());
+  const { register, handleProps, dragIdx, overIdx, ghost } = useReorder(rows.length, move, { tapSafe: true, within: listRef });
 
   return (
-    <div ref={listRef} data-editor-layers style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 220, overflowY: "auto" }}>
-      {rows.map((l, i) => (
-        <LayerRow
-          key={l.id}
-          l={l}
-          selected={l.id === doc.sel}
-          over={ghost?.over === i && ghost.id !== l.id}
-          onSelect={() => s.selectLayer(l.id)}
-          onToggle={() => s.toggleLayer(l.id)}
-          onRename={(v) => s.renameLayer(l.id, v)}
-          onGrab={(e) => {
-            drag.current = { id: l.id, y0: e.clientY, moved: false };
-          }}
-          tipOn={t(l.on ? "editor.layerHide" : "editor.layerShow")}
-        />
-      ))}
-      {!rows.length && <Hint>{t("editor.noLayers")}</Hint>}
-    </div>
+    <>
+      <div ref={listRef} data-editor-layers style={{ display: "flex", flexDirection: "column", maxHeight: 220, overflowY: "auto" }}>
+        {rows.map((l, i) => (
+          <Fragment key={l.id}>
+            <DropLine on={dragIdx != null && overIdx === i} />
+            <LayerRow
+              rowRef={register(i)}
+              l={l}
+              selected={l.id === doc.sel}
+              dim={dragIdx === i}
+              hp={handleProps(i)}
+              onSelect={() => s.selectLayer(l.id)}
+              onToggle={() => s.toggleLayer(l.id)}
+              onRename={(v) => s.renameLayer(l.id, v)}
+              tipOn={t(l.on ? "editor.layerHide" : "editor.layerShow")}
+            />
+          </Fragment>
+        ))}
+        <DropLine on={dragIdx != null && overIdx === rows.length} />
+        {!rows.length && <Hint>{t("editor.noLayers")}</Hint>}
+      </div>
+      {/* 커서를 따라오는 잔상 — 포인터 방식은 브라우저가 잔상을 만들어 주지 않는다 */}
+      {ghost && dragIdx != null && rows[dragIdx] && (
+        <DragGhost x={ghost.x} y={ghost.y} anchor="exact" style={{ width: ghost.w, borderRadius: "var(--r-2)" }}>
+          <LayerRow l={rows[dragIdx]} selected ghost onToggle={() => {}} onRename={() => {}} tipOn="" />
+        </DragGhost>
+      )}
+    </>
   );
 }
 
+type Handle = ReturnType<ReturnType<typeof useReorder>["handleProps"]>;
+
 function LayerRow({
-  l, selected, over, onSelect, onToggle, onRename, onGrab, tipOn,
+  l, selected, dim, hp, rowRef, ghost, onSelect, onToggle, onRename, tipOn,
 }: {
-  l: Layer; selected: boolean; over: boolean; onSelect: () => void; onToggle: () => void; onRename: (v: string) => void;
-  onGrab: (e: React.PointerEvent) => void; tipOn: string;
+  l: Layer;
+  selected: boolean;
+  dim?: boolean;
+  /** 끌기 손잡이(`useReorder.handleProps`). 잔상에는 없다 */
+  hp?: Handle;
+  rowRef?: (el: HTMLElement | null) => void;
+  /** 끌리는 동안 커서를 따라가는 사본 — 표식도 조작도 없다 */
+  ghost?: boolean;
+  onSelect?: () => void;
+  onToggle: () => void;
+  onRename: (v: string) => void;
+  tipOn: string;
 }) {
   return (
     <div
-      data-editor-layer={l.id}
-      data-on={selected ? "" : undefined}
+      ref={rowRef}
+      {...(ghost ? {} : { "data-editor-layer": l.id, "data-on": selected ? "" : undefined })}
+      {...hp}
       onPointerDown={(e) => {
         if ((e.target as HTMLElement).closest("button, input")) return;
-        onSelect();
-        onGrab(e);
+        onSelect?.();
+        hp?.onPointerDown(e);
       }}
       style={{
+        ...hp?.style,
         display: "flex",
         alignItems: "center",
         gap: "var(--sp-2)",
         padding: "3px var(--sp-2)",
+        margin: "1px 0",
         borderRadius: "var(--r-2)",
         border: `1px solid ${selected ? "var(--accent)" : "transparent"}`,
-        background: selected ? "var(--accent-bg)" : "var(--bg)",
-        boxShadow: over ? "0 -2px 0 0 var(--accent)" : undefined,
-        opacity: l.on ? 1 : 0.55,
-        cursor: "grab",
-        userSelect: "none",
+        background: ghost ? "var(--panel)" : selected ? "var(--accent-bg)" : "var(--bg)",
+        opacity: dim ? 0.35 : l.on ? 1 : 0.55,
       }}
     >
-      <button data-editor-layer-toggle onClick={onToggle} data-tip={tipOn} style={{ display: "grid", color: l.on ? "var(--ink-soft)" : "var(--ink-ghost)" }}>
+      <button data-editor-layer-toggle onClick={onToggle} data-tip={tipOn || undefined} style={{ display: "grid", color: l.on ? "var(--ink-soft)" : "var(--ink-ghost)" }}>
         {l.on ? Icon.dotOn : Icon.dotOff}
       </button>
       <img
@@ -328,7 +323,7 @@ function LayerRow({
         draggable={false}
         style={{ width: 44, height: 30, borderRadius: 3, flexShrink: 0, background: "conic-gradient(#3a3a44 25%, #2a2a32 0 50%, #3a3a44 0 75%, #2a2a32 0) 0 0/8px 8px" }}
       />
-      <EditableName name={l.name} onRename={onRename} mark="editor-layer" style={{ flex: 1, minWidth: 0, fontSize: "var(--text-2xs)" }} />
+      <EditableName name={l.name} onRename={onRename} mark={ghost ? undefined : "editor-layer"} style={{ flex: 1, minWidth: 0, fontSize: "var(--text-2xs)" }} />
     </div>
   );
 }
