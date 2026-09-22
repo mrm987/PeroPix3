@@ -825,7 +825,7 @@ export const ko: Dict = {
     addLayer: "새 레이어",
     dupLayer: "레이어 복제",
     mergeDown: "아래 레이어와 합치기",
-    delLayer: "레이어 삭제",
+    delLayer: "레이어 삭제 (Del)",
     layerHide: "숨기기",
     layerShow: "보이기",
     noLayers: "레이어가 없습니다",

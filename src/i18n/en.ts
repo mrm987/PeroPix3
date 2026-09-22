@@ -802,7 +802,7 @@ export const en = {
     addLayer: "New layer",
     dupLayer: "Duplicate layer",
     mergeDown: "Merge down",
-    delLayer: "Delete layer",
+    delLayer: "Delete layer (Del)",
     layerHide: "Hide",
     layerShow: "Show",
     noLayers: "No layers",

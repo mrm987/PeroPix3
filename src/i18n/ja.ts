@@ -800,7 +800,7 @@ export const ja: Dict = {
     addLayer: "新規レイヤー",
     dupLayer: "レイヤーを複製",
     mergeDown: "下のレイヤーと結合",
-    delLayer: "レイヤーを削除",
+    delLayer: "レイヤーを削除 (Del)",
     layerHide: "隠す",
     layerShow: "表示",
     noLayers: "レイヤーがありません",

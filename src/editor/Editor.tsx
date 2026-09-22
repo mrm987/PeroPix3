@@ -54,6 +54,8 @@ export default function Editor() {
         if (e.key === "Enter") { e.preventDefault(); return st.applyCrop(); }
         if (e.key === "Escape") { e.preventDefault(); return st.setCrop(null); }
       }
+      // ★Del — 고른 레이어를 지운다 (사용자 지시 2026-09-22). 되돌리기가 있어 묻지 않는다 (삭제 단추와 같다)
+      if (e.key === "Delete" && st.layer()) { e.preventDefault(); return st.removeLayer(); }
       const tools: Record<string, Tool> = { KeyV: "select", KeyB: "brush", KeyE: "eraser", KeyT: "text", KeyC: "crop", KeyH: "pan" };
       const tool = tools[e.code];
       if (tool) { e.preventDefault(); st.setTool(tool); }
