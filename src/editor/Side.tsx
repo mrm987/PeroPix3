@@ -71,9 +71,10 @@ export function Side({ doc }: { doc: Doc }) {
                 <NumIn mark="editor-y" value={Math.round(sel.y)} onCommit={(v) => s.patchLayer(sel.id, { y: v })} />
               </Line>
               <Line label={t("editor.dims")}>
-                <NumIn mark="editor-w" value={Math.round(sel.w)} min={1} onCommit={(v) => s.patchLayer(sel.id, s.ratioLock ? { w: v, h: withRatio(sel.w, sel.h, v) } : { w: v })} />
+                {/* ★글자 레이어는 언제나 비율대로 늘고, 늘린 만큼 글꼴 크기가 된다 (`settleText`) */}
+                <NumIn mark="editor-w" value={Math.round(sel.w)} min={1} onCommit={(v) => { s.patchLayer(sel.id, s.ratioLock || sel.text ? { w: v, h: withRatio(sel.w, sel.h, v) } : { w: v }); if (sel.text) s.settleText(sel.id); }} />
                 <span style={{ color: "var(--ink-ghost)" }}>×</span>
-                <NumIn mark="editor-h" value={Math.round(sel.h)} min={1} onCommit={(v) => s.patchLayer(sel.id, s.ratioLock ? { h: v, w: withRatio(sel.h, sel.w, v) } : { h: v })} />
+                <NumIn mark="editor-h" value={Math.round(sel.h)} min={1} onCommit={(v) => { s.patchLayer(sel.id, s.ratioLock || sel.text ? { h: v, w: withRatio(sel.h, sel.w, v) } : { h: v }); if (sel.text) s.settleText(sel.id); }} />
                 <button
                   data-editor-ratio
                   onMouseDown={dropFocus}

@@ -14,15 +14,15 @@ import { useUi } from "../store/ui";
 import { ask } from "../store/ask";
 import type { Dropped } from "../lib/dropImages";
 import {
-  FILL_COLOR, NO_ADJUST, canvasShift, cropShift, destOf, dirOf, emptyHist, growsBeyond, hasAdjust, nextName, placeNew, pushHist,
+  FILL_COLOR, NO_ADJUST, canvasShift, centerOf, cropShift, destOf, dirOf, docToLayer, emptyHist, growsBeyond, hasAdjust, nextName, placeNew, pushHist,
   redoHist, rotate90 as rot90, saveNameOf, scaleXform, textLayerName, undoHist,
   type Adjust, type Anchor, type Fill, type Hist, type Rect, type TextMeta,
 } from "./model";
-import { bakeStroke, cloneCanvas, exportDataUrl, fillAround, makeCanvas, mergeInto, renderText, type Layer, type Stroke } from "./pixels";
+import { bakeStroke, bucketFill, cloneCanvas, exportDataUrl, fillAround, makeCanvas, mergeInto, renderText, type Layer, type Stroke } from "./pixels";
 import { loadItem, saveImage } from "./io";
 import { loadDocs, scheduleFlush } from "./persist";
 
-export type Tool = "select" | "brush" | "eraser" | "text" | "crop" | "pan";
+export type Tool = "select" | "brush" | "eraser" | "bucket" | "text" | "crop" | "pan";
 
 type Snap = { w: number; h: number; layers: Layer[]; sel: string | null };
 
@@ -106,6 +106,10 @@ type S = {
   endTextEdit: (apply: boolean) => void;
   /** 글자 레이어의 원문·글꼴을 고치고 픽셀을 새로 굽는다 (한 걸음). 어느 캔버스에 있든 찾는다. 빈 원문이면 레이어를 거둔다 */
   patchText: (id: string, p: Partial<TextMeta>) => void;
+  /** 손잡이·폭 칸으로 늘린 글자 레이어 — 늘린 비율을 **글꼴 크기**로 옮기고 다시 굽는다 (걸음은 안 적는다: 끌기 전에 적혀 있다) */
+  settleText: (id: string) => void;
+  /** 페인트통 — 고른 레이어에서 누른 자리와 이어진 같은 색을 브러시 색으로 채운다 (한 걸음). 채운 것이 없으면 false */
+  fillAt: (at: { x: number; y: number }) => boolean;
 
   undo: () => void;
   redo: () => void;
@@ -414,13 +418,36 @@ export const useEditor = create<S>((set, get) => {
         const text: TextMeta = { ...l.text, ...p };
         if (!text.value.trim()) return without(dd, id);
         const cv = renderText(text);
-        // ★글을 고쳐도 손잡이로 키워 둔 배율은 지킨다 (빈 글이었으면 1)
-        const k = l.text.value.trim() ? l.w / l.sw : 1;
+        // ★글자 레이어의 상자는 언제나 구운 크기 그대로다 — 늘린 비율은 `settleText` 가 글꼴 크기로 옮겨 두므로 여기서 지킬 배율이 없다
         const name = "value" in p ? textLayerName(text.value, l.name) : l.name;
         return {
-          layers: dd.layers.map((x) => (x.id === id ? { ...x, text, name, cv, sw: cv.width, sh: cv.height, w: cv.width * k, h: cv.height * k } : x)),
+          layers: dd.layers.map((x) => (x.id === id ? { ...x, text, name, cv, sw: cv.width, sh: cv.height, w: cv.width, h: cv.height } : x)),
         };
       });
+    },
+    settleText(id) {
+      // ★글자 레이어는 픽셀을 확대하지 않는다 (사용자 지적 2026-09-22: 늘리면 글씨가 깨지고, 글자 도구로 열면 원래 크기로 돌아갔다).
+      //   상자를 늘린 비율만큼 글꼴 크기를 바꿔 새로 굽고, 가운데는 그 자리에 둔다
+      const d = get().docs.find((x) => x.layers.some((l) => l.id === id));
+      const l = d?.layers.find((x) => x.id === id);
+      if (!d || !l?.text || (l.w === l.sw && l.h === l.sh)) return;
+      const text: TextMeta = { ...l.text, size: Math.max(1, Math.round(l.text.size * (l.w / l.sw))) };
+      const cv = renderText(text);
+      const c = centerOf(l);
+      patchDoc(d.id, {
+        layers: d.layers.map((x) => (x.id === id ? { ...x, text, cv, sw: cv.width, sh: cv.height, w: cv.width, h: cv.height, x: c.x - cv.width / 2, y: c.y - cv.height / 2 } : x)),
+        dirty: true,
+      });
+    },
+    fillAt(at) {
+      const l = get().layer();
+      if (!l) return false;
+      const ui = useUi.getState().editorBrush;
+      const p = docToLayer(l, at.x, at.y);
+      const cv = bucketFill(l, p.x, p.y, ui.brush.color, ui.bucket.tolerance);
+      if (!cv) return false;
+      commit((d) => ({ layers: d.layers.map((x) => (x.id === l.id ? { ...x, cv } : x)) }));
+      return true;
     },
 
     undo() {

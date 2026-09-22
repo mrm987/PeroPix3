@@ -164,12 +164,14 @@ export function Stage({ doc }: { doc: Doc }) {
       return;
     }
 
-    if (tool === "brush" || tool === "eraser") {
+    if (tool === "brush" || tool === "eraser" || tool === "bucket") {
       const l = s.layer();
       if (!l) return toast(t("editor.noLayer"), "warn");
       if (!l.on) return toast(t("editor.layerOff"), "warn");
       // ★글자 레이어에는 안 그린다 — 그리면 원문과 어긋난다. 아래와 합치면 보통 레이어가 된다
       if (l.text) return toast(t("editor.textNoPaint"), "warn");
+      // 페인트통 — 누른 자리와 이어진 같은 색을 채운다 (한 걸음)
+      if (tool === "bucket") { s.fillAt(p); return; }
       const b = tool === "eraser" ? useUi.getState().editorBrush.eraser : useUi.getState().editorBrush.brush;
       const cv = makeCanvas(l.sw, l.sh);
       const st: Stroke = { cv, alpha: b.opacity / 100, erase: tool === "eraser" };
@@ -202,6 +204,12 @@ export function Stage({ doc }: { doc: Doc }) {
       dragRef.current = { kind: "move", start: p, layer: hit };
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
     } else if (doc.sel) s.selectLayer(null);
+  };
+  /** 캔버스 **밖**(무대의 빈 바탕)을 눌러도 선택을 푼다 — 안의 빈 자리를 눌렀을 때와 같다 (사용자 지시 2026-09-22).
+   *  ★캔버스 위의 누르기도 여기까지 올라오므로 **바탕 자체**를 누른 것만 받는다 */
+  const downOutside = (e: React.PointerEvent) => {
+    if (e.target !== e.currentTarget || e.button !== 0 || tool !== "select") return;
+    if (doc.sel) useEditor.getState().selectLayer(null);
   };
 
   const strokeAt = (p: { x: number; y: number }) => {
@@ -262,10 +270,9 @@ export function Stage({ doc }: { doc: Doc }) {
         const oy = -sy * (l.h / 2);
         let w = sx ? Math.max(1, Math.abs(ux - ox)) : l.w;
         let h = sy ? Math.max(1, Math.abs(uy - oy)) : l.h;
-        if (ratioLock && sx && sy) {
-          const kx = w / l.w;
-          const ky = h / l.h;
-          const kk = Math.max(kx, ky);
+        // ★글자 레이어는 언제나 비율대로 — 상자를 늘리는 것이 곧 글꼴 크기라(놓을 때 `settleText` 가 다시 굽는다) 한쪽만 늘릴 수 없다
+        if (l.text || (ratioLock && sx && sy)) {
+          const kk = !sx ? h / l.h : !sy ? w / l.w : Math.max(w / l.w, h / l.h);
           w = l.w * kk;
           h = l.h * kk;
         }
@@ -293,6 +300,8 @@ export function Stage({ doc }: { doc: Doc }) {
         const c = useEditor.getState().crop;
         if (c && (c.w < 2 || c.h < 2)) useEditor.getState().setCrop(null);
       }
+      // 글자 레이어를 늘렸으면 — 늘린 만큼 글꼴 크기를 바꿔 다시 굽는다 (픽셀 확대를 남기지 않는다)
+      if (d.kind === "scale" && d.marked && d.layer?.text) useEditor.getState().settleText(d.layer.id);
       return;
     }
     const sr = strokeRef.current;
@@ -339,7 +348,7 @@ export function Stage({ doc }: { doc: Doc }) {
 
   const cursorStyle =
     tool === "pan" ? (movable ? "move" : "default")
-      : tool === "crop" ? "crosshair"
+      : tool === "crop" || tool === "bucket" ? "crosshair"
         : tool === "text" ? "text"
           : tool === "brush" || tool === "eraser" ? "none"
             : hover ? "move" : "default";
@@ -351,6 +360,7 @@ export function Stage({ doc }: { doc: Doc }) {
     <div
       ref={hostRef}
       data-editor-stage
+      onPointerDown={downOutside}
       style={{ flex: 1, minHeight: 0, position: "relative", overflow: "hidden", border: "1px solid var(--line)", borderRadius: "var(--r-3)", ...bgStyle }}
     >
       <div

@@ -3,7 +3,7 @@
  *  ★레이어 픽셀은 **불변**으로 다룬다: 획 하나·보정 적용·합치기는 언제나 **새 캔버스**를 만든다. 이력(`Hist`)이
  *    옛 캔버스를 그대로 들고 있으므로 되돌리기는 참조를 바꾸는 것으로 끝난다.
  *  ★합성은 **문서 좌표계**에서 한다 — 레이어의 변형(자리·크기·회전·반전)은 그릴 때 `ctx` 변환으로 건다 (비파괴). */
-import { centerOf, filterOf, layoutText, rad, type LayerMeta, type Rect, type Size, type TextMeta, type Xform } from "./model";
+import { centerOf, filterOf, floodFill, hexRgb, layoutText, rad, type LayerMeta, type Rect, type Size, type TextMeta, type Xform } from "./model";
 
 export type Layer = LayerMeta & { cv: HTMLCanvasElement };
 
@@ -157,6 +157,18 @@ export function resample(src: HTMLCanvasElement, w: number, h: number): HTMLCanv
   const g = cv.getContext("2d")!;
   g.imageSmoothingQuality = "high";
   g.drawImage(src, 0, 0, cv.width, cv.height);
+  return cv;
+}
+
+/** 페인트통 — 레이어 **원본 좌표** `(x, y)` 에서 이어진 같은 색을 `color` 로 채운다 → 새 캔버스.
+ *  누른 자리가 레이어 밖이거나 바뀐 것이 없으면 null (그때는 걸음도 안 적는다) */
+export function bucketFill(l: Layer, x: number, y: number, color: string, tol: number): HTMLCanvasElement | null {
+  if (x < 0 || y < 0 || x >= l.sw || y >= l.sh) return null;
+  const cv = cloneCanvas(l.cv);
+  const g = cv.getContext("2d")!;
+  const img = g.getImageData(0, 0, cv.width, cv.height);
+  if (!floodFill(img.data, cv.width, cv.height, x, y, [...hexRgb(color), 255], tol)) return null;
+  g.putImageData(img, 0, 0);
   return cv;
 }
 

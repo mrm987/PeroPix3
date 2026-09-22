@@ -187,10 +187,12 @@ type Persisted = {
   /** ★이미지 편집의 **저장 설정** (사용자 지시 2026-09-22) — 자리 세 갈래(일괄 변환·검열과 같다)와 형식(PNG·WebP 무손실).
    *  일괄 변환의 `convertLast` 와 같은 사정: 열 때마다 기본값이면 매번 다시 맞춘다. */
   editLast: { mode: "overwrite" | "sub" | "folder"; dest: string; fmt: "png" | "webp" };
-  /** 이미지 편집의 붓 — **브러시와 지우개가 따로** 기억된다 (사용자 지시 2026-09-22). 크기·경도·불투명도, 브러시는 색까지 */
+  /** 이미지 편집의 붓 — **브러시와 지우개가 따로** 기억된다 (사용자 지시 2026-09-22). 크기·경도·불투명도, 브러시는 색까지.
+   *  페인트통은 허용치만 제 것이고 색은 브러시의 것을 쓴다 (전경색 하나) */
   editorBrush: {
     brush: { size: number; hard: number; opacity: number; color: string };
     eraser: { size: number; hard: number; opacity: number };
+    bucket: { tolerance: number };
   };
   /** 이미지 편집 글자 도구의 마지막 글꼴·크기·색·굵기·정렬 — 새 글자 레이어의 기본값 (`editor/model` 의 `TextStyle`) */
   editorText: { font: string; size: number; color: string; bold: boolean; align: "left" | "center" | "right" };
@@ -279,7 +281,7 @@ const DEFAULTS: Persisted = {
   // 기본은 각 방향의 기본 해상도 (`SIZE_PRESETS` 의 ✦ 표시)
   sizeLast: { landscape: [1216, 832], portrait: [832, 1216], square: [1024, 1024] },
   editLast: { mode: "sub", dest: "", fmt: "png" },
-  editorBrush: { brush: { size: 24, hard: 0.8, opacity: 100, color: "#ff5a6e" }, eraser: { size: 40, hard: 0.8, opacity: 100 } },
+  editorBrush: { brush: { size: 24, hard: 0.8, opacity: 100, color: "#ff5a6e" }, eraser: { size: 40, hard: 0.8, opacity: 100 }, bucket: { tolerance: 32 } },
   editorText: { font: FONTS[0].stack, size: 48, color: "#ffffff", bold: false, align: "left" },
   editorBg: "dark",
   laneSide: "bottom",
@@ -311,6 +313,8 @@ function load(): Persisted {
       }
       // ★작업 상태의 칸이 늘면(`hide`, 2026-09-08) 옛 저장본에 그 칸이 없다 — 빈 표로 채운다
       if (got.view && typeof got.view === "object") got.view = { ...DEFAULTS.view, ...got.view };
+      // ★붓에 도구가 늘면(페인트통, 2026-09-22) 옛 저장본에 그 칸이 없다 — 기본값으로 채운다
+      if (got.editorBrush && typeof got.editorBrush === "object") got.editorBrush = { ...DEFAULTS.editorBrush, ...got.editorBrush };
       return { ...DEFAULTS, ...got };
     }
   } catch {}
@@ -360,7 +364,7 @@ type S = Persisted & {
   /** 일괄 변환의 마지막 설정을 얹는다 (한 칸씩 바뀐다) */
   setConvertLast: (v: Partial<Persisted["convertLast"]>) => void;
   setEditLast: (v: Partial<Persisted["editLast"]>) => void;
-  setEditorBrush: (which: "brush" | "eraser", v: Partial<Persisted["editorBrush"]["brush"]>) => void;
+  setEditorBrush: (which: "brush" | "eraser" | "bucket", v: Partial<Persisted["editorBrush"]["brush"] & Persisted["editorBrush"]["bucket"]>) => void;
   setEditorText: (v: Partial<Persisted["editorText"]>) => void;
   setEditorBg: (v: string) => void;
   setStreamPreview: (v: boolean) => void;

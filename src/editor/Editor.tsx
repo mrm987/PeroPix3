@@ -56,7 +56,7 @@ export default function Editor() {
       }
       // ★Del — 고른 레이어를 지운다 (사용자 지시 2026-09-22). 되돌리기가 있어 묻지 않는다 (삭제 단추와 같다)
       if (e.key === "Delete" && st.layer()) { e.preventDefault(); return st.removeLayer(); }
-      const tools: Record<string, Tool> = { KeyV: "select", KeyB: "brush", KeyE: "eraser", KeyT: "text", KeyC: "crop", KeyH: "pan" };
+      const tools: Record<string, Tool> = { KeyV: "select", KeyB: "brush", KeyE: "eraser", KeyG: "bucket", KeyT: "text", KeyC: "crop", KeyH: "pan" };
       const tool = tools[e.code];
       if (tool) { e.preventDefault(); st.setTool(tool); }
     };
@@ -208,10 +208,11 @@ const dropTrappedFocus = (e: React.PointerEvent) => {
   if (a && a !== document.body && a.matches("input, textarea, select, [contenteditable=true]")) a.blur();
 };
 
-const TOOLS: { id: Tool; icon: React.ReactNode; key: "editor.toolSelect" | "editor.toolBrush" | "editor.toolEraser" | "editor.toolText" | "editor.toolCrop" | "editor.toolPan" }[] = [
+const TOOLS: { id: Tool; icon: React.ReactNode; key: "editor.toolSelect" | "editor.toolBrush" | "editor.toolEraser" | "editor.toolBucket" | "editor.toolText" | "editor.toolCrop" | "editor.toolPan" }[] = [
   { id: "select", icon: Icon.cursor, key: "editor.toolSelect" },
   { id: "brush", icon: Icon.brush, key: "editor.toolBrush" },
   { id: "eraser", icon: Icon.eraser, key: "editor.toolEraser" },
+  { id: "bucket", icon: Icon.bucket, key: "editor.toolBucket" },
   { id: "text", icon: Icon.typeT, key: "editor.toolText" },
   { id: "crop", icon: Icon.crop, key: "editor.toolCrop" },
   { id: "pan", icon: Icon.move, key: "editor.toolPan" },
@@ -314,6 +315,18 @@ function ToolOptions() {
               <input type="color" data-editor-brush-color value={brushes.brush.color} onChange={(e) => setBrush("brush", { color: e.target.value })} style={colorBox} />
             </Opt>
           )}
+        </>
+      )}
+      {/* 페인트통 — 허용치는 제 것, 색은 브러시와 같은 것(전경색) */}
+      {tool === "bucket" && (
+        <>
+          <Opt label={t("editor.tolerance")}>
+            <input type="range" data-editor-bucket-tol min={0} max={255} value={brushes.bucket.tolerance} onChange={(e) => setBrush("bucket", { tolerance: Number(e.target.value) })} style={{ width: 110 }} />
+            <span style={num}>{brushes.bucket.tolerance}</span>
+          </Opt>
+          <Opt label={t("editor.color")}>
+            <input type="color" data-editor-brush-color value={brushes.brush.color} onChange={(e) => setBrush("brush", { color: e.target.value })} style={colorBox} />
+          </Opt>
         </>
       )}
       {tool === "text" && (

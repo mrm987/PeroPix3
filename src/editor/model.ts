@@ -198,6 +198,50 @@ export function redoHist<T>(h: Hist<T>, cur: T): { h: Hist<T>; snap: T } | null 
 
 /* ── 이름·저장 자리 ─────────────────────────────────────────────── */
 
+/* ── 페인트통 ─────────────────────────────────────────────────── */
+
+/** `#rrggbb` → [r, g, b] */
+export function hexRgb(hex: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  const n = m ? parseInt(m[1], 16) : 0;
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** 페인트통 — `(x, y)` 에서 **이어진** 같은 색을 `rgba` 로 채운다. `data` 는 RGBA 픽셀이고 제자리에서 바꾼다.
+ *  `tol` 은 채널마다의 차이 상한(0~255, 포토샵의 허용치). 떨어져 있는 같은 색은 안 채운다.
+ *  누른 자리가 밖이거나 이미 그 색이면 아무것도 안 바꾸고 false */
+export function floodFill(data: Uint8ClampedArray, w: number, h: number, x: number, y: number, rgba: [number, number, number, number], tol: number): boolean {
+  x = Math.floor(x);
+  y = Math.floor(y);
+  if (x < 0 || y < 0 || x >= w || y >= h) return false;
+  const i0 = (y * w + x) * 4;
+  const t = [data[i0], data[i0 + 1], data[i0 + 2], data[i0 + 3]];
+  if (t[0] === rgba[0] && t[1] === rgba[1] && t[2] === rgba[2] && t[3] === rgba[3]) return false;
+  const near = (p: number) => {
+    const i = p * 4;
+    return Math.abs(data[i] - t[0]) <= tol && Math.abs(data[i + 1] - t[1]) <= tol && Math.abs(data[i + 2] - t[2]) <= tol && Math.abs(data[i + 3] - t[3]) <= tol;
+  };
+  const seen = new Uint8Array(w * h);
+  const stack = [y * w + x];
+  // 가로 한 줄씩 — 이어진 구간을 양쪽으로 넓혀 칠하고, 그 구간의 위아래를 다시 본다
+  while (stack.length) {
+    const p = stack.pop()!;
+    if (seen[p] || !near(p)) continue;
+    const py = Math.floor(p / w);
+    let l = p;
+    let r = p;
+    while (l % w > 0 && !seen[l - 1] && near(l - 1)) l--;
+    while ((r + 1) % w > 0 && !seen[r + 1] && near(r + 1)) r++;
+    for (let i = l; i <= r; i++) {
+      seen[i] = 1;
+      data.set(rgba, i * 4);
+      if (py > 0) stack.push(i - w);
+      if (py < h - 1) stack.push(i + w);
+    }
+  }
+  return true;
+}
+
 /** 「레이어 N」 — 있는 이름과 안 겹치는 다음 번호 */
 export function nextName(names: string[], base: (n: number) => string): string {
   for (let n = 1; ; n++) {
