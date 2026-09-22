@@ -95,6 +95,7 @@
   --mode-set: #14806f;
   --mode-gallery: #6b5bb8;
   --mode-censor: #a8433b;
+  --mode-editor: #b8712f;
   --mode-utility: #7a7f86;
   --mode-plugins: #2f7a63;
 
@@ -266,6 +267,7 @@
     --mode-set: #22c55e;
     --mode-gallery: #9d8cf5;
     --mode-censor: #e05555;
+    --mode-editor: #e8944a;
     --mode-utility: #a8a8b6;
     --mode-plugins: #3fbf9a;
 

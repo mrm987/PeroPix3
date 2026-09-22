@@ -11,7 +11,7 @@ export function AskDialog() {
     if (!cur) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") answer(false);
-      if (e.key === "Enter") answer(true);
+      if (e.key === "Enter") answer(cur.options ? cur.options[0].key : true);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -54,19 +54,34 @@ export function AskDialog() {
           <button data-ask-cancel onClick={() => answer(false)} style={btn}>
             {cur.cancel}
           </button>
-          <button
-            data-ask-ok
-            autoFocus
-            onClick={() => answer(true)}
-            style={{
-              ...btn,
-              background: cur.danger ? "var(--err)" : "var(--accent)",
-              borderColor: cur.danger ? "var(--err)" : "var(--accent)",
-              color: "#fff",
-            }}
-          >
-            {cur.ok}
-          </button>
+          {/* ★갈래 물음이면 단추가 갈래 수만큼 — 첫 것이 기본 (Enter) */}
+          {cur.options
+            ? cur.options.map((o, i) => (
+                <button
+                  key={o.key}
+                  data-ask-pick={o.key}
+                  autoFocus={i === 0}
+                  onClick={() => answer(o.key)}
+                  style={i === 0 ? { ...btn, background: "var(--accent)", borderColor: "var(--accent)", color: "#fff" } : btn}
+                >
+                  {o.label}
+                </button>
+              ))
+            : (
+              <button
+                data-ask-ok
+                autoFocus
+                onClick={() => answer(true)}
+                style={{
+                  ...btn,
+                  background: cur.danger ? "var(--err)" : "var(--accent)",
+                  borderColor: cur.danger ? "var(--err)" : "var(--accent)",
+                  color: "#fff",
+                }}
+              >
+                {cur.ok}
+              </button>
+            )}
         </div>
       </div>
     </div>

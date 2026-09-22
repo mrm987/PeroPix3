@@ -1,5 +1,5 @@
 import { useI18n, t as tGlobal } from "./i18n";
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { api } from "./lib/backend";
 import { mark, flushBootTime } from "./lib/bootTime";
 import { watchErrors } from "./lib/report";
@@ -34,6 +34,9 @@ import { CanvasTabs } from "./panels/CanvasTabs";
 import { Gallery } from "./panels/Gallery";
 import { Censor } from "./panels/Censor";
 import { Tools } from "./panels/Tools";
+/* ★★이미지 편집은 **지연 로드** (사용자 지시 2026-09-22: "이미지 편집이 크다고 하니까 분리"). 픽셀 편집기가
+   다른 화면의 첫 그림을 늦추지 않게, 그 모드에 처음 들어갈 때 받는다. */
+const Editor = lazy(() => import("./editor/Editor"));
 import { Plugins } from "./panels/Plugins";
 import { PluginPanel } from "./panels/PluginPanel";
 import { usePlugins } from "./lib/pluginHost";
@@ -365,6 +368,10 @@ export function App() {
             <Gallery />
           ) : mode === "censor" ? (
             <Censor />
+          ) : mode === "editor" ? (
+            <Suspense fallback={null}>
+              <Editor />
+            </Suspense>
           ) : mode === "utility" ? (
             <Tools />
           ) : mode === "plugins" ? null : (

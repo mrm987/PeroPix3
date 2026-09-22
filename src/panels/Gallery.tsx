@@ -775,6 +775,7 @@ function Big({
                  한쪽만 고쳐진다. */
             onConvert={() => toConvert([file])}
             onCensor={() => toCensor([file])}
+            onEdit={() => toEdit([file])}
             /* ★★**지우는 단추가 여기 있어야 한다** (사용자 지시 2026-08-25: *"갤러리 이미지
                  보는 곳에 삭제 버튼이 없음"*). 그리드에서는 골라서 지우지만, 크게 보다가
                  「이건 아니다」 하는 자리가 바로 여기다 — 닫고 다시 골라야 했다.
@@ -906,6 +907,13 @@ async function toCensor(files: string[]) {
   useUi.getState().setMode("censor");
 }
 
+/** 「이미지 편집으로 보내기」 — 보관함 그림은 절대 경로로 넘긴다 (검열과 같다). 여러 장이면 한 문서에 전부 (사용자 지시 2026-09-22) */
+async function toEdit(files: string[]) {
+  const items = await keepPaths(files);
+  const { sendToEditor } = await import("../editor/sendTo");
+  await sendToEditor(items);
+}
+
 /** 고른 그림 아래 붙는 **빠른 줄** (사용자 지시 2026-09-21: *"갤러리에서 이미지 그냥 클릭했을 때도
  *  하단에 빠른 메뉴 뜨게"*).
  *
@@ -966,6 +974,7 @@ function QuickBar({
         }
         onConvert={() => toConvert(files)}
         onCensor={() => toCensor(files)}
+        onEdit={() => toEdit(files)}
         extra={
           <button
             data-gallery-quick-del

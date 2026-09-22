@@ -424,6 +424,14 @@ function SceneActions() {
           useCensor.getState().setTab("before");
           useUi.getState().setMode("censor");
         }}
+        /* ★이미지 편집으로 보내기 (사용자 지시 2026-09-22) — 검열과 같은 `rel`(아웃풋 루트 기준). 여러 장이면 전부.
+           열린 문서가 있으면 편집기가 한 번 묻는다 (새 문서 / 레이어로 추가). */
+        onEdit={async () => {
+          const files = multiFiles.length > 1 ? multiFiles : [await ensureSaved()].filter((x): x is string => !!x);
+          if (!files.length) return;
+          const { sendToEditor } = await import("../editor/sendTo");
+          await sendToEditor(files.map((f) => ({ name: f.split("/").pop() ?? f, rel: `${ws}/${f}` })));
+        }}
         extra={
           <>
             {/* ★미저장이면 「삭제」 자리에 **「저장」** — 저장하면 이 줄이 그대로 「삭제」가 된다 */}

@@ -53,6 +53,8 @@ export function ImageActions({
   onKeep,
   onConvert,
   onCensor,
+  onEdit,
+  getUrl,
   onClone,
   onLeave,
   extra,
@@ -96,6 +98,10 @@ export function ImageActions({
   onConvert?: () => void | Promise<void>;
   /** 자동검열 목록에 담고 그 화면으로 (사용자 지시 2026-09-07: 「보내기」에 「자동검열로 보내기」) */
   onCensor?: () => void | Promise<void>;
+  /** 「이미지 편집으로 보내기」 (사용자 지시 2026-09-22) — 씬 캔버스·갤러리가 준다. 편집기 안에서는 안 준다 */
+  onEdit?: () => void | Promise<void>;
+  /** ★그림을 **누를 때** 굽는 자리 (이미지 편집기) — 합성 결과라 매 편집마다 PNG 를 만들 수 없다. 있으면 `url` 대신 쓴다 */
+  getUrl?: () => Promise<string>;
   /** 「새 탭으로 복제」 — **워크스페이스 파일에만** 뜻이 있다 (보관함에서는 안 넘어온다).
    *  ★미저장 그림에도 안 뜬다: 그때는 부르는 쪽이 이 줄 대신 다른 줄을 그린다 (`SceneActions`) */
   onClone?: () => void | Promise<void>;
@@ -118,6 +124,7 @@ export function ImageActions({
   /** ★쿼리를 하나 붙여 받는다 — 같은 주소를 `<img>` 가 no-cors 로 먼저 캐시해 두면
    *  그 뒤의 `fetch` 가 CORS 로 막힌다 (실측으로 밟았다, 2026-08-04). */
   const asBase64 = async () => {
+    if (getUrl) return (await getUrl()).split(",")[1] ?? "";
     /* ★★**미저장 그림은 주소가 `data:` 다** (자동 저장을 끈 결과 — `Canvas` 가 `takeSrc` 와 같은 꼴로
        준다). 거기에 `?b64=1` 을 붙이면 base64 가 깨져 i2i·인페인트가 실패했다 (사용자 지적
        2026-08-30). 이미 바이트를 들고 있으니 그대로 꺼낸다 — 서버에 물을 것이 없다. */
@@ -474,12 +481,13 @@ export function ImageActions({
             ★단추는 일괄변환이 쓰던 아이콘, 갈래는 **글자**로 (같은 지시). */}
         <SendMenu
           busy={busy}
-          img={{ url, name }}
+          img={url ? { url, name } : undefined}
           items={[
             onClone && { mark: "clone", label: t("act.clone"), run: runClone },
             onKeep && { mark: "keep", label: t("gallery.keep"), run: onKeep },
             onConvert && { mark: "convert", label: t("tools.sendConvert"), run: onConvert },
             onCensor && { mark: "censor", label: t("tools.sendCensor"), run: onCensor },
+            onEdit && { mark: "edit", label: t("tools.sendEdit"), run: onEdit },
           ].filter((x): x is SendItem => !!x)}
         />
         {extra}

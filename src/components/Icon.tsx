@@ -480,6 +480,16 @@ export const Icon = {
       <path d="M9.5 5.5 12 3l2.5 2.5M9.5 18.5 12 21l2.5-2.5M5.5 9.5 3 12l2.5 2.5M18.5 9.5 21 12l-2.5 2.5" />
     </>,
   ),
+  /* ── 이미지 편집 (2026-09-22) ── */
+  crop: s(<><path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M2 6h14a2 2 0 0 1 2 2v14" /></>),
+  redo: s(<><path d="M20 9H9a5 5 0 0 0 0 10h6" /><path d="M16 5l4 4-4 4" /></>, 14),
+  /** 아래 레이어와 합치기 */
+  merge: s(<><path d="M12 4v10" /><path d="M8.5 10.5 12 14l3.5-3.5" /><path d="M5 19h14" /></>, 14),
+  rotateCw: s(<><path d="M20 5v5h-5" /><path d="M19.4 13a7.6 7.6 0 1 1-1.7-6.4L20 10" /></>, 12),
+  flipH: s(<><path d="M12 3v18" /><path d="M8 7 4 12l4 5V7z" /><path d="M16 7l4 5-4 5V7z" /></>, 12),
+  flipV: s(<><path d="M3 12h18" /><path d="M7 8l5-4 5 4H7z" /><path d="M7 16l5 4 5-4H7z" /></>, 12),
+  /** 캔버스 밖 배경 (체커) */
+  checker: s(<><rect x="4" y="4" width="16" height="16" rx="1.5" /><path d="M4 4h8v8H4zM12 12h8v8h-8z" fill="currentColor" stroke="none" /></>, 14),
   settings: s(
     <>
       <circle cx="12" cy="12" r="3" />

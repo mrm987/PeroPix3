@@ -9,12 +9,14 @@ import { useEffect, useRef } from "react";
 
 /** 모드 = 하단 네비의 자리. v2.x 의 모드 전환이 여기로 온다.
  *  싱글·세트는 모드가 아니라 캔버스 탭이므로 여기 없다. */
-export type ModeId = "generate" | "gallery" | "censor" | "utility" | "plugins";
+export type ModeId = "generate" | "gallery" | "censor" | "editor" | "utility" | "plugins";
 
 export const MODES: { id: ModeId; label: string; color: string }[] = [
   { id: "generate", label: "생성", color: "var(--mode-single)" },
   { id: "gallery", label: "갤러리", color: "var(--mode-gallery)" },
   { id: "censor", label: "자동검열", color: "var(--mode-censor)" },
+  // ★이미지 편집 — 레이어·브러시·변형·보정 (사용자 지시 2026-09-22, `src/editor/`). 자동검열과 보조 도구 사이
+  { id: "editor", label: "이미지 편집", color: "var(--mode-editor)" },
   { id: "utility", label: "보조 도구", color: "var(--mode-utility)" },
   // ★플러그인 — 설치된 플러그인의 캔버스 + 관리 (사용자 제안 2026-09-07, `docs/plugin-design.md`)
   { id: "plugins", label: "플러그인", color: "var(--mode-plugins)" },
@@ -182,6 +184,12 @@ type Persisted = {
    *  탭을 누르면 목록만 갈리는 게 아니라 **그 크기가 바로 걸린다** — 세로로 뽑다가
    *  가로로 옮길 때 목록에서 한 번 더 고르지 않아도 된다. */
   sizeLast: Record<"landscape" | "portrait" | "square", [number, number]>;
+  /** ★이미지 편집의 **저장 설정** (사용자 지시 2026-09-22) — 자리 세 갈래(일괄 변환·검열과 같다)와 형식(PNG·WebP 무손실).
+   *  일괄 변환의 `convertLast` 와 같은 사정: 열 때마다 기본값이면 매번 다시 맞춘다. */
+  editLast: { mode: "overwrite" | "sub" | "folder"; dest: string; fmt: "png" | "webp" };
+  /** 이미지 편집의 **캔버스 밖 배경** — `dark`·`light`·`checker` 또는 `#rrggbb`. 투명 그림을 열면 안팎이 같은 색이라
+   *  영역이 안 보이므로 바깥만 따로 바꾼다. 문서가 아니라 보기 설정이라 여기 산다 (사용자 지시 2026-09-22) */
+  editorBg: string;
   /** ★★씬 줄을 **어디에 두나** (사용자 지시 2026-08-22).
    *
    *  `bottom` 은 지금까지의 모습 — 큰 그림 아래에 가로로 눕는다.
@@ -263,6 +271,8 @@ const DEFAULTS: Persisted = {
                  mode: "sub", dest: "" },
   // 기본은 각 방향의 기본 해상도 (`SIZE_PRESETS` 의 ✦ 표시)
   sizeLast: { landscape: [1216, 832], portrait: [832, 1216], square: [1024, 1024] },
+  editLast: { mode: "sub", dest: "", fmt: "png" },
+  editorBg: "dark",
   laneSide: "bottom",
   laneWidth: 420,
   laneHeadH: 132,
@@ -340,6 +350,8 @@ type S = Persisted & {
   setMaskBrush: (v: number) => void;
   /** 일괄 변환의 마지막 설정을 얹는다 (한 칸씩 바뀐다) */
   setConvertLast: (v: Partial<Persisted["convertLast"]>) => void;
+  setEditLast: (v: Partial<Persisted["editLast"]>) => void;
+  setEditorBg: (v: string) => void;
   setStreamPreview: (v: boolean) => void;
   setFocusNewPending: (v: boolean) => void;
   /** 그 방향에서 마지막에 고른 크기를 적어 둔다 */
@@ -527,6 +539,14 @@ export const useUi = create<S>((set, get) => ({
     set({ convertLast: { ...get().convertLast, ...v } });
     get().commitLayout();
   },
+  setEditLast: (v) => {
+    set({ editLast: { ...get().editLast, ...v } });
+    get().commitLayout();
+  },
+  setEditorBg: (v) => {
+    set({ editorBg: v });
+    get().commitLayout();
+  },
   setSizeLast: (dir, wh) => {
     const cur = get().sizeLast[dir];
     if (cur && cur[0] === wh[0] && cur[1] === wh[1]) return;   // 같은 값이면 저장을 안 부른다
@@ -594,7 +614,7 @@ export const useUi = create<S>((set, get) => ({
     const { leftWidth, rightWidth, leftCollapsed, rightCollapsed, cols, laneSize, laneHeadW,
       laneHeight, artistH, artistOpen, artistColor, artistAlways, font, textScale, importPick, aiWidth, aiCollapsed,
       notifyDone, notifySound, notifyVolume, perSlot, curated, agentAuto, agentAskHard,
-      tagSuggest, artistPrefix, weightHl, fmView, streamPreview, focusNewPending, enhanceLast, maskBrush, convertLast, sizeLast,
+      tagSuggest, artistPrefix, weightHl, fmView, streamPreview, focusNewPending, enhanceLast, maskBrush, convertLast, editLast, editorBg, sizeLast,
       laneSide, laneWidth, laneHeadH, view } = get();
     try {
       localStorage.setItem(
@@ -633,6 +653,8 @@ export const useUi = create<S>((set, get) => ({
           enhanceLast,
           maskBrush,
           convertLast,
+          editLast,
+          editorBg,
           sizeLast,
           laneSide,
           laneWidth,

@@ -3212,6 +3212,107 @@ def censor_apply(body: CensorApply):
     return {"file": str(rel).replace("\\", "/"), "name": dst.name}
 
 
+# ── 이미지 편집 — 합성한 그림을 저장한다 (사용자 지시 2026-09-22) ──────────────
+class EditSave(BaseModel):
+    """이미지 편집 모드가 **합성해 구운** 그림을 저장한다. ★서버는 받은 바이트를 적을 뿐이다 (검열과 같다:
+    레이어·변형·보정은 전부 화면이 하고, 여기에는 결과 픽셀만 온다).
+
+    ★★**메타데이터를 남기지 않는다** (사용자 결정 2026-09-22). 편집본은 생성물이 아니라 재현할 설정이 없고,
+      원본 레이어의 알파에 심긴 스텔스 비트가 합성에 그대로 실려 올 수 있으므로 `meta.strip` 으로 **언제나**
+      민다 (tEXt·EXIF·알파 LSB). 브라우저 PNG 에 tEXt 가 없다고 건너뛰지 말 것.
+    ★형식은 **PNG·WebP(무손실) 둘뿐**이다 — 생성 옵션의 저장 형식과 같다 (`OptionsPanel`). 품질 칸은 없다.
+    ★자리는 일괄 변환·검열과 같은 세 갈래다 (`tools.MODES`). `sub`·`folder` 의 실제 폴더는 화면이 `dest` 로
+      준다 (검열 `CensorApply` 와 같은 이유: 어느 것이 「첫 그림」인지는 한 장씩 오는 창구가 모른다)."""
+
+    #: 화면이 문서 크기로 구운 PNG (data URL 이거나 맨 base64, RGBA)
+    image: str = ""
+    #: 원본 파일 이름 — 줄기를 따서 `<줄기>_edit.png` 로 짓는다. 없으면 `edit`
+    name: str = ""
+    fmt: str = "png"
+    mode: str = "sub"
+    dest: str | None = None
+    #: 원본 자리 — 덮어쓰기가 물러나게 할 파일 (아웃풋 루트 기준 `rel` 이거나 절대 경로 `path`)
+    rel: str | None = None
+    path: str | None = None
+    suffix: str = "_edit"
+
+
+def _edit_src(b: EditSave) -> Path | None:
+    """원본 자리 (있으면). ★루트 밖은 `rel` 로 못 가리킨다 (`files.under` 가 막는다)."""
+    if b.rel:
+        try:
+            p = files.under(WS_ROOT, b.rel)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return p if p.is_file() else None
+    if b.path:
+        p = Path(b.path)
+        return p if p.is_file() else None
+    return None
+
+
+def _edit_out(dst: Path) -> dict:
+    """저장한 자리를 화면 계약대로 — 루트 안이면 아웃풋 루트 기준 상대 경로, 밖이면 절대 경로 (검열과 같다)"""
+    root = WS_ROOT.resolve()
+    rel = dst.relative_to(root) if str(dst).startswith(str(root)) else dst
+    return {"file": str(rel).replace("\\", "/"), "name": dst.name}
+
+
+@app.post("/api/edit/save")
+def edit_save(body: EditSave):
+    """편집 결과를 적는다. ★★픽셀은 화면이 그려 보낸다 — 여기서 다시 그리지 않는다.
+
+    · overwrite  원본 자리에 같은 줄기로. 옛 파일은 지우지 않고 휴지통으로 (`tools.retire`: 루트 안은 앱 휴지통,
+                 밖은 OS 휴지통). 물러날 자리가 없으면 **덮어쓰지 않고 세운다.**
+    · sub·folder 화면이 준 폴더(`dest`)에 `<줄기>_edit.<ext>` 로. 겹치면 `_2`·`_3` 을 붙인다 (덮지 않는다)."""
+    raw = body.image.split(",", 1)[-1] if body.image else ""
+    if not raw:
+        raise HTTPException(400, "저장할 그림이 없습니다")
+    try:
+        rendered = base64.b64decode(raw)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(400, f"그림을 못 읽었습니다: {e}")
+    fmt = "WEBP" if str(body.fmt).lower() == "webp" else "PNG"
+    ext = ".webp" if fmt == "WEBP" else ".png"
+    try:
+        packed = meta.strip(rendered, fmt)
+    except Exception as e:
+        raise HTTPException(400, f"그림을 못 읽었습니다: {e}")
+    if body.mode not in tools_mod.MODES:
+        raise HTTPException(400, f"모르는 저장 방식입니다: {body.mode}")
+    src = _edit_src(body)
+    stem = Path(body.name).stem if body.name else (src.stem if src else "edit")
+
+    if body.mode == "overwrite":
+        if src is None:
+            raise HTTPException(400, "원본 자리를 모르는 그림은 덮어쓸 수 없습니다. 저장 폴더를 정해 주세요.")
+        dst = src.parent / f"{src.stem}{ext}"
+        gone = [q for q in {src, dst} if q.exists()]
+        if gone and not tools_mod.retire(WS_ROOT, gone):
+            raise HTTPException(400, "옛 파일을 휴지통으로 못 보내 덮어쓰기를 멈췄습니다.")
+        dst.write_bytes(packed)
+        return _edit_out(dst)
+
+    if not body.dest:
+        raise HTTPException(400, "저장할 폴더를 골라 주세요.")
+    p = Path(body.dest)
+    if p.is_absolute():
+        folder = p
+    else:
+        try:
+            folder = files.under(WS_ROOT, body.dest)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    folder.mkdir(parents=True, exist_ok=True)
+    dst = folder / f"{stem}{body.suffix}{ext}"
+    n = 2
+    while dst.exists():
+        dst = folder / f"{stem}{body.suffix}_{n}{ext}"
+        n += 1
+    dst.write_bytes(packed)
+    return _edit_out(dst)
+
+
 # ── 파일 관리 (아웃풋 폴더 트리) ────────────────────────────────
 
 
