@@ -16,6 +16,8 @@ export function CanvasSizeDialog({ doc, onClose }: { doc: Doc; onClose: () => vo
   const [h, setH] = useState(doc.h);
   const [a, setA] = useState<Anchor>({ ax: 0.5, ay: 0.5 });
   const [fill, setFill] = useState<Fill>("transparent");
+  /** 비율 유지 (사용자 지시 2026-09-22) — 이미지 크기 창과 같은 단추. ★기본은 꺼짐: 캔버스는 한쪽만 늘리는 일이 잦다 (이미지 크기는 켜짐) */
+  const [lock, setLock] = useState(false);
   const ok = () => {
     if (w >= 1 && h >= 1) useEditor.getState().setCanvasSize(Math.round(w), Math.round(h), a, fill);
     onClose();
@@ -25,15 +27,20 @@ export function CanvasSizeDialog({ doc, onClose }: { doc: Doc; onClose: () => vo
       <div style={{ display: "flex", gap: "var(--sp-6)" }}>
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
           <Line label={t("editor.width")}>
-            <NumField mark="editor-dlg-w" value={w} onChange={setW} />
+            <NumField mark="editor-dlg-w" value={w} onChange={(v) => { setW(v); if (lock) setH(withRatio(doc.w, doc.h, v)); }} />
             <span style={unit}>px</span>
             <span data-editor-dlg-was-w style={was}>{doc.w}</span>
           </Line>
           <Line label={t("editor.height")}>
-            <NumField mark="editor-dlg-h" value={h} onChange={setH} />
+            <NumField mark="editor-dlg-h" value={h} onChange={(v) => { setH(v); if (lock) setW(withRatio(doc.h, doc.w, v)); }} />
             <span style={unit}>px</span>
             <span data-editor-dlg-was-h style={was}>{doc.h}</span>
           </Line>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button data-editor-dlg-lock onMouseDown={dropFocus} onClick={() => setLock(!lock)} style={{ ...box, ...(lock ? on : {}), padding: "2px 8px" }}>
+              {t("editor.ratio")}
+            </button>
+          </div>
           <Line label={t("editor.fill")}>
             <select data-editor-fill value={fill} onChange={(e) => setFill(e.target.value as Fill)} style={{ ...box, flex: 1, minWidth: 0 }}>
               <option value="transparent">{t("editor.fillNone")}</option>
