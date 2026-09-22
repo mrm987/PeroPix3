@@ -3,7 +3,7 @@
  *  ★레이어 픽셀은 **불변**으로 다룬다: 획 하나·보정 적용·합치기는 언제나 **새 캔버스**를 만든다. 이력(`Hist`)이
  *    옛 캔버스를 그대로 들고 있으므로 되돌리기는 참조를 바꾸는 것으로 끝난다.
  *  ★합성은 **문서 좌표계**에서 한다 — 레이어의 변형(자리·크기·회전·반전)은 그릴 때 `ctx` 변환으로 건다 (비파괴). */
-import { centerOf, filterOf, floodFill, hexRgb, layoutText, rad, type LayerMeta, type Rect, type Size, type TextMeta, type Xform } from "./model";
+import { centerOf, filterOf, floodFill, hexRgb, layoutText, rad, textBaseline, type LayerMeta, type Rect, type Size, type TextMeta, type Xform } from "./model";
 
 export type Layer = LayerMeta & { cv: HTMLCanvasElement };
 
@@ -106,23 +106,27 @@ export function composite(
 export const fontOf = (t: TextMeta) => `${t.bold ? "bold " : ""}${t.size}px ${t.font}`;
 
 let probe: CanvasRenderingContext2D | null = null;
-/** 글자 상자의 크기와 줄 자리 — 글 상자(편집 중)와 굽기가 **같은 셈**을 쓴다 */
+/** 글자 상자의 크기와 줄 자리 — 글 상자(편집 중)와 굽기가 **같은 셈**을 쓴다.
+ *  `baseline` 은 줄 위에서 기준선까지 — 글꼴의 올림·내림 높이(주 글꼴의 것, CSS 가 줄 상자에 쓰는 값과 같다)로 셈한다 */
 export function textLayout(t: TextMeta) {
   if (!probe) probe = makeCanvas(1, 1).getContext("2d")!;
   probe.font = fontOf(t);
   const lines = t.value.split("\n");
-  return { lines, ...layoutText(t, lines.map((s) => probe!.measureText(s).width)) };
+  const ms = lines.map((s) => probe!.measureText(s));
+  const L = layoutText(t, ms.map((m) => m.width));
+  return { lines, ...L, baseline: textBaseline(L.lineH, ms[0].fontBoundingBoxAscent, ms[0].fontBoundingBoxDescent) };
 }
 
-/** 글자 레이어의 픽셀 — 원문·글꼴·크기·색·정렬로 새로 굽는다 (빈 글이면 여백만큼의 빈 캔버스) */
+/** 글자 레이어의 픽셀 — 원문·글꼴·크기·색·정렬로 새로 굽는다 (빈 글이면 여백만큼의 빈 캔버스).
+ *  ★기준선은 alphabetic 을 글 상자(CSS)와 같은 자리에 둔다 — `top` 으로 그리면 편집 중보다 위로 올라간다 (사용자 지적 2026-09-22) */
 export function renderText(t: TextMeta): HTMLCanvasElement {
   const L = textLayout(t);
   const cv = makeCanvas(L.w, L.h);
   const g = cv.getContext("2d")!;
   g.font = fontOf(t);
   g.fillStyle = t.color;
-  g.textBaseline = "top";
-  L.lines.forEach((s, i) => g.fillText(s, L.xs[i], L.pad + i * L.lineH));
+  g.textBaseline = "alphabetic";
+  L.lines.forEach((s, i) => g.fillText(s, L.xs[i], L.pad + i * L.lineH + L.baseline));
   return cv;
 }
 

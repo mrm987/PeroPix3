@@ -50,6 +50,11 @@ export function layoutText(t: TextStyle, widths: number[]): { w: number; h: numb
   return { w, h, pad, lineH, xs };
 }
 
+/** 줄 위에서 **기준선(alphabetic)** 까지 — 글 상자(CSS)는 글꼴의 올림(`asc`)·내림(`desc`) 높이를 줄 높이 가운데에 앉히므로
+ *  굽기도 같은 자리에 기준선을 둔다. em 상자 꼭대기(`textBaseline = "top"`)로 그리면 구운 글자가 편집 중보다 위로 올라간다
+ *  (사용자 지적 2026-09-22) */
+export const textBaseline = (lineH: number, asc: number, desc: number) => (lineH - (asc + desc)) / 2 + asc;
+
 /** 글자 레이어의 이름 — 첫 줄을 딴다 (길면 자른다). 빈 글이면 준 이름 그대로 */
 export function textLayerName(value: string, fallback: string): string {
   const first = value.split("\n").find((s) => s.trim())?.trim() ?? "";
