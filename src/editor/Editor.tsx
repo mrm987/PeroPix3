@@ -6,7 +6,7 @@ import { useImageDrop } from "../lib/dropImages";
 import { percent } from "../lib/zoomView";
 import { useFiles } from "../store/files";
 import { toast } from "../store/toast";
-import { useUi } from "../store/ui";
+import { FONTS, useUi } from "../store/ui";
 import { isAbsPath } from "../store/censor";
 import { box, card, dropFocus, num, on } from "../panels/censor/ui";
 import { ImageActions } from "../panels/ImageActions";
@@ -20,7 +20,8 @@ import { sendToEditor } from "./sendTo";
 /** 이미지 편집 모드 (사용자 지시 2026-09-22, 목업 `docs/image-editor-mockup.html`).
  *
  *  뼈대는 자동검열과 같다: 머리 줄 · 도구 옵션 줄 · (도구 띠 | 무대 + 빠른 줄 | 오른쪽 280px 기둥).
- *  ★문서 탭은 워크스페이스 탭과 같은 어법이다 (네모, 세로 선, 활성은 올라온 면).
+ *  ★캔버스 탭은 워크스페이스 탭과 같은 어법이다 (네모, 세로 선, 활성은 올라온 면). 화면은 「캔버스」, 코드는 `Doc` 이다.
+ *  ★남겨 둔 캔버스를 다 읽기 전(`hydrated`)에는 안 그린다 — 빈 화면이 잠깐 떴다가 캔버스가 나타나는 것을 막는다.
  *  ★무대 아래 빠른 줄은 갤러리·크게 보기와 **같은 부품**(`ImageActions`)이라 i2i·인페인트·보내기가 그대로 온다.
  *    그림은 합성 결과를 **누를 때** 굽는다 (`getUrl`) — 매 편집마다 PNG 를 굽지 않는다.
  *  ★★이 모드는 **지연 로드**된다 (`App.tsx` 의 `lazy`) — 픽셀 편집기가 다른 화면의 첫 그림을 늦추지 않게. */
@@ -28,6 +29,7 @@ export default function Editor() {
   const t = useI18n((s) => s.t);
   const s = useEditor();
   const doc = s.doc();
+  const hydrated = s.hydrated;
   const editLast = useUi((st) => st.editLast);
   const { zone, over } = useImageDrop((items) => void sendToEditor(items));
 
@@ -52,7 +54,7 @@ export default function Editor() {
         if (e.key === "Enter") { e.preventDefault(); return st.applyCrop(); }
         if (e.key === "Escape") { e.preventDefault(); return st.setCrop(null); }
       }
-      const tools: Record<string, Tool> = { KeyV: "select", KeyB: "brush", KeyE: "eraser", KeyC: "crop", KeyH: "pan" };
+      const tools: Record<string, Tool> = { KeyV: "select", KeyB: "brush", KeyE: "eraser", KeyT: "text", KeyC: "crop", KeyH: "pan" };
       const tool = tools[e.code];
       if (tool) { e.preventDefault(); st.setTool(tool); }
     };
@@ -139,7 +141,7 @@ export default function Editor() {
         )}
       </div>
 
-      {!doc && (
+      {hydrated && !doc && (
         <div style={{ ...card, flex: 1, minHeight: 0, display: "grid", placeItems: "center", background: "var(--bg)", borderColor: over ? "var(--accent)" : "var(--line)" }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--sp-3)", color: "var(--ink-faint)" }}>
             <span style={{ display: "grid", color: "var(--ink-ghost)" }}>{Icon.images}</span>
@@ -151,7 +153,7 @@ export default function Editor() {
         </div>
       )}
 
-      {doc && (
+      {hydrated && doc && (
         <>
           <ToolOptions />
           <div style={{ flex: 1, minHeight: 0, display: "flex", gap: "var(--sp-4)" }}>
@@ -193,10 +195,11 @@ export default function Editor() {
   );
 }
 
-const TOOLS: { id: Tool; icon: React.ReactNode; key: "editor.toolSelect" | "editor.toolBrush" | "editor.toolEraser" | "editor.toolCrop" | "editor.toolPan" }[] = [
+const TOOLS: { id: Tool; icon: React.ReactNode; key: "editor.toolSelect" | "editor.toolBrush" | "editor.toolEraser" | "editor.toolText" | "editor.toolCrop" | "editor.toolPan" }[] = [
   { id: "select", icon: Icon.cursor, key: "editor.toolSelect" },
   { id: "brush", icon: Icon.brush, key: "editor.toolBrush" },
   { id: "eraser", icon: Icon.eraser, key: "editor.toolEraser" },
+  { id: "text", icon: Icon.typeT, key: "editor.toolText" },
   { id: "crop", icon: Icon.crop, key: "editor.toolCrop" },
   { id: "pan", icon: Icon.move, key: "editor.toolPan" },
 ];
@@ -232,13 +235,26 @@ function ToolStrip() {
   );
 }
 
-/** 도구 옵션 줄 — 고른 도구의 값 + 보기 (꽉차게·원본·% · 캔버스 밖 배경) */
+/** 도구 옵션 줄 — 고른 도구의 값 + 보기 (꽉차게·원본·% · 캔버스 밖 배경).
+ *  ★붓 값은 브러시·지우개가 **따로**다 (`useUi.editorBrush`, 사용자 지시 2026-09-22). 글자 값은 새 글자 레이어의 기본값이면서,
+ *    글자 레이어를 골라 두었으면 그 레이어에도 곧바로 걸린다. */
 function ToolOptions() {
   const t = useI18n((s) => s.t);
   const s = useEditor();
   const doc = s.doc()!;
   const bg = useUi((st) => st.editorBg);
   const setBg = useUi((st) => st.setEditorBg);
+  const brushes = useUi((st) => st.editorBrush);
+  const setBrush = useUi((st) => st.setEditorBrush);
+  const txt = useUi((st) => st.editorText);
+  const setTextUi = useUi((st) => st.setEditorText);
+  const which = s.tool === "eraser" ? "eraser" : "brush";
+  const b = brushes[which];
+  const sel = s.layer();
+  const setText = (p: Partial<typeof txt>) => {
+    setTextUi(p);
+    if (sel?.text) s.patchText(sel.id, p);
+  };
   const [bgOpen, setBgOpen] = useState(false);
   const bgRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -269,22 +285,64 @@ function ToolOptions() {
       {(tool === "brush" || tool === "eraser") && (
         <>
           <Opt label={t("editor.size")}>
-            <input type="range" data-editor-brush-size min={1} max={400} value={s.brush.size} onChange={(e) => s.setBrush({ size: Number(e.target.value) })} style={{ width: 110 }} />
-            <span style={num}>{s.brush.size}</span>
+            <input type="range" data-editor-brush-size min={1} max={400} value={b.size} onChange={(e) => setBrush(which, { size: Number(e.target.value) })} style={{ width: 110 }} />
+            <span style={num}>{b.size}</span>
           </Opt>
           <Opt label={t("editor.hardness")}>
-            <input type="range" data-editor-brush-hard min={0} max={100} value={Math.round(s.brush.hard * 100)} onChange={(e) => s.setBrush({ hard: Number(e.target.value) / 100 })} style={{ width: 90 }} />
-            <span style={num}>{Math.round(s.brush.hard * 100)}%</span>
+            <input type="range" data-editor-brush-hard min={0} max={100} value={Math.round(b.hard * 100)} onChange={(e) => setBrush(which, { hard: Number(e.target.value) / 100 })} style={{ width: 90 }} />
+            <span style={num}>{Math.round(b.hard * 100)}%</span>
           </Opt>
           <Opt label={t("editor.opacity")}>
-            <input type="range" data-editor-brush-opacity min={1} max={100} value={s.brush.opacity} onChange={(e) => s.setBrush({ opacity: Number(e.target.value) })} style={{ width: 90 }} />
-            <span style={num}>{s.brush.opacity}%</span>
+            <input type="range" data-editor-brush-opacity min={1} max={100} value={b.opacity} onChange={(e) => setBrush(which, { opacity: Number(e.target.value) })} style={{ width: 90 }} />
+            <span style={num}>{b.opacity}%</span>
           </Opt>
           {tool === "brush" && (
             <Opt label={t("editor.color")}>
-              <input type="color" data-editor-brush-color value={s.brush.color} onChange={(e) => s.setBrush({ color: e.target.value })} style={{ width: 24, height: 18, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "transparent" }} />
+              <input type="color" data-editor-brush-color value={brushes.brush.color} onChange={(e) => setBrush("brush", { color: e.target.value })} style={colorBox} />
             </Opt>
           )}
+        </>
+      )}
+      {tool === "text" && (
+        <>
+          <Opt label={t("editor.font")}>
+            <select data-editor-text-font value={txt.font} onChange={(e) => setText({ font: e.target.value })} style={{ ...box, width: 140, padding: "1px 6px" }}>
+              {FONTS.map((f) => <option key={f.id} value={f.stack}>{f.label}</option>)}
+              <option value="serif">Serif</option>
+              <option value="monospace">Monospace</option>
+            </select>
+          </Opt>
+          <Opt label={t("editor.size")}>
+            <input
+              type="number"
+              data-editor-text-size
+              min={4}
+              max={600}
+              value={txt.size}
+              onChange={(e) => setText({ size: Math.max(4, Math.min(600, Math.round(Number(e.target.value) || 4))) })}
+              style={{ ...box, width: 58, textAlign: "right", fontVariantNumeric: "tabular-nums", padding: "1px 6px" }}
+            />
+          </Opt>
+          <Opt label={t("editor.color")}>
+            <input type="color" data-editor-text-color value={txt.color} onChange={(e) => setText({ color: e.target.value })} style={colorBox} />
+          </Opt>
+          <button data-editor-text-bold onMouseDown={dropFocus} onClick={() => setText({ bold: !txt.bold })} style={{ ...box, ...(txt.bold ? on : {}), padding: "2px 8px", fontWeight: "var(--w-bold)" }}>
+            {t("editor.bold")}
+          </button>
+          <span style={{ display: "inline-flex", gap: 2 }}>
+            {(["left", "center", "right"] as const).map((a) => (
+              <button
+                key={a}
+                data-editor-text-align={a}
+                onMouseDown={dropFocus}
+                onClick={() => setText({ align: a })}
+                data-tip={t(a === "left" ? "editor.alignLeft" : a === "center" ? "editor.alignCenter" : "editor.alignRight")}
+                style={{ ...box, ...(txt.align === a ? on : {}), display: "grid", padding: "3px 6px" }}
+              >
+                {a === "left" ? Icon.alignLeft : a === "center" ? Icon.alignCenter : Icon.alignRight}
+              </button>
+            ))}
+          </span>
         </>
       )}
       {tool === "crop" && (
@@ -324,6 +382,8 @@ function ToolOptions() {
     </div>
   );
 }
+
+const colorBox: React.CSSProperties = { width: 24, height: 18, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "transparent" };
 
 const menuRow: React.CSSProperties = {
   display: "flex",

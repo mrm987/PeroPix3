@@ -187,6 +187,13 @@ type Persisted = {
   /** ★이미지 편집의 **저장 설정** (사용자 지시 2026-09-22) — 자리 세 갈래(일괄 변환·검열과 같다)와 형식(PNG·WebP 무손실).
    *  일괄 변환의 `convertLast` 와 같은 사정: 열 때마다 기본값이면 매번 다시 맞춘다. */
   editLast: { mode: "overwrite" | "sub" | "folder"; dest: string; fmt: "png" | "webp" };
+  /** 이미지 편집의 붓 — **브러시와 지우개가 따로** 기억된다 (사용자 지시 2026-09-22). 크기·경도·불투명도, 브러시는 색까지 */
+  editorBrush: {
+    brush: { size: number; hard: number; opacity: number; color: string };
+    eraser: { size: number; hard: number; opacity: number };
+  };
+  /** 이미지 편집 글자 도구의 마지막 글꼴·크기·색·굵기·정렬 — 새 글자 레이어의 기본값 (`editor/model` 의 `TextStyle`) */
+  editorText: { font: string; size: number; color: string; bold: boolean; align: "left" | "center" | "right" };
   /** 이미지 편집의 **캔버스 밖 배경** — `dark`·`light`·`checker` 또는 `#rrggbb`. 투명 그림을 열면 안팎이 같은 색이라
    *  영역이 안 보이므로 바깥만 따로 바꾼다. 문서가 아니라 보기 설정이라 여기 산다 (사용자 지시 2026-09-22) */
   editorBg: string;
@@ -272,6 +279,8 @@ const DEFAULTS: Persisted = {
   // 기본은 각 방향의 기본 해상도 (`SIZE_PRESETS` 의 ✦ 표시)
   sizeLast: { landscape: [1216, 832], portrait: [832, 1216], square: [1024, 1024] },
   editLast: { mode: "sub", dest: "", fmt: "png" },
+  editorBrush: { brush: { size: 24, hard: 0.8, opacity: 100, color: "#ff5a6e" }, eraser: { size: 40, hard: 0.8, opacity: 100 } },
+  editorText: { font: FONTS[0].stack, size: 48, color: "#ffffff", bold: false, align: "left" },
   editorBg: "dark",
   laneSide: "bottom",
   laneWidth: 420,
@@ -351,6 +360,8 @@ type S = Persisted & {
   /** 일괄 변환의 마지막 설정을 얹는다 (한 칸씩 바뀐다) */
   setConvertLast: (v: Partial<Persisted["convertLast"]>) => void;
   setEditLast: (v: Partial<Persisted["editLast"]>) => void;
+  setEditorBrush: (which: "brush" | "eraser", v: Partial<Persisted["editorBrush"]["brush"]>) => void;
+  setEditorText: (v: Partial<Persisted["editorText"]>) => void;
   setEditorBg: (v: string) => void;
   setStreamPreview: (v: boolean) => void;
   setFocusNewPending: (v: boolean) => void;
@@ -543,6 +554,15 @@ export const useUi = create<S>((set, get) => ({
     set({ editLast: { ...get().editLast, ...v } });
     get().commitLayout();
   },
+  setEditorBrush: (which, v) => {
+    const cur = get().editorBrush;
+    set({ editorBrush: { ...cur, [which]: { ...cur[which], ...v } } });
+    get().commitLayout();
+  },
+  setEditorText: (v) => {
+    set({ editorText: { ...get().editorText, ...v } });
+    get().commitLayout();
+  },
   setEditorBg: (v) => {
     set({ editorBg: v });
     get().commitLayout();
@@ -614,8 +634,8 @@ export const useUi = create<S>((set, get) => ({
     const { leftWidth, rightWidth, leftCollapsed, rightCollapsed, cols, laneSize, laneHeadW,
       laneHeight, artistH, artistOpen, artistColor, artistAlways, font, textScale, importPick, aiWidth, aiCollapsed,
       notifyDone, notifySound, notifyVolume, perSlot, curated, agentAuto, agentAskHard,
-      tagSuggest, artistPrefix, weightHl, fmView, streamPreview, focusNewPending, enhanceLast, maskBrush, convertLast, editLast, editorBg, sizeLast,
-      laneSide, laneWidth, laneHeadH, view } = get();
+      tagSuggest, artistPrefix, weightHl, fmView, streamPreview, focusNewPending, enhanceLast, maskBrush, convertLast, editLast, editorBrush, editorText,
+      editorBg, sizeLast, laneSide, laneWidth, laneHeadH, view } = get();
     try {
       localStorage.setItem(
         KEY,
@@ -654,6 +674,8 @@ export const useUi = create<S>((set, get) => ({
           maskBrush,
           convertLast,
           editLast,
+          editorBrush,
+          editorText,
           editorBg,
           sizeLast,
           laneSide,

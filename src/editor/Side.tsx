@@ -4,7 +4,6 @@ import { Icon } from "../components/Icon";
 import { EditableName } from "../components/EditableName";
 import { DropLine } from "../components/DropLine";
 import { Help } from "../components/Tip";
-import { DragGhost } from "../cards/DragGhost";
 import { api } from "../lib/backend";
 import { moveTo } from "../lib/moveTo";
 import { useReorder } from "../lib/useReorder";
@@ -230,7 +229,9 @@ export function Side({ doc }: { doc: Doc }) {
 }
 
 /** 레이어 목록 — **위가 앞**이다 (스토어는 아래가 먼저). 차례 바꾸기는 앱의 것 하나(`useReorder`)다 — 탭·블록과 같은 끌기라
- *  끼움선(`DropLine`)·잔상(`DragGhost`)도 같은 부품이다 (사용자 지시 2026-09-22).
+ *  끼움선(`DropLine`)도 같은 부품이다 (사용자 지시 2026-09-22).
+ *  ★잔상(`DragGhost`)은 **안 그린다** (사용자 지적 2026-09-22: 커서를 따라오는 줄이 놓일 자리를 가려 어디에 놓이는지 알 수 없었다).
+ *    끌리는 줄은 제자리에서 흐려지고, 놓일 자리는 끼움선 하나로 말한다 (포토샵의 레이어 판과 같다).
  *  ★줄은 눌러서 고르는 자리이기도 해서 `tapSafe` 로 잡는다 — 문턱을 넘기 전에는 클릭(고르기)·더블클릭(이름 고치기)이 산다 */
 function LayerList({ doc }: { doc: Doc }) {
   const t = useI18n((s) => s.t);
@@ -239,54 +240,45 @@ function LayerList({ doc }: { doc: Doc }) {
   const listRef = useRef<HTMLDivElement | null>(null);
   /** 화면 차례(위가 0)의 틈 번호로 받아 스토어 차례(아래가 먼저)로 넘긴다 — 셈은 앱 공통 `moveTo` */
   const move = (from: number, to: number) => s.orderLayers(moveTo(rows, from, to).map((l) => l.id).reverse());
-  const { register, handleProps, dragIdx, overIdx, ghost } = useReorder(rows.length, move, { tapSafe: true, within: listRef });
+  const { register, handleProps, dragIdx, overIdx } = useReorder(rows.length, move, { tapSafe: true, within: listRef });
 
   return (
-    <>
-      <div ref={listRef} data-editor-layers style={{ display: "flex", flexDirection: "column", maxHeight: 220, overflowY: "auto" }}>
-        {rows.map((l, i) => (
-          <Fragment key={l.id}>
-            <DropLine on={dragIdx != null && overIdx === i} />
-            <LayerRow
-              rowRef={register(i)}
-              l={l}
-              selected={l.id === doc.sel}
-              dim={dragIdx === i}
-              hp={handleProps(i)}
-              onSelect={() => s.selectLayer(l.id)}
-              onToggle={() => s.toggleLayer(l.id)}
-              onRename={(v) => s.renameLayer(l.id, v)}
-              tipOn={t(l.on ? "editor.layerHide" : "editor.layerShow")}
-            />
-          </Fragment>
-        ))}
-        <DropLine on={dragIdx != null && overIdx === rows.length} />
-        {!rows.length && <Hint>{t("editor.noLayers")}</Hint>}
-      </div>
-      {/* 커서를 따라오는 잔상 — 포인터 방식은 브라우저가 잔상을 만들어 주지 않는다 */}
-      {ghost && dragIdx != null && rows[dragIdx] && (
-        <DragGhost x={ghost.x} y={ghost.y} anchor="exact" style={{ width: ghost.w, borderRadius: "var(--r-2)" }}>
-          <LayerRow l={rows[dragIdx]} selected ghost onToggle={() => {}} onRename={() => {}} tipOn="" />
-        </DragGhost>
-      )}
-    </>
+    <div ref={listRef} data-editor-layers style={{ display: "flex", flexDirection: "column", maxHeight: 220, overflowY: "auto" }}>
+      {rows.map((l, i) => (
+        <Fragment key={l.id}>
+          <DropLine on={dragIdx != null && overIdx === i} />
+          <LayerRow
+            rowRef={register(i)}
+            l={l}
+            selected={l.id === doc.sel}
+            dim={dragIdx === i}
+            hp={handleProps(i)}
+            onSelect={() => s.selectLayer(l.id)}
+            onToggle={() => s.toggleLayer(l.id)}
+            onRename={(v) => s.renameLayer(l.id, v)}
+            tipOn={t(l.on ? "editor.layerHide" : "editor.layerShow")}
+          />
+        </Fragment>
+      ))}
+      <DropLine on={dragIdx != null && overIdx === rows.length} />
+      {!rows.length && <Hint>{t("editor.noLayers")}</Hint>}
+    </div>
   );
 }
 
 type Handle = ReturnType<ReturnType<typeof useReorder>["handleProps"]>;
 
 function LayerRow({
-  l, selected, dim, hp, rowRef, ghost, onSelect, onToggle, onRename, tipOn,
+  l, selected, dim, hp, rowRef, onSelect, onToggle, onRename, tipOn,
 }: {
   l: Layer;
   selected: boolean;
+  /** 끌리는 중 — 제자리에서 흐려진다 */
   dim?: boolean;
-  /** 끌기 손잡이(`useReorder.handleProps`). 잔상에는 없다 */
-  hp?: Handle;
-  rowRef?: (el: HTMLElement | null) => void;
-  /** 끌리는 동안 커서를 따라가는 사본 — 표식도 조작도 없다 */
-  ghost?: boolean;
-  onSelect?: () => void;
+  /** 끌기 손잡이(`useReorder.handleProps`) */
+  hp: Handle;
+  rowRef: (el: HTMLElement | null) => void;
+  onSelect: () => void;
   onToggle: () => void;
   onRename: (v: string) => void;
   tipOn: string;
@@ -294,15 +286,17 @@ function LayerRow({
   return (
     <div
       ref={rowRef}
-      {...(ghost ? {} : { "data-editor-layer": l.id, "data-on": selected ? "" : undefined })}
+      data-editor-layer={l.id}
+      data-on={selected ? "" : undefined}
+      data-text={l.text ? "" : undefined}
       {...hp}
       onPointerDown={(e) => {
         if ((e.target as HTMLElement).closest("button, input")) return;
-        onSelect?.();
-        hp?.onPointerDown(e);
+        onSelect();
+        hp.onPointerDown(e);
       }}
       style={{
-        ...hp?.style,
+        ...hp.style,
         display: "flex",
         alignItems: "center",
         gap: "var(--sp-2)",
@@ -310,11 +304,11 @@ function LayerRow({
         margin: "1px 0",
         borderRadius: "var(--r-2)",
         border: `1px solid ${selected ? "var(--accent)" : "transparent"}`,
-        background: ghost ? "var(--panel)" : selected ? "var(--accent-bg)" : "var(--bg)",
+        background: selected ? "var(--accent-bg)" : "var(--bg)",
         opacity: dim ? 0.35 : l.on ? 1 : 0.55,
       }}
     >
-      <button data-editor-layer-toggle onClick={onToggle} data-tip={tipOn || undefined} style={{ display: "grid", color: l.on ? "var(--ink-soft)" : "var(--ink-ghost)" }}>
+      <button data-editor-layer-toggle onClick={onToggle} data-tip={tipOn} style={{ display: "grid", color: l.on ? "var(--ink-soft)" : "var(--ink-ghost)" }}>
         {l.on ? Icon.dotOn : Icon.dotOff}
       </button>
       <img
@@ -323,7 +317,9 @@ function LayerRow({
         draggable={false}
         style={{ width: 44, height: 30, borderRadius: 3, flexShrink: 0, background: "conic-gradient(#3a3a44 25%, #2a2a32 0 50%, #3a3a44 0 75%, #2a2a32 0) 0 0/8px 8px" }}
       />
-      <EditableName name={l.name} onRename={onRename} mark={ghost ? undefined : "editor-layer"} style={{ flex: 1, minWidth: 0, fontSize: "var(--text-2xs)" }} />
+      {/* 글자 레이어 표식 — 붓이 안 먹는 이유가 목록에서 보인다 */}
+      {l.text && <span style={{ display: "grid", color: "var(--ink-faint)", flexShrink: 0 }}>{Icon.typeT12}</span>}
+      <EditableName name={l.name} onRename={onRename} mark="editor-layer" style={{ flex: 1, minWidth: 0, fontSize: "var(--text-2xs)" }} />
     </div>
   );
 }

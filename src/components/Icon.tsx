@@ -335,6 +335,13 @@ export const Icon = {
   chevronUp12: s(<path d="M6 15l6-6 6 6" />, 12),
   /** 위 화살표 — 캔버스 크기 창의 기준점 칸이 `rotate` 로 여덟 방향을 만든다 */
   arrowUp12: s(<path d="M12 19V5M6 11l6-6 6 6" />, 12),
+  /** 글자 도구 — T */
+  typeT: s(<path d="M5 7V4.5h14V7M12 4.5v15M9 19.5h6" />),
+  typeT12: s(<path d="M5 7V4.5h14V7M12 4.5v15M9 19.5h6" />, 12),
+  /** 글자 정렬 — 왼쪽·가운데·오른쪽 */
+  alignLeft: s(<path d="M4 6h16M4 10h10M4 14h16M4 18h10" />, 14),
+  alignCenter: s(<path d="M4 6h16M7 10h10M4 14h16M7 18h10" />, 14),
+  alignRight: s(<path d="M4 6h16M10 10h10M4 14h16M10 18h10" />, 14),
   chevronDown12: s(<path d="M6 9l6 6 6-6" />, 12),
   chevronRight12: s(<path d="M9 6l6 6-6 6" />, 12),
   chevronDown: s(<path d="M6 9l6 6 6-6" />),

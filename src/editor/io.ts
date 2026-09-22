@@ -4,6 +4,7 @@
 import { api, backendUrl } from "../lib/backend";
 import { fileMgrImg } from "../lib/imgUrl";
 import type { Dropped } from "../lib/dropImages";
+import type { LayerMeta } from "./model";
 import { canvasFrom } from "./pixels";
 
 /** 바이트를 받는다 — `rel` 은 파일 관리의 그림 창구, `path` 는 떨군 파일 읽기, `data` 는 그대로 */
@@ -61,4 +62,46 @@ export function saveImage(req: SaveReq): Promise<{ file: string; name: string }>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
   });
+}
+
+/* ── 열어 둔 캔버스 남기기 (`persist.ts` 가 부른다) ─────────────────── */
+
+/** 남겨 두는 레이어 — 메타 그대로에 픽셀 파일의 키(`px`) */
+export type PersistLayer = LayerMeta & { px: string };
+export type PersistDoc = {
+  id: string;
+  name: string;
+  w: number;
+  h: number;
+  sel: string | null;
+  src: { rel?: string; path?: string; name: string } | null;
+  dirty: boolean;
+  view: { fit: boolean; zoom: number };
+  layers: PersistLayer[];
+};
+export type PersistState = { docs: PersistDoc[]; cur: string | null };
+
+export const loadState = () => api<PersistState>("/api/edit/state");
+
+/** 상태 통째로. `keep` 은 캔버스마다 **지금 쓰는 픽셀 키** — 서버가 나머지를 지운다 */
+export function putState(body: PersistState & { keep: Record<string, string[]> }): Promise<unknown> {
+  return api("/api/edit/state", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
+export async function putPx(doc: string, key: string, blob: Blob): Promise<void> {
+  const base = await backendUrl();
+  const r = await fetch(`${base}/api/edit/px/${doc}/${key}`, { method: "PUT", body: blob });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+}
+
+export async function getPx(doc: string, key: string): Promise<HTMLCanvasElement> {
+  const base = await backendUrl();
+  const r = await fetch(`${base}/api/edit/px/${doc}/${key}`);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  const bmp = await createImageBitmap(await r.blob());
+  try {
+    return canvasFrom(bmp);
+  } finally {
+    bmp.close();
+  }
 }

@@ -308,7 +308,7 @@ for _line in (migrate_thumbs.run(cards, store, pins) if not _SKIP_MIGRATIONS els
 #   바이브 캐시 · 카드 · 대화. 한 곳만 비우면 나머지 휴지통이 영영 쌓인다.
 for _batch in (trash.sweep(WS_ROOT) if not _SKIP_MIGRATIONS else []):
     print(f"[휴지통 비움] {_batch}")
-for _root in ((DATA_DIR / "cards", DATA_DIR / "chats", DATA_DIR / "vibe-cache") if not _SKIP_MIGRATIONS else ()):
+for _root in ((DATA_DIR / "cards", DATA_DIR / "chats", DATA_DIR / "vibe-cache", DATA_DIR / "editor") if not _SKIP_MIGRATIONS else ()):
     for _batch in trash.sweep_at(_root):
         print(f"[휴지통 비움] {_root.name}/{_batch}")
 
@@ -3311,6 +3311,82 @@ def edit_save(body: EditSave):
         n += 1
     dst.write_bytes(packed)
     return _edit_out(dst)
+
+
+# ── 이미지 편집 — 열어 둔 캔버스를 재실행 뒤에도 남긴다 (사용자 지시 2026-09-22) ──
+# 화면(`src/editor/persist.ts`)이 레이어 픽셀을 PNG 한 장씩 `data/editor/<캔버스>/<키>.png` 로 올리고, 나머지(이름·크기·
+# 레이어 메타·원본 자리·고른 것)를 `state.json` 으로 통째로 적는다. ★서버는 셈을 안 한다 — 받은 것을 적고, 안 쓰는 것을 치울 뿐이다.
+EDIT_DIR = DATA_DIR / "editor"
+
+
+def _edit_id(s: str) -> str:
+    """캔버스·픽셀 키 — 글자·숫자·`_`·`-` 만 (경로로 새어 나가지 못하게)"""
+    s = str(s or "")
+    if not s or len(s) > 64 or not all(ch.isalnum() or ch in "_-" for ch in s):
+        raise HTTPException(400, f"잘못된 id 입니다: {s[:40]}")
+    return s
+
+
+class EditState(BaseModel):
+    docs: list[dict] = []
+    cur: str | None = None
+    #: 캔버스마다 **지금 쓰는 픽셀 키** (현재 레이어 + 이력) — 없는 것은 치운다
+    keep: dict[str, list[str]] = {}
+
+
+@app.get("/api/edit/state")
+def edit_state():
+    p = EDIT_DIR / "state.json"
+    if not p.is_file():
+        return {"docs": [], "cur": None}
+    try:
+        got = json.loads(p.read_text("utf-8"))
+        return {"docs": got.get("docs", []), "cur": got.get("cur")}
+    except Exception as e:
+        print(f"[편집 상태] 못 읽음: {e}")
+        return {"docs": [], "cur": None}
+
+
+@app.put("/api/edit/state")
+def edit_state_put(body: EditState):
+    """상태를 통째로 적는다. ★닫힌 캔버스의 픽셀 폴더는 **휴지통으로** (24시간 뒤 비운다 — 부팅 비우기 목록에 있다).
+    열린 캔버스에서 이력 밖으로 밀린 픽셀은 그냥 지운다 — 사용자 파일이 아니라 작업 사본이고, 화면에도 더는 없다."""
+    EDIT_DIR.mkdir(parents=True, exist_ok=True)
+    ids = {_edit_id(d.get("id", "")) for d in body.docs}
+    gone = [q.name for q in EDIT_DIR.iterdir() if q.is_dir() and q.name != trash.TRASH and q.name not in ids]
+    if gone:
+        trash.send_at(EDIT_DIR, gone)
+    for did in ids:
+        d = EDIT_DIR / did
+        if not d.is_dir():
+            continue
+        keep = set(body.keep.get(did, []))
+        for f in d.glob("*.png"):
+            if f.stem not in keep:
+                f.unlink(missing_ok=True)
+    tmp = EDIT_DIR / "state.json.tmp"
+    tmp.write_text(json.dumps({"docs": body.docs, "cur": body.cur}, ensure_ascii=False), "utf-8")
+    tmp.replace(EDIT_DIR / "state.json")
+    return {"ok": True}
+
+
+@app.put("/api/edit/px/{doc}/{key}")
+async def edit_px_put(doc: str, key: str, request: Request):
+    d = EDIT_DIR / _edit_id(doc)
+    d.mkdir(parents=True, exist_ok=True)
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "빈 그림입니다")
+    (d / f"{_edit_id(key)}.png").write_bytes(data)
+    return {"ok": True}
+
+
+@app.get("/api/edit/px/{doc}/{key}")
+def edit_px(doc: str, key: str):
+    p = EDIT_DIR / _edit_id(doc) / f"{_edit_id(key)}.png"
+    if not p.is_file():
+        raise HTTPException(404, "없는 그림입니다")
+    return FileResponse(p, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
 # ── 파일 관리 (아웃풋 폴더 트리) ────────────────────────────────

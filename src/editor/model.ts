@@ -20,6 +20,12 @@ export function filterOf(a: Adjust): string {
   return `brightness(${1 + a.bri / 100}) contrast(${1 + a.con / 100}) saturate(${1 + a.sat / 100}) hue-rotate(${a.hue}deg)`;
 }
 
+/** 글자 레이어의 **글꼴** — 새 글자 레이어의 기본값(`useUi.editorText`)이자 레이어마다 든 값 */
+export type TextStyle = { font: string; size: number; color: string; bold: boolean; align: "left" | "center" | "right" };
+/** 글자 레이어 (사용자 지시 2026-09-22) — 렌더한 픽셀을 캔버스로 들되, **다시 고칠 수 있게** 원문과 글꼴을 함께 든다.
+ *  붓으로는 못 그린다 (그리면 원문과 어긋난다) — 아래 레이어와 합치면 보통 레이어가 된다 */
+export type TextMeta = TextStyle & { value: string };
+
 export type LayerMeta = Xform & {
   id: string;
   name: string;
@@ -30,7 +36,26 @@ export type LayerMeta = Xform & {
   /** 원본 픽셀 크기 */
   sw: number;
   sh: number;
+  text?: TextMeta;
 };
+
+/** 글자를 어떻게 앉히나 — 줄마다 잰 폭을 받아 상자 크기와 줄의 x 를 정한다 (재는 것은 캔버스가, 셈은 여기가) */
+export function layoutText(t: TextStyle, widths: number[]): { w: number; h: number; pad: number; lineH: number; xs: number[] } {
+  const lineH = Math.ceil(t.size * 1.25);
+  const pad = Math.ceil(t.size * 0.25);
+  const wide = Math.ceil(Math.max(0, ...widths));
+  const w = wide + pad * 2;
+  const h = lineH * Math.max(1, widths.length) + pad * 2;
+  const xs = widths.map((lw) => (t.align === "left" ? pad : t.align === "center" ? (w - lw) / 2 : w - pad - lw));
+  return { w, h, pad, lineH, xs };
+}
+
+/** 글자 레이어의 이름 — 첫 줄을 딴다 (길면 자른다). 빈 글이면 준 이름 그대로 */
+export function textLayerName(value: string, fallback: string): string {
+  const first = value.split("\n").find((s) => s.trim())?.trim() ?? "";
+  if (!first) return fallback;
+  return first.length > 24 ? `${first.slice(0, 24)}…` : first;
+}
 
 export const rad = (d: number) => (d * Math.PI) / 180;
 

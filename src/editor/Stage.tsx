@@ -4,23 +4,26 @@ import { toast } from "../store/toast";
 import { useUi } from "../store/ui";
 import { canPan, centerPan, clampPan, drawSize, keepCenter, stepZoom, zoomFrom, ZOOM_MAX, ZOOM_MIN, type Pan, type Size } from "../lib/zoomView";
 import { brushScale, centerOf, cornersOf, docToLayer, hitLayer, normRect, rad } from "./model";
-import { composite, makeCanvas, strokeTo, type Layer, type Stroke } from "./pixels";
+import { composite, fontOf, makeCanvas, strokeTo, textLayout, type Layer, type Stroke } from "./pixels";
 import { useEditor, type Doc } from "./store";
 
-/** 무대 — 문서 한 장을 합성해 보여 주고, 도구에 따라 **누르고 끄는 것**을 받는다.
+/** 무대 — 캔버스 한 장을 합성해 보여 주고, 도구에 따라 **누르고 끄는 것**을 받는다.
  *
- *  세 겹이다: 합성 캔버스 · 조작 SVG(손잡이·자르기 상자·붓 커서). 검열 무대(`CensorStage`)와 같은 뼈대다.
+ *  세 겹이다: 합성 캔버스 · 조작 SVG(손잡이·자르기 상자·붓 커서) · 글 상자(글자를 고치는 동안). 검열 무대(`CensorStage`)와 같은 뼈대다.
  *  ★★획을 긋는 동안은 리액트를 안 거친다 — `strokeRef` 에 모아 두고 프레임마다 `paint()` 가 스토어를 `getState()` 로
  *    읽어 그린다. 손을 떼면 `endStroke` 가 한 걸음 적는다.
  *  ★배율·자리 계산은 전부 `lib/zoomView` (검열·생성 쪽과 같은 함수). `fit` 이면 판 안에 맞추고(작은 그림은
- *    안 키운다), 배율을 정하면 넘치는 만큼 끌어 본다. */
+ *    안 키운다), 배율을 정하면 넘치는 만큼 끌어 본다.
+ *  ★붓 값은 `useUi.editorBrush` — 브러시와 지우개가 **따로** 기억된다 (사용자 지시 2026-09-22). */
 export function Stage({ doc }: { doc: Doc }) {
   const t = useI18n((s) => s.t);
   const tool = useEditor((s) => s.tool);
-  const brush = useEditor((s) => s.brush);
   const ratioLock = useEditor((s) => s.ratioLock);
   const crop = useEditor((s) => s.crop);
   const rev = useEditor((s) => s.rev);
+  const textEdit = useEditor((s) => s.textEdit);
+  const brushes = useUi((s) => s.editorBrush);
+  const brush = tool === "eraser" ? brushes.eraser : brushes.brush;
   const bg = useUi((s) => s.editorBg);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -60,7 +63,7 @@ export function Stage({ doc }: { doc: Doc }) {
     fit();
     return () => ro.disconnect();
   }, []);
-  // 문서가 바뀌면 가운데에서 시작한다
+  // 캔버스가 바뀌면 가운데에서 시작한다
   useEffect(() => {
     if (box.w && box.h) setPan(centerPan(box, fitted));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,11 +82,11 @@ export function Stage({ doc }: { doc: Doc }) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const kk = (cv.clientWidth / d.w) * dpr || 1;
     const st = strokeRef.current?.st ?? null;
-    composite(d, cv, kk, { sel: d.sel, stroke: st });
+    composite(d, cv, kk, { sel: d.sel, stroke: st, skip: s.textEdit?.id ?? null });
   }, []);
   useEffect(() => {
     paint();
-  }, [doc, rev, fitted.w, fitted.h, paint]);
+  }, [doc, rev, fitted.w, fitted.h, textEdit, paint]);
 
   /* ── 좌표 ── */
   const toDoc = (e: { clientX: number; clientY: number }) => {
@@ -94,6 +97,7 @@ export function Stage({ doc }: { doc: Doc }) {
   };
   const scale = fitted.w / doc.w || 1;
   const sel = doc.layers.find((l) => l.id === doc.sel) ?? null;
+  const editing = textEdit ? doc.layers.find((l) => l.id === textEdit.id && l.text) ?? null : null;
 
   /** 손잡이 자리 (문서 좌표) — 네 모서리·네 변 가운데·회전 손잡이 */
   const handlesOf = (l: Layer) => {
@@ -116,10 +120,11 @@ export function Stage({ doc }: { doc: Doc }) {
     for (const x of h.list) if (Math.hypot(x.p.x - p.x, x.p.y - p.y) <= tol) return { handle: x };
     return null;
   };
-  const topLayerAt = (p: { x: number; y: number }) => {
+  /** 그 자리의 맨 앞 레이어 (켜진 것만). `only` 로 종류를 거른다 */
+  const topLayerAt = (p: { x: number; y: number }, only?: (l: Layer) => boolean) => {
     for (let i = doc.layers.length - 1; i >= 0; i--) {
       const l = doc.layers[i];
-      if (l.on && hitLayer(l, p.x, p.y)) return l;
+      if (l.on && (!only || only(l)) && hitLayer(l, p.x, p.y)) return l;
     }
     return null;
   };
@@ -148,12 +153,25 @@ export function Stage({ doc }: { doc: Doc }) {
       return;
     }
 
+    if (tool === "text") {
+      // 글자 레이어 위면 그것을 고친다 (고른 것 우선), 아니면 그 자리에 새 글자 레이어
+      const hit = sel?.text && sel.on && hitLayer(sel, p.x, p.y) ? sel : topLayerAt(p, (l) => !!l.text);
+      if (hit) {
+        s.selectLayer(hit.id);
+        s.setTextEdit({ id: hit.id, fresh: false });
+      } else s.addText(p);
+      return;
+    }
+
     if (tool === "brush" || tool === "eraser") {
       const l = s.layer();
       if (!l) return toast(t("editor.noLayer"), "warn");
       if (!l.on) return toast(t("editor.layerOff"), "warn");
+      // ★글자 레이어에는 안 그린다 — 그리면 원문과 어긋난다. 아래와 합치면 보통 레이어가 된다
+      if (l.text) return toast(t("editor.textNoPaint"), "warn");
+      const b = tool === "eraser" ? useUi.getState().editorBrush.eraser : useUi.getState().editorBrush.brush;
       const cv = makeCanvas(l.sw, l.sh);
-      const st: Stroke = { cv, alpha: s.brush.opacity / 100, erase: tool === "eraser" };
+      const st: Stroke = { cv, alpha: b.opacity / 100, erase: tool === "eraser" };
       strokeRef.current = { st, last: null, layer: l };
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
       strokeAt(p);
@@ -193,12 +211,13 @@ export function Stage({ doc }: { doc: Doc }) {
   const strokeAt = (p: { x: number; y: number }) => {
     const sr = strokeRef.current;
     if (!sr) return;
-    const s = useEditor.getState();
+    const ui = useUi.getState().editorBrush;
+    const b = sr.st.erase ? ui.eraser : ui.brush;
     const l = sr.layer;
     const lp = docToLayer(l, p.x, p.y);
-    const d = s.brush.size * brushScale(l);
+    const d = b.size * brushScale(l);
     const g = sr.st.cv.getContext("2d")!;
-    strokeTo(g, sr.last, lp, d, s.brush.hard, sr.st.erase ? "#ffffff" : s.brush.color);
+    strokeTo(g, sr.last, lp, d, b.hard, sr.st.erase ? "#ffffff" : ui.brush.color);
     sr.last = lp;
     if (!rafRef.current) rafRef.current = requestAnimationFrame(() => { rafRef.current = 0; paint(); });
   };
@@ -287,7 +306,7 @@ export function Stage({ doc }: { doc: Doc }) {
     useEditor.getState().endStroke(sr.st);
   };
 
-  /* ── 휠: Ctrl 확대·축소 · Alt 붓 크기 ── */
+  /* ── 휠: Ctrl 확대·축소 · Alt 붓 크기 (지금 도구의 것) ── */
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return;
@@ -306,8 +325,10 @@ export function Stage({ doc }: { doc: Doc }) {
       }
       if (e.altKey) {
         e.preventDefault();
+        const which = useEditor.getState().tool === "eraser" ? "eraser" : "brush";
+        const ui = useUi.getState();
         const step = (e.shiftKey ? 10 : 1) * (e.deltaY < 0 ? 1 : -1);
-        useEditor.getState().setBrush({ size: Math.max(1, Math.min(400, useEditor.getState().brush.size + step)) });
+        ui.setEditorBrush(which, { size: Math.max(1, Math.min(400, ui.editorBrush[which].size + step)) });
       }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
@@ -323,8 +344,9 @@ export function Stage({ doc }: { doc: Doc }) {
   const cursorStyle =
     tool === "pan" ? (movable ? "move" : "default")
       : tool === "crop" ? "crosshair"
-        : tool === "brush" || tool === "eraser" ? "none"
-          : hover ? "move" : "default";
+        : tool === "text" ? "text"
+          : tool === "brush" || tool === "eraser" ? "none"
+            : hover ? "move" : "default";
 
   const line = 1.5 / scale;
   const hs = 7 / scale;
@@ -347,7 +369,7 @@ export function Stage({ doc }: { doc: Doc }) {
           lineHeight: 0,
           userSelect: "none",
           boxShadow: "0 0 0 1px rgba(255,255,255,.06), 0 10px 40px rgba(0,0,0,.55)",
-          // 문서의 투명한 자리 — 체커. 바깥 배경과 갈라 보이게 (사용자 지시 2026-09-22)
+          // 캔버스의 투명한 자리 — 체커. 바깥 배경과 갈라 보이게 (사용자 지시 2026-09-22)
           background: "conic-gradient(#2a2a32 25%, #222229 0 50%, #2a2a32 0 75%, #222229 0) 0 0/16px 16px",
         }}
       >
@@ -397,13 +419,86 @@ export function Stage({ doc }: { doc: Doc }) {
               cy={cursor.y}
               r={brush.size / 2}
               fill={tool === "eraser" ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.08)"}
-              stroke={tool === "eraser" ? "rgba(255,255,255,.85)" : brush.color}
+              stroke={tool === "eraser" ? "rgba(255,255,255,.85)" : brushes.brush.color}
               strokeWidth={line}
               style={{ pointerEvents: "none" }}
             />
           )}
         </svg>
+        {/* 글 상자 — 글자 레이어를 고치는 동안 그 자리에 뜬다 (그 레이어는 합성에서 뺀다) */}
+        {editing && textEdit && <TextEditBox key={editing.id} l={editing} scale={scale} fresh={textEdit.fresh} />}
       </div>
     </div>
+  );
+}
+
+/** 글자 레이어의 글 상자 — 레이어와 **같은 셈**(`textLayout`)으로 크기를 잡아 그 자리에 같은 글꼴로 뜬다.
+ *  마무리는 세 갈래다: 밖을 누르거나(`blur`) Ctrl+Enter 면 반영, Esc 면 취소(방금 만든 것이면 레이어를 거둔다).
+ *  ★언마운트에는 `onBlur` 이 안 온다 (데스크 지침 「잊기 쉬운 것」) — 도구를 바꾸거나 캔버스를 옮겨 사라질 때는
+ *    정리 효과에서 마무리한다. `done` 이 두 번 반영을 막는다. */
+function TextEditBox({ l, scale, fresh }: { l: Layer; scale: number; fresh: boolean }) {
+  const meta = l.text!;
+  const [value, setValue] = useState(meta.value);
+  const latest = useRef(value);
+  latest.current = value;
+  const done = useRef(false);
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    ref.current?.focus({ preventScroll: true });
+    ref.current?.select();
+  }, []);
+  const finish = useCallback((cancel: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    const s = useEditor.getState();
+    const v = latest.current;
+    if (cancel) {
+      if (fresh) s.removeLayer(l.id);
+    } else if (v !== meta.value || (fresh && !v.trim())) {
+      s.patchText(l.id, { value: v });   // 빈 원문이면 레이어를 거둔다
+    }
+    if (s.textEdit?.id === l.id) s.setTextEdit(null);
+  }, [fresh, l.id, meta.value]);
+  useEffect(() => () => finish(false), [finish]);
+
+  const L = textLayout({ ...meta, value });
+  return (
+    <textarea
+      ref={ref}
+      data-editor-text-input
+      value={value}
+      spellCheck={false}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => finish(false)}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Escape") { e.preventDefault(); finish(true); }
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); finish(false); }
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
+      style={{
+        position: "absolute",
+        left: l.x * scale,
+        top: l.y * scale,
+        width: Math.max(L.w, meta.size * 2) * scale,
+        height: L.h * scale,
+        padding: L.pad * scale,
+        boxSizing: "border-box",
+        margin: 0,
+        border: "1px dashed var(--accent-ink)",
+        borderRadius: 2,
+        background: "transparent",
+        color: meta.color,
+        font: fontOf({ ...meta, size: meta.size * scale }),
+        lineHeight: `${L.lineH * scale}px`,
+        textAlign: meta.align,
+        whiteSpace: "pre",
+        overflow: "hidden",
+        resize: "none",
+        outline: "none",
+        caretColor: "var(--accent-ink)",
+        zIndex: 2,
+      }}
+    />
   );
 }
