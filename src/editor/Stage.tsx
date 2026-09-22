@@ -3,7 +3,7 @@ import { useI18n } from "../i18n";
 import { toast } from "../store/toast";
 import { useUi } from "../store/ui";
 import { canPan, centerPan, clampPan, drawSize, keepCenter, stepZoom, zoomFrom, ZOOM_MAX, ZOOM_MIN, type Pan, type Size } from "../lib/zoomView";
-import { brushScale, centerOf, cornersOf, docToLayer, hitLayer, normRect, rad, resizeCursor } from "./model";
+import { brushScale, centerOf, cornersOf, docToLayer, hitLayer, keepAnchor, normRect, rad, resizeCursor } from "./model";
 import { composite, fontOf, makeCanvas, strokeTo, textLayout, type Layer, type Stroke } from "./pixels";
 import { useEditor, type Doc } from "./store";
 
@@ -55,6 +55,8 @@ export function Stage({ doc }: { doc: Doc }) {
     marked?: boolean;
   } | null>(null);
   const rafRef = useRef(0);
+  /** 선택 도구의 더블클릭 셈 — 바로 앞의 누르기 (pointerdown 의 기본 동작을 막으면 호환 dblclick 이 안 와서 직접 센다) */
+  const dblRef = useRef<{ t: number; x: number; y: number } | null>(null);
 
   const k = zoomFrom(box, doc, doc.view.fit, doc.view.zoom);
   const fitK = doc.view.fit ? Math.min(k, 1) : k;
@@ -192,6 +194,11 @@ export function Stage({ doc }: { doc: Doc }) {
     // 선택 도구 — 고른 레이어의 손잡이 → **누른 자리의 맨 앞 레이어**(상자 기준) → 아무 상자도 없으면 선택을 푼다
     // ★사용자 결정 2026-09-22: 앞의 레이어를 누르면 곧바로 그것이 골라진다 (한때 「고른 레이어 안이면 고른 것을 끈다」로
     //   두었다가 되돌렸다). 판정은 화면에 보이는 상자다 — 픽셀로 봤더니 투명한 배경을 누를 때 선택이 풀렸다.
+    // ★같은 자리를 잇달아 두 번 누르면(더블클릭) 글자 레이어는 곧바로 글자 도구로 고친다 (사용자 지시 2026-09-22)
+    const last = dblRef.current;
+    const now = performance.now();
+    dblRef.current = { t: now, x: e.clientX, y: e.clientY };
+    const dbl = !!last && now - last.t < 400 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 6;
     if (sel) {
       const h = hitHandle(sel, p);
       if (h && "rotate" in h) {
@@ -207,6 +214,13 @@ export function Stage({ doc }: { doc: Doc }) {
       }
     }
     const hit = topLayerAt(p);
+    if (dbl && hit?.text) {
+      dblRef.current = null;
+      s.setTool("text");
+      s.selectLayer(hit.id);
+      s.beginTextEdit(hit.id);
+      return;
+    }
     if (hit) {
       if (hit.id !== doc.sel) s.selectLayer(hit.id);
       dragRef.current = { kind: "move", start: p, layer: hit };
@@ -460,6 +474,10 @@ function TextEditBox({ l, scale, value }: { l: Layer; scale: number; value: stri
   }, []);
 
   const L = textLayout({ ...meta, value });
+  // 빈 글에도 커서가 들어갈 폭은 준다. 자리는 **닻**(정렬 쪽 위 모서리)을 레이어의 것에 맞춘다 — 상자가 레이어보다 넓거나 치는
+  // 동안 넓어져도 글이 같은 자리에 있고, 돌려 둔 글자도 글자마다 밀리지 않는다 (사용자 지적 2026-09-22)
+  const boxW = Math.max(L.w, meta.size * 2);
+  const at = keepAnchor(l, { w: boxW, h: L.h }, meta.align);
   return (
     <textarea
       ref={ref}
@@ -476,9 +494,9 @@ function TextEditBox({ l, scale, value }: { l: Layer; scale: number; value: stri
       onPointerDown={(e) => e.stopPropagation()}
       style={{
         position: "absolute",
-        left: l.x * scale,
-        top: l.y * scale,
-        width: Math.max(L.w, meta.size * 2) * scale,
+        left: at.x * scale,
+        top: at.y * scale,
+        width: boxW * scale,
         height: L.h * scale,
         // ★레이어의 변형(회전·반전)을 글 상자에도 건다 — 안 걸면 돌려 둔 글자가 고치는 동안 0° 로 보인다 (사용자 지적 2026-09-22)
         transform: `rotate(${l.rot}deg) scale(${l.flipH ? -1 : 1}, ${l.flipV ? -1 : 1})`,

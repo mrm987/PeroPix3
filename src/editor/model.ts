@@ -91,6 +91,25 @@ export function layerToDoc(l: Xform & { sw: number; sh: number }, sx: number, sy
   return { x: c.x + rx * Math.cos(r) - ry * Math.sin(r), y: c.y + rx * Math.sin(r) + ry * Math.cos(r) };
 }
 
+/** 상자 크기가 바뀌어도 **닻**(정렬 쪽의 위 모서리 — 왼쪽 정렬은 왼쪽 위, 가운데는 위 가운데, 오른쪽은 오른쪽 위)의 화면 자리를
+ *  지키는 새 x·y. ★돌려 둔 글자 레이어는 글자를 칠 때마다 상자가 넓어지는데, x·y 를 그대로 두면 회전 중심(상자 가운데)이 옆으로
+ *  옮겨 가 글 전체가 밀린다 (사용자 지적 2026-09-22: 한 글자마다 상자가 위로 올라갔다). 안 돌린 왼쪽 정렬이면 x·y 그대로다 */
+export function keepAnchor(prev: Xform, next: Size, align: "left" | "center" | "right"): { x: number; y: number } {
+  const ax = align === "left" ? -1 : align === "right" ? 1 : 0;
+  const at = (l: Xform) => {
+    const ux = (ax * l.w) / 2;
+    const uy = -l.h / 2;
+    const rx = l.flipH ? -ux : ux;
+    const ry = l.flipV ? -uy : uy;
+    const r = rad(l.rot);
+    const c = centerOf(l);
+    return { x: c.x + rx * Math.cos(r) - ry * Math.sin(r), y: c.y + rx * Math.sin(r) + ry * Math.cos(r) };
+  };
+  const p0 = at(prev);
+  const p1 = at({ ...prev, w: next.w, h: next.h });
+  return { x: prev.x + (p0.x - p1.x), y: prev.y + (p0.y - p1.y) };
+}
+
 /** 레이어의 네 모서리 (문서 좌표, 회전 포함) — 손잡이와 맞춤 판정이 쓴다 */
 export function cornersOf(l: Xform): { x: number; y: number }[] {
   const c = centerOf(l);

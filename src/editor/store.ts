@@ -14,7 +14,7 @@ import { useUi } from "../store/ui";
 import { ask } from "../store/ask";
 import type { Dropped } from "../lib/dropImages";
 import {
-  FILL_COLOR, NO_ADJUST, canvasShift, cropShift, destOf, dirOf, docToLayer, emptyHist, growsBeyond, hasAdjust, nextName, placeNew, pushHist,
+  FILL_COLOR, NO_ADJUST, canvasShift, cropShift, destOf, dirOf, docToLayer, emptyHist, growsBeyond, hasAdjust, keepAnchor, nextName, placeNew, pushHist,
   redoHist, rotate90 as rot90, saveNameOf, scaleXform, textLayerName, undoHist,
   type Adjust, type Anchor, type Fill, type Hist, type Rect, type TextMeta,
 } from "./model";
@@ -418,10 +418,12 @@ export const useEditor = create<S>((set, get) => {
         const text: TextMeta = { ...l.text, ...p };
         if (!text.value.trim()) return without(dd, id);
         const cv = renderText(text);
-        // ★글자 레이어의 상자는 언제나 구운 크기 그대로다 — 늘린 비율은 `settleText` 가 글꼴 크기로 옮겨 두므로 여기서 지킬 배율이 없다
+        // ★글자 레이어의 상자는 언제나 구운 크기 그대로다 — 늘린 비율은 `settleText` 가 글꼴 크기로 옮겨 두므로 여기서 지킬 배율이 없다.
+        //   자리는 닻(정렬 쪽 위 모서리)을 지킨다 — 돌려 둔 글자가 글자를 칠 때마다 밀리지 않게
         const name = "value" in p ? textLayerName(text.value, l.name) : l.name;
+        const at = keepAnchor(l, { w: cv.width, h: cv.height }, text.align);
         return {
-          layers: dd.layers.map((x) => (x.id === id ? { ...x, text, name, cv, sw: cv.width, sh: cv.height, w: cv.width, h: cv.height } : x)),
+          layers: dd.layers.map((x) => (x.id === id ? { ...x, text, name, cv, sw: cv.width, sh: cv.height, w: cv.width, h: cv.height, x: at.x, y: at.y } : x)),
         };
       });
     },
