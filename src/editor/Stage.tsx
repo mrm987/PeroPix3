@@ -3,9 +3,9 @@ import { useI18n } from "../i18n";
 import { toast } from "../store/toast";
 import { useUi } from "../store/ui";
 import { canPan, centerPan, clampPan, drawSize, keepCenter, stepZoom, zoomFrom, ZOOM_MAX, ZOOM_MIN, type Pan, type Size } from "../lib/zoomView";
-import { brushScale, centerOf, cornersOf, docToLayer, hitLayer, keepAnchor, normRect, rad, resizeCursor } from "./model";
+import { boxInside, brushScale, centerOf, cornersOf, docToLayer, hitLayer, keepAnchor, normRect, rad, rectFrom, resizeCursor, type Rect } from "./model";
 import { composite, fontOf, makeCanvas, strokeTo, textLayout, type Layer, type Stroke } from "./pixels";
-import { useEditor, type Doc } from "./store";
+import { primaryOf, useEditor, type Doc } from "./store";
 
 /** 무대 — 캔버스 한 장을 합성해 보여 주고, 도구에 따라 **누르고 끄는 것**을 받는다.
  *
@@ -35,7 +35,10 @@ export function Stage({ doc }: { doc: Doc }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayRef = useRef<SVGSVGElement | null>(null);
   const [box, setBox] = useState<Size>({ w: 0, h: 0 });
+  /** 끌어 고르기 상자 (문서 좌표, 캔버스 밖도 된다) */
+  const [marquee, setMarquee] = useState<Rect | null>(null);
   const [pan, setPan] = useState<Pan>({ x: 0, y: 0 });
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   /** 선택 도구에서 커서 아래에 있는 것의 커서 모양 — 손잡이면 크기·회전 커서, 레이어면 move, 없으면 null (사용자 지시 2026-09-22) */
@@ -44,9 +47,13 @@ export function Stage({ doc }: { doc: Doc }) {
   const strokeRef = useRef<{ st: Stroke; last: { x: number; y: number } | null; layer: Layer } | null>(null);
   /** 손잡이를 끄는 중 */
   const dragRef = useRef<{
-    kind: "move" | "scale" | "rotate" | "crop" | "pan";
+    kind: "move" | "scale" | "rotate" | "crop" | "pan" | "marquee";
     start: { x: number; y: number };
     layer?: Layer;
+    /** 함께 옮기는 것들 (끌기 시작 때의 자리) */
+    layers?: Layer[];
+    /** 끌어 고르기가 얹히는 바탕 — Ctrl 로 시작했으면 그때 골라 둔 것 */
+    base?: string[];
     handle?: { sx: -1 | 0 | 1; sy: -1 | 0 | 1 };
     pan0?: Pan;
     rot0?: number;
@@ -92,7 +99,7 @@ export function Stage({ doc }: { doc: Doc }) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const kk = (cv.clientWidth / d.w) * dpr || 1;
     const st = strokeRef.current?.st ?? null;
-    composite(d, cv, kk, { sel: d.sel, stroke: st, skip: s.textEdit?.id ?? null });
+    composite(d, cv, kk, { sel: primaryOf(d), stroke: st, skip: s.textEdit?.id ?? null });
   }, []);
   useEffect(() => {
     paint();
@@ -106,7 +113,9 @@ export function Stage({ doc }: { doc: Doc }) {
     return { x: ((e.clientX - r.left) / r.width) * doc.w, y: ((e.clientY - r.top) / r.height) * doc.h };
   };
   const scale = fitted.w / doc.w || 1;
-  const sel = doc.layers.find((l) => l.id === doc.sel) ?? null;
+  /** 으뜸(마지막에 고른 것) — 글자 도구가 본다. 손잡이는 **하나만 골랐을 때**(`single`)만 */
+  const sel = doc.layers.find((l) => l.id === primaryOf(doc)) ?? null;
+  const single = doc.sel.length === 1 ? sel : null;
   const editing = textEdit ? doc.layers.find((l) => l.id === textEdit.id && l.text) ?? null : null;
 
   /** 손잡이 자리 (문서 좌표) — 네 모서리·네 변 가운데·회전 손잡이 */
@@ -195,20 +204,23 @@ export function Stage({ doc }: { doc: Doc }) {
     // ★사용자 결정 2026-09-22: 앞의 레이어를 누르면 곧바로 그것이 골라진다 (한때 「고른 레이어 안이면 고른 것을 끈다」로
     //   두었다가 되돌렸다). 판정은 화면에 보이는 상자다 — 픽셀로 봤더니 투명한 배경을 누를 때 선택이 풀렸다.
     // ★같은 자리를 잇달아 두 번 누르면(더블클릭) 글자 레이어는 곧바로 글자 도구로 고친다 (사용자 지시 2026-09-22)
+    // ★여럿 고르기 (사용자 지시 2026-09-22): Ctrl+클릭은 고른 것에 넣고 빼기, 빈 자리에서 끌면 끌어 고르기(상자가 통째로 든 것만),
+    //   여럿을 고른 채 하나를 끌면 함께 옮긴다. 손잡이는 하나만 골랐을 때만 있다
     const last = dblRef.current;
     const now = performance.now();
     dblRef.current = { t: now, x: e.clientX, y: e.clientY };
     const dbl = !!last && now - last.t < 400 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 6;
-    if (sel) {
-      const h = hitHandle(sel, p);
+    const multi = e.ctrlKey || e.metaKey;
+    if (single) {
+      const h = hitHandle(single, p);
       if (h && "rotate" in h) {
-        const c = centerOf(sel);
-        dragRef.current = { kind: "rotate", start: p, layer: sel, rot0: sel.rot, ang0: Math.atan2(p.y - c.y, p.x - c.x) };
+        const c = centerOf(single);
+        dragRef.current = { kind: "rotate", start: p, layer: single, rot0: single.rot, ang0: Math.atan2(p.y - c.y, p.x - c.x) };
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
         return;
       }
       if (h && "handle" in h) {
-        dragRef.current = { kind: "scale", start: p, layer: sel, handle: h.handle };
+        dragRef.current = { kind: "scale", start: p, layer: single, handle: h.handle };
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
         return;
       }
@@ -222,16 +234,34 @@ export function Stage({ doc }: { doc: Doc }) {
       return;
     }
     if (hit) {
-      if (hit.id !== doc.sel) s.selectLayer(hit.id);
-      dragRef.current = { kind: "move", start: p, layer: hit };
+      if (multi) {
+        s.toggleSelect(hit.id);
+        if (doc.sel.includes(hit.id)) return;   // 뺐으면 끌 것이 없다
+      } else if (!doc.sel.includes(hit.id)) s.selectLayer(hit.id);
+      const ids = useEditor.getState().doc()?.sel ?? [hit.id];
+      const group = doc.layers.filter((l) => ids.includes(l.id));
+      dragRef.current = { kind: "move", start: p, layers: group.length ? group : [hit] };
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
-    } else if (doc.sel) s.selectLayer(null);
+      return;
+    }
+    // 빈 자리 — 선택을 풀고(Ctrl 이면 둔다) 끌어 고르기를 시작한다
+    if (!multi && doc.sel.length) s.selectLayer(null);
+    dragRef.current = { kind: "marquee", start: p, base: multi ? doc.sel : [] };
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
   };
   /** 캔버스 **밖**(무대의 빈 바탕)을 눌러도 선택을 푼다 — 안의 빈 자리를 눌렀을 때와 같다 (사용자 지시 2026-09-22).
-   *  ★캔버스 위의 누르기도 여기까지 올라오므로 **바탕 자체**를 누른 것만 받는다 */
+   *  ★캔버스 위의 누르기도 여기까지 올라오므로 **바탕 자체**를 누른 것만 받는다.
+   *  ★끌어 고르기는 **캔버스 밖에서 시작해도 된다** — 배경 레이어가 캔버스를 다 덮으므로 안에는 빈 자리가 없다. 뒤의 움직임·놓기는
+   *    조작 SVG 의 `move`·`up` 이 받도록 포인터를 거기에 잡아 둔다 */
   const downOutside = (e: React.PointerEvent) => {
     if (e.target !== e.currentTarget || e.button !== 0 || tool !== "select") return;
-    if (doc.sel) useEditor.getState().selectLayer(null);
+    e.preventDefault();
+    const multi = e.ctrlKey || e.metaKey;
+    if (!multi && doc.sel.length) useEditor.getState().selectLayer(null);
+    const p = toDoc(e);
+    if (!p) return;
+    dragRef.current = { kind: "marquee", start: p, base: multi ? doc.sel : [] };
+    overlayRef.current?.setPointerCapture(e.pointerId);
   };
 
   const strokeAt = (p: { x: number; y: number }) => {
@@ -263,6 +293,14 @@ export function Stage({ doc }: { doc: Doc }) {
         s.setCrop(normRect({ x: d.start.x, y: d.start.y, w: p.x - d.start.x, h: p.y - d.start.y }, doc));
         return;
       }
+      if (d.kind === "marquee") {
+        // 끄는 동안 곧바로 골라진다 — 상자가 통째로 든 (켜진) 레이어. Ctrl 로 시작했으면 그때 골라 둔 것 위에 얹는다
+        const r = rectFrom(d.start, p);
+        setMarquee(r);
+        const inside = doc.layers.filter((l) => l.on && boxInside(l, r)).map((l) => l.id);
+        s.selectMany([...(d.base ?? []).filter((id) => !inside.includes(id)), ...inside]);
+        return;
+      }
       const l = d.layer!;
       // ★처음 움직이는 순간에 「끌기 전」을 적는다 — 그 뒤는 live 패치라 걸음이 하나다
       if (!d.marked) {
@@ -271,7 +309,10 @@ export function Stage({ doc }: { doc: Doc }) {
         d.marked = true;
       }
       if (d.kind === "move") {
-        s.patchLayer(l.id, { x: l.x + (p.x - d.start.x), y: l.y + (p.y - d.start.y) }, true);
+        // 고른 것 전부를 함께 — 각자 끌기 시작 때의 자리에서 같은 만큼
+        const dx = p.x - d.start.x;
+        const dy = p.y - d.start.y;
+        s.patchLayers(Object.fromEntries((d.layers ?? []).map((g) => [g.id, { x: g.x + dx, y: g.y + dy }])), true);
         return;
       }
       if (d.kind === "rotate") {
@@ -309,8 +350,8 @@ export function Stage({ doc }: { doc: Doc }) {
     }
     if (strokeRef.current && p) return strokeAt(p);
     if (tool === "select" && p) {
-      const h = sel ? hitHandle(sel, p) : null;
-      setHoverCur(h ? ("rotate" in h ? ROTATE_CURSOR : resizeCursor(sel!.rot, h.handle)) : topLayerAt(p) ? "move" : null);
+      const h = single ? hitHandle(single, p) : null;
+      setHoverCur(h ? ("rotate" in h ? ROTATE_CURSOR : resizeCursor(single!.rot, h.handle)) : topLayerAt(p) ? "move" : null);
     }
   };
 
@@ -324,6 +365,7 @@ export function Stage({ doc }: { doc: Doc }) {
       }
       // 글자 레이어를 늘렸으면 — 늘린 만큼 글꼴 크기를 바꿔 다시 굽는다 (픽셀 확대를 남기지 않는다)
       if (d.kind === "scale" && d.marked && d.layer?.text) useEditor.getState().settleText(d.layer.id);
+      if (d.kind === "marquee") setMarquee(null);
       return;
     }
     const sr = strokeRef.current;
@@ -403,6 +445,7 @@ export function Stage({ doc }: { doc: Doc }) {
       >
         <canvas ref={canvasRef} data-editor-canvas style={{ width: "100%", height: "100%", display: "block" }} />
         <svg
+          ref={overlayRef}
           data-editor-overlay
           viewBox={`0 0 ${doc.w} ${doc.h}`}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: cursorStyle, touchAction: "none", overflow: "visible" }}
@@ -413,10 +456,22 @@ export function Stage({ doc }: { doc: Doc }) {
           onPointerLeave={() => setCursor(null)}
           onContextMenu={(e) => e.preventDefault()}
         >
-          {/* 고른 레이어의 상자와 손잡이 — 선택 도구에서만 */}
-          {tool === "select" && sel && !crop && (() => {
-            const cs = cornersOf(sel);
-            const h = handlesOf(sel);
+          {/* 여럿을 골랐을 때 — 각 상자의 테두리만 (손잡이는 하나일 때만) */}
+          {tool === "select" && doc.sel.length > 1 && !crop && (
+            <g data-editor-multi>
+              {doc.layers.filter((l) => doc.sel.includes(l.id)).map((l) => (
+                <polygon key={l.id} points={cornersOf(l).map((c) => `${c.x},${c.y}`).join(" ")} fill="none" stroke="var(--accent-ink)" strokeWidth={line} />
+              ))}
+            </g>
+          )}
+          {/* 끌어 고르기 상자 */}
+          {marquee && (marquee.w > 0 || marquee.h > 0) && (
+            <rect data-editor-marquee x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} fill="rgba(255,255,255,.06)" stroke="var(--accent-ink)" strokeWidth={line} strokeDasharray={`${4 / scale} ${3 / scale}`} />
+          )}
+          {/* 고른 레이어의 상자와 손잡이 — 선택 도구에서 하나만 골랐을 때 */}
+          {tool === "select" && single && !crop && (() => {
+            const cs = cornersOf(single);
+            const h = handlesOf(single);
             return (
               <g data-editor-handles>
                 <polygon points={cs.map((c) => `${c.x},${c.y}`).join(" ")} fill="none" stroke="var(--accent-ink)" strokeWidth={line} />

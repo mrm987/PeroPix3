@@ -73,7 +73,8 @@ export type PersistDoc = {
   name: string;
   w: number;
   h: number;
-  sel: string | null;
+  /** 고른 레이어들 (뒤가 으뜸). 옛 저장본은 하나(`string | null`)라 읽을 때 배열로 맞춘다 */
+  sel: string[] | string | null;
   src: { rel?: string; path?: string; name: string } | null;
   dirty: boolean;
   view: { fit: boolean; zoom: number };

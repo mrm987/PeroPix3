@@ -128,6 +128,12 @@ async function hookClose(): Promise<void> {
 }
 
 /** 켤 때 — 남겨 둔 캔버스를 되살린다. 픽셀을 못 읽은 레이어는 빼고 연다 (통째로 잃지 않게) */
+/** 남긴 선택 → 지금 있는 레이어만 (옛 저장본의 하나짜리도 받는다). 하나도 안 남으면 맨 앞 레이어 */
+const selOf = (raw: PersistDoc["sel"], layers: Layer[]): string[] => {
+  const ids = (Array.isArray(raw) ? raw : raw ? [raw] : []).filter((id) => layers.some((l) => l.id === id));
+  return ids.length ? ids : layers.length ? [layers[layers.length - 1].id] : [];
+};
+
 export async function loadDocs(): Promise<{ docs: Doc[]; cur: string | null }> {
   const st = await loadState();
   const docs: Doc[] = [];
@@ -152,7 +158,7 @@ export async function loadDocs(): Promise<{ docs: Doc[]; cur: string | null }> {
     }
     docs.push({
       id: p.id, name: p.name, w: p.w, h: p.h, layers,
-      sel: layers.some((l) => l.id === p.sel) ? p.sel : (layers[layers.length - 1]?.id ?? null),
+      sel: selOf(p.sel, layers),
       src: p.src ?? null, hist: emptyHist(), dirty: !!p.dirty, view: p.view ?? { fit: true, zoom: 1 },
     });
   }

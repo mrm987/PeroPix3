@@ -24,7 +24,7 @@ import { loadDocs, scheduleFlush } from "./persist";
 
 export type Tool = "select" | "brush" | "eraser" | "bucket" | "text" | "crop" | "pan";
 
-type Snap = { w: number; h: number; layers: Layer[]; sel: string | null };
+type Snap = { w: number; h: number; layers: Layer[]; sel: string[] };
 
 export type Doc = {
   id: string;
@@ -34,7 +34,8 @@ export type Doc = {
   h: number;
   /** ★아래가 먼저다 (0 = 맨 뒤). 화면 목록은 뒤집어 그린다 (위가 앞) */
   layers: Layer[];
-  sel: string | null;
+  /** 고른 레이어들 — **뒤가 으뜸**(`primaryOf`: 붓·글자 옵션·오른쪽 기둥이 보는 것). 끌어 고르기·Ctrl+클릭으로 여럿 (사용자 지시 2026-09-22) */
+  sel: string[];
   /** 첫 그림의 자리 — 저장 자리(하위 output·덮어쓰기)와 파일 이름의 근거. 새 캔버스·떨군 바이트는 null */
   src: { rel?: string; path?: string; name: string } | null;
   hist: Hist<Snap>;
@@ -78,16 +79,22 @@ type S = {
   setRatioLock: (v: boolean) => void;
   setView: (v: Partial<Doc["view"]>) => void;
 
-  /** 레이어를 고른다. `null` 이면 선택을 푼다 (선택 도구로 빈 자리를 눌렀을 때) */
+  /** 레이어 하나만 고른다. `null` 이면 선택을 푼다 (선택 도구로 빈 자리를 눌렀을 때) */
   selectLayer: (id: string | null) => void;
+  /** 고른 것에 넣거나 뺀다 (Ctrl+클릭). 넣으면 그것이 으뜸이 된다 */
+  toggleSelect: (id: string) => void;
+  /** 고른 것을 통째로 바꾼다 (끌어 고르기) */
+  selectMany: (ids: string[]) => void;
   /** 변형·불투명도를 고친다. `live` 면 이력을 안 적는다 (끄는 중) — 놓을 때 `commit: true` 로 한 번 적는다 */
   patchLayer: (id: string, p: Partial<Layer>, live?: boolean) => void;
+  /** 여러 레이어를 한 번에 (고른 것을 함께 끌 때) */
+  patchLayers: (ps: Record<string, Partial<Layer>>, live?: boolean) => void;
   /** 끌기 시작 전의 상태를 이력에 적어 둔다 (live 패치가 그 위에 쌓인다) */
   markBefore: () => void;
   addLayer: () => void;
   dupLayer: () => void;
   mergeDown: () => void;
-  /** 레이어를 거둔다 — 주면 그것, 안 주면 고른 것 */
+  /** 레이어를 거둔다 — 주면 그것, 안 주면 **고른 것 전부** (한 걸음) */
   removeLayer: (id?: string) => void;
   /** 레이어 차례를 통째로 (아래가 먼저인 id 목록). 화면 목록의 끌기(`useReorder`)가 새 차례를 셈해 넘긴다 */
   orderLayers: (ids: string[]) => void;
@@ -134,6 +141,8 @@ const DEFAULT_W = 1216;
 const DEFAULT_H = 832;
 
 const docOf = (s: S) => s.docs.find((d) => d.id === s.cur) ?? null;
+/** 고른 것 가운데 으뜸 — 마지막에 고른 것 */
+export const primaryOf = (d: { sel: string[] }): string | null => d.sel[d.sel.length - 1] ?? null;
 
 export const useEditor = create<S>((set, get) => {
   /** 한 걸음 — 직전 상태를 적고 바꾼다 (그 문서에) */
@@ -158,13 +167,16 @@ export const useEditor = create<S>((set, get) => {
     x: at.x, y: at.y, w: at.w, h: at.h, rot: 0, flipH: false, flipV: false,
   });
   const layerName = (d: Doc | { layers: Layer[] }) => nextName(d.layers.map((l) => l.name), (n) => t("editor.layerN", { n }));
-  /** 레이어 하나를 뺀 목록과, 고른 것이 빠졌을 때의 다음 선택 */
-  const without = (d: Doc, id: string): Partial<Doc> | null => {
-    const i = d.layers.findIndex((x) => x.id === id);
-    if (i < 0) return null;
-    const layers = d.layers.filter((_, k) => k !== i);
-    const sel = d.sel === id ? (layers[Math.min(i, layers.length - 1)]?.id ?? null) : d.sel;
-    return { layers, sel };
+  /** 레이어들을 뺀 목록과 그 뒤의 선택 — 고른 것이 빠졌으면 빠진 자리(맨 아래 것)의 이웃 하나, 아니면 고른 것 그대로 */
+  const without = (d: Doc, ids: string[]): Partial<Doc> | null => {
+    const gone = d.layers.filter((x) => ids.includes(x.id));
+    if (!gone.length) return null;
+    const layers = d.layers.filter((x) => !ids.includes(x.id));
+    const left = d.sel.filter((id) => !ids.includes(id));
+    if (left.length === d.sel.length) return { layers, sel: left };
+    const i = d.layers.findIndex((x) => x.id === gone[0].id);
+    const next = layers[Math.min(i, layers.length - 1)]?.id;
+    return { layers, sel: left.length ? left : next ? [next] : [] };
   };
 
   // ★처음 쓸 때 남겨 둔 캔버스를 되살린다. 그 전에 연 것(빠르게 보낸 그림)은 뒤에 붙인다
@@ -193,7 +205,7 @@ export const useEditor = create<S>((set, get) => {
     doc: () => docOf(get()),
     layer: () => {
       const d = docOf(get());
-      return d?.layers.find((l) => l.id === d.sel) ?? null;
+      return d?.layers.find((l) => l.id === primaryOf(d)) ?? null;
     },
     canUndo: () => (docOf(get())?.hist.past.length ?? 0) > 0,
     canRedo: () => (docOf(get())?.hist.future.length ?? 0) > 0,
@@ -221,7 +233,7 @@ export const useEditor = create<S>((set, get) => {
             for (const x of loaded) {
               const l = mkLayer(x.cv, x.name.replace(/\.[^.]+$/, ""), placeNew(d, { w: x.cv.width, h: x.cv.height }));
               layers.push(l);
-              sel = l.id;
+              sel = [l.id];
             }
             return { layers, sel };
           });
@@ -238,7 +250,7 @@ export const useEditor = create<S>((set, get) => {
         const src = first.item.rel || first.item.path ? { rel: first.item.rel, path: first.item.path, name: first.name } : null;
         const doc: Doc = {
           id: newId("d"), name: first.name.replace(/\.[^.]+$/, ""), w, h, layers,
-          sel: layers[layers.length - 1].id, src, hist: emptyHist(), dirty: false, view: { fit: true, zoom: 1 },
+          sel: [layers[layers.length - 1].id], src, hist: emptyHist(), dirty: false, view: { fit: true, zoom: 1 },
         };
         set((s) => ({ docs: [...s.docs, doc], cur: doc.id, crop: null, textEdit: null }));
       } finally {
@@ -251,7 +263,7 @@ export const useEditor = create<S>((set, get) => {
       const name = nextName(names, (n) => t("editor.untitledN", { n }));
       const cv = makeCanvas(w, h);
       const l = mkLayer(cv, t("editor.layerN", { n: 1 }), { x: 0, y: 0, w, h });
-      const doc: Doc = { id: newId("d"), name, w, h, layers: [l], sel: l.id, src: null, hist: emptyHist(), dirty: false, view: { fit: true, zoom: 1 } };
+      const doc: Doc = { id: newId("d"), name, w, h, layers: [l], sel: [l.id], src: null, hist: emptyHist(), dirty: false, view: { fit: true, zoom: 1 } };
       set((s) => ({ docs: [...s.docs, doc], cur: doc.id, crop: null, textEdit: null }));
     },
 
@@ -295,12 +307,27 @@ export const useEditor = create<S>((set, get) => {
 
     selectLayer(id) {
       const d = docOf(get());
-      if (d && d.sel !== id) patchDoc(d.id, { sel: id });
+      if (!d) return;
+      const next = id ? [id] : [];
+      if (d.sel.length !== next.length || d.sel[0] !== next[0]) patchDoc(d.id, { sel: next });
     },
-    patchLayer(id, p, live = false) {
+    toggleSelect(id) {
       const d = docOf(get());
       if (!d) return;
-      const layers = d.layers.map((x) => (x.id === id ? { ...x, ...p } : x));
+      patchDoc(d.id, { sel: d.sel.includes(id) ? d.sel.filter((x) => x !== id) : [...d.sel, id] });
+    },
+    selectMany(ids) {
+      const d = docOf(get());
+      if (!d) return;
+      if (ids.length !== d.sel.length || ids.some((id, i) => d.sel[i] !== id)) patchDoc(d.id, { sel: ids });
+    },
+    patchLayer(id, p, live = false) {
+      get().patchLayers({ [id]: p }, live);
+    },
+    patchLayers(ps, live = false) {
+      const d = docOf(get());
+      if (!d) return;
+      const layers = d.layers.map((x) => (ps[x.id] ? { ...x, ...ps[x.id] } : x));
       if (live) patchDoc(d.id, { layers, dirty: true });
       else commit(() => ({ layers }));
     },
@@ -311,39 +338,42 @@ export const useEditor = create<S>((set, get) => {
     addLayer() {
       commit((d) => {
         const l = mkLayer(makeCanvas(d.w, d.h), layerName(d), { x: 0, y: 0, w: d.w, h: d.h });
-        const i = d.layers.findIndex((x) => x.id === d.sel);
+        const i = d.layers.findIndex((x) => x.id === primaryOf(d));
         const layers = [...d.layers];
         layers.splice(i < 0 ? layers.length : i + 1, 0, l);
-        return { layers, sel: l.id };
+        return { layers, sel: [l.id] };
       });
     },
     dupLayer() {
       commit((d) => {
-        const i = d.layers.findIndex((x) => x.id === d.sel);
+        const i = d.layers.findIndex((x) => x.id === primaryOf(d));
         if (i < 0) return null;
         const src = d.layers[i];
         const l: Layer = { ...src, id: newId("l"), name: t("editor.copyOf", { name: src.name }), cv: cloneCanvas(src.cv) };
         const layers = [...d.layers];
         layers.splice(i + 1, 0, l);
-        return { layers, sel: l.id };
+        return { layers, sel: [l.id] };
       });
     },
     mergeDown() {
       commit((d) => {
-        const i = d.layers.findIndex((x) => x.id === d.sel);
+        const i = d.layers.findIndex((x) => x.id === primaryOf(d));
         if (i <= 0) return null;
         const top = d.layers[i];
         const below = d.layers[i - 1];
         // ★합친 결과는 보통 레이어다 — 아래가 글자 레이어였어도 원문을 떼어 낸다 (남기면 다음 고치기가 합친 것을 지운다)
         const merged: Layer = { ...below, text: undefined, cv: mergeInto(below, top) };
         const layers = d.layers.filter((_, k) => k !== i).map((x) => (x.id === below.id ? merged : x));
-        return { layers, sel: below.id };
+        return { layers, sel: [below.id] };
       });
     },
     removeLayer(id) {
-      const target = id ?? get().doc()?.sel ?? "";
-      if (get().textEdit?.id === target) set({ textEdit: null });
-      commit((d) => without(d, target));
+      // ★안 주면 고른 것 **전부** — 여럿을 골라 Del 하면 한 걸음에 다 거둔다 (사용자 지시 2026-09-22)
+      const targets = id ? [id] : (get().doc()?.sel ?? []);
+      if (!targets.length) return;
+      const te = get().textEdit;
+      if (te && targets.includes(te.id)) set({ textEdit: null });
+      commit((d) => without(d, targets));
     },
     orderLayers(ids) {
       commit((d) => {
@@ -364,7 +394,7 @@ export const useEditor = create<S>((set, get) => {
     },
     endStroke(st) {
       commit((d) => {
-        const l = d.layers.find((x) => x.id === d.sel);
+        const l = d.layers.find((x) => x.id === primaryOf(d));
         if (!l) return null;
         return { layers: d.layers.map((x) => (x.id === l.id ? { ...x, cv: bakeStroke(x, st) } : x)) };
       });
@@ -380,10 +410,10 @@ export const useEditor = create<S>((set, get) => {
           text,
         };
         made = l.id;
-        const i = d.layers.findIndex((x) => x.id === d.sel);
+        const i = d.layers.findIndex((x) => x.id === primaryOf(d));
         const layers = [...d.layers];
         layers.splice(i < 0 ? layers.length : i + 1, 0, l);
-        return { layers, sel: l.id };
+        return { layers, sel: [l.id] };
       });
       if (made) set({ textEdit: { id: made, fresh: true, value: "" } });
     },
@@ -416,7 +446,7 @@ export const useEditor = create<S>((set, get) => {
         const l = dd.layers.find((x) => x.id === id);
         if (!l?.text) return null;
         const text: TextMeta = { ...l.text, ...p };
-        if (!text.value.trim()) return without(dd, id);
+        if (!text.value.trim()) return without(dd, [id]);
         const cv = renderText(text);
         // ★글자 레이어의 상자는 언제나 구운 크기 그대로다 — 늘린 비율은 `settleText` 가 글꼴 크기로 옮겨 두므로 여기서 지킬 배율이 없다.
         //   자리는 닻(정렬 쪽 위 모서리)을 지킨다 — 돌려 둔 글자가 글자를 칠 때마다 밀리지 않게
@@ -491,10 +521,10 @@ export const useEditor = create<S>((set, get) => {
       set({ crop: null });
     },
     rotate90() {
-      commit((d) => ({ layers: d.layers.map((l) => (l.id === d.sel ? { ...l, ...rot90(l) } : l)) }));
+      commit((d) => ({ layers: d.layers.map((l) => (d.sel.includes(l.id) ? { ...l, ...rot90(l) } : l)) }));
     },
     flip(axis) {
-      commit((d) => ({ layers: d.layers.map((l) => (l.id === d.sel ? { ...l, ...(axis === "h" ? { flipH: !l.flipH } : { flipV: !l.flipV }) } : l)) }));
+      commit((d) => ({ layers: d.layers.map((l) => (d.sel.includes(l.id) ? { ...l, ...(axis === "h" ? { flipH: !l.flipH } : { flipV: !l.flipV }) } : l)) }));
     },
 
     async save() {

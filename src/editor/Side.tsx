@@ -12,15 +12,17 @@ import { useUi } from "../store/ui";
 import { Hint, Line, Sec, box, dropFocus, num, on } from "../panels/censor/ui";
 import { NO_ADJUST, hasAdjust, withRatio } from "./model";
 import { thumbOf, type Layer } from "./pixels";
-import { saveName, useEditor, whereOf, type Doc } from "./store";
+import { primaryOf, saveName, useEditor, whereOf, type Doc } from "./store";
 import { CanvasSizeDialog, ImageSizeDialog } from "./dialogs";
 
 /** 오른쪽 기둥 — 레이어 · 변형 · 보정 · 캔버스 · 저장 위치. 검열의 오른쪽 기둥과 같은 조각(`Sec`·`Line`·`box`)으로 그린다 */
 export function Side({ doc }: { doc: Doc }) {
   const t = useI18n((s) => s.t);
   const s = useEditor();
-  const sel = doc.layers.find((l) => l.id === doc.sel) ?? null;
-  const adj = sel?.adj ?? NO_ADJUST;
+  /** 으뜸(마지막에 고른 것). 여럿을 골랐으면(`many`) 변형·보정 칸은 접고 개수만 말한다 — 한 레이어의 값을 보여 주면 무엇을 고치는지 알 수 없다 */
+  const sel = doc.layers.find((l) => l.id === primaryOf(doc)) ?? null;
+  const many = doc.sel.length > 1;
+  const adj = sel && !many ? sel.adj : NO_ADJUST;
   const [dlg, setDlg] = useState<"canvas" | "image" | null>(null);
   const editLast = useUi((st) => st.editLast);
   const setEditLast = useUi((st) => st.setEditLast);
@@ -61,9 +63,10 @@ export function Side({ doc }: { doc: Doc }) {
         </Sec>
 
         {/* ── 변형 ── */}
-        <Sec label={sel ? `${sel.name} · ${t("editor.transform")}` : t("editor.transform")}>
+        <Sec label={sel && !many ? `${sel.name} · ${t("editor.transform")}` : t("editor.transform")}>
           {!sel && <Hint>{t("editor.noLayer")}</Hint>}
-          {sel && (
+          {sel && many && <span data-editor-many><Hint>{t("editor.selectedN", { n: doc.sel.length })}</Hint></span>}
+          {sel && !many && (
             <>
               <Line label={t("editor.pos")}>
                 <NumIn mark="editor-x" value={Math.round(sel.x)} onCommit={(v) => s.patchLayer(sel.id, { x: v })} />
@@ -117,7 +120,7 @@ export function Side({ doc }: { doc: Doc }) {
             {t("editor.adjust")}
             <Help tip={t("editor.adjustHint")} />
             <span style={{ flex: 1 }} />
-            <button data-editor-adjust-reset disabled={!sel || !hasAdjust(adj)} onClick={() => s.resetAdjust()} style={{ ...box, padding: "1px 8px", fontSize: "var(--text-3xs)", color: "var(--ink-faint)" }}>
+            <button data-editor-adjust-reset disabled={!sel || many || !hasAdjust(adj)} onClick={() => s.resetAdjust()} style={{ ...box, padding: "1px 8px", fontSize: "var(--text-3xs)", color: "var(--ink-faint)" }}>
               {t("editor.reset")}
             </button>
           </span>
@@ -136,7 +139,7 @@ export function Side({ doc }: { doc: Doc }) {
                 min={lo}
                 max={hi}
                 value={adj[key]}
-                disabled={!sel}
+                disabled={!sel || many}
                 onPointerDown={() => s.markBefore()}
                 onChange={(e) => s.setAdjust({ [key]: Number(e.target.value) }, true)}
                 style={{ flex: 1 }}
@@ -251,10 +254,11 @@ function LayerList({ doc }: { doc: Doc }) {
           <LayerRow
             rowRef={register(i)}
             l={l}
-            selected={l.id === doc.sel}
+            selected={doc.sel.includes(l.id)}
             dim={dragIdx === i}
             hp={handleProps(i)}
-            onSelect={() => s.selectLayer(l.id)}
+            // ★Ctrl+클릭은 고른 것에 넣고 빼기, 그냥 누르면 그것 하나만 (사용자 지시 2026-09-22)
+            onSelect={(e) => (e.ctrlKey || e.metaKey ? s.toggleSelect(l.id) : s.selectLayer(l.id))}
             onToggle={() => s.toggleLayer(l.id)}
             onRename={(v) => s.renameLayer(l.id, v)}
             tipOn={t(l.on ? "editor.layerHide" : "editor.layerShow")}
@@ -279,7 +283,7 @@ function LayerRow({
   /** 끌기 손잡이(`useReorder.handleProps`) */
   hp: Handle;
   rowRef: (el: HTMLElement | null) => void;
-  onSelect: () => void;
+  onSelect: (e: React.PointerEvent) => void;
   onToggle: () => void;
   onRename: (v: string) => void;
   tipOn: string;
@@ -293,7 +297,7 @@ function LayerRow({
       {...hp}
       onPointerDown={(e) => {
         if ((e.target as HTMLElement).closest("button, input")) return;
-        onSelect();
+        onSelect(e);
         hp.onPointerDown(e);
       }}
       style={{

@@ -834,6 +834,7 @@ export const ko: Dict = {
     noLayer: "레이어를 고르세요",
     layerOff: "꺼진 레이어에는 그릴 수 없습니다",
     layersN: "레이어 {n}",
+    selectedN: "레이어 {n}개 선택",
     transform: "변형",
     pos: "위치",
     dims: "크기",

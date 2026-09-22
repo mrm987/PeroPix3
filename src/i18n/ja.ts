@@ -809,6 +809,7 @@ export const ja: Dict = {
     noLayer: "レイヤーを選んでください",
     layerOff: "非表示のレイヤーには描けません",
     layersN: "レイヤー {n}",
+    selectedN: "レイヤー {n} 個を選択",
     transform: "変形",
     pos: "位置",
     dims: "サイズ",

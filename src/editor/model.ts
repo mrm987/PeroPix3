@@ -110,6 +110,17 @@ export function keepAnchor(prev: Xform, next: Size, align: "left" | "center" | "
   return { x: prev.x + (p0.x - p1.x), y: prev.y + (p0.y - p1.y) };
 }
 
+/** 두 점이 만드는 상자 (어느 쪽으로 끌었든 w·h 는 양수). 문서 밖도 그대로다 — 끌어 고르기는 캔버스 밖에서 시작해도 된다 */
+export function rectFrom(a: { x: number; y: number }, b: { x: number; y: number }): Rect {
+  return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) };
+}
+
+/** 레이어 상자(회전 포함)가 **통째로** `r` 안에 드나 — 끌어 고르기의 판정. ★걸치기만 해도 고르면 캔버스를 다 덮는 배경 레이어가
+ *  언제나 함께 골라진다 (사용자 지시 2026-09-22 의 끌어 고르기, 판정은 내 가정) */
+export function boxInside(l: Xform, r: Rect): boolean {
+  return cornersOf(l).every((c) => c.x >= r.x && c.x <= r.x + r.w && c.y >= r.y && c.y <= r.y + r.h);
+}
+
 /** 레이어의 네 모서리 (문서 좌표, 회전 포함) — 손잡이와 맞춤 판정이 쓴다 */
 export function cornersOf(l: Xform): { x: number; y: number }[] {
   const c = centerOf(l);

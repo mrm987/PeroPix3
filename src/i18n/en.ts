@@ -811,6 +811,7 @@ export const en = {
     noLayer: "Select a layer",
     layerOff: "Cannot paint on a hidden layer",
     layersN: "{n} layers",
+    selectedN: "{n} layers selected",
     transform: "Transform",
     pos: "Position",
     dims: "Size",
