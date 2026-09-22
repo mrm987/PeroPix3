@@ -265,6 +265,8 @@ function ToolOptions() {
   const which = s.tool === "eraser" ? "eraser" : "brush";
   const b = brushes[which];
   const sel = s.layer();
+  // ★글자 옵션은 고른 글자 레이어가 있으면 **그 레이어의 값**을 보여 주고 (사용자 결정 2026-09-22), 없으면 새 글자 레이어의 기본값이다
+  const cur = sel?.text ?? txt;
   const setText = (p: Partial<typeof txt>) => {
     setTextUi(p);
     if (sel?.text) s.patchText(sel.id, p);
@@ -329,10 +331,11 @@ function ToolOptions() {
           </Opt>
         </>
       )}
-      {tool === "text" && (
+      {/* 글자 옵션 — 글자 도구일 때, 그리고 **글자 레이어를 골라 두었을 때** (어느 도구든, 사용자 지시 2026-09-22) */}
+      {(tool === "text" || !!sel?.text) && (
         <>
           <Opt label={t("editor.font")}>
-            <select data-editor-text-font value={txt.font} onChange={(e) => setText({ font: e.target.value })} style={{ ...box, width: 140, padding: "1px 6px" }}>
+            <select data-editor-text-font value={cur.font} onChange={(e) => setText({ font: e.target.value })} style={{ ...box, width: 140, padding: "1px 6px" }}>
               {FONTS.map((f) => <option key={f.id} value={f.stack}>{f.label}</option>)}
               <option value="serif">Serif</option>
               <option value="monospace">Monospace</option>
@@ -344,15 +347,15 @@ function ToolOptions() {
               data-editor-text-size
               min={4}
               max={600}
-              value={txt.size}
+              value={cur.size}
               onChange={(e) => setText({ size: Math.max(4, Math.min(600, Math.round(Number(e.target.value) || 4))) })}
               style={{ ...box, width: 58, textAlign: "right", fontVariantNumeric: "tabular-nums", padding: "1px 6px" }}
             />
           </Opt>
           <Opt label={t("editor.color")}>
-            <input type="color" data-editor-text-color value={txt.color} onChange={(e) => setText({ color: e.target.value })} style={colorBox} />
+            <input type="color" data-editor-text-color value={cur.color} onChange={(e) => setText({ color: e.target.value })} style={colorBox} />
           </Opt>
-          <button data-editor-text-bold onMouseDown={dropFocus} onClick={() => setText({ bold: !txt.bold })} style={{ ...box, ...(txt.bold ? on : {}), padding: "2px 8px", fontWeight: "var(--w-bold)" }}>
+          <button data-editor-text-bold onMouseDown={dropFocus} onClick={() => setText({ bold: !cur.bold })} style={{ ...box, ...(cur.bold ? on : {}), padding: "2px 8px", fontWeight: "var(--w-bold)" }}>
             {t("editor.bold")}
           </button>
           <span style={{ display: "inline-flex", gap: 2 }}>
@@ -363,7 +366,7 @@ function ToolOptions() {
                 onMouseDown={dropFocus}
                 onClick={() => setText({ align: a })}
                 data-tip={t(a === "left" ? "editor.alignLeft" : a === "center" ? "editor.alignCenter" : "editor.alignRight")}
-                style={{ ...box, ...(txt.align === a ? on : {}), display: "grid", padding: "3px 6px" }}
+                style={{ ...box, ...(cur.align === a ? on : {}), display: "grid", padding: "3px 6px" }}
               >
                 {a === "left" ? Icon.alignLeft : a === "center" ? Icon.alignCenter : Icon.alignRight}
               </button>

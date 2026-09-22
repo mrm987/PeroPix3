@@ -98,6 +98,13 @@ export function cornersOf(l: Xform): { x: number; y: number }[] {
   }));
 }
 
+/** 크기 손잡이 위의 커서 — 손잡이 방향(회전 반영)을 네 갈래로 접는다: ew · nwse · ns · nesw */
+export function resizeCursor(rot: number, h: { sx: number; sy: number }): string {
+  const deg = (Math.atan2(h.sy, h.sx) * 180) / Math.PI + rot;
+  const a = ((deg % 180) + 180) % 180;
+  return ["ew-resize", "nwse-resize", "ns-resize", "nesw-resize"][Math.round(a / 45) % 4];
+}
+
 /** 그 문서 좌표가 레이어 상자 안인가 (회전을 푼 자리로 본다) */
 export function hitLayer(l: Xform & { sw: number; sh: number }, px: number, py: number): boolean {
   const p = docToLayer(l, px, py);

@@ -3,7 +3,7 @@ import { useI18n } from "../i18n";
 import { toast } from "../store/toast";
 import { useUi } from "../store/ui";
 import { canPan, centerPan, clampPan, drawSize, keepCenter, stepZoom, zoomFrom, ZOOM_MAX, ZOOM_MIN, type Pan, type Size } from "../lib/zoomView";
-import { brushScale, centerOf, cornersOf, docToLayer, hitLayer, normRect, rad } from "./model";
+import { brushScale, centerOf, cornersOf, docToLayer, hitLayer, normRect, rad, resizeCursor } from "./model";
 import { composite, fontOf, makeCanvas, strokeTo, textLayout, type Layer, type Stroke } from "./pixels";
 import { useEditor, type Doc } from "./store";
 
@@ -15,6 +15,13 @@ import { useEditor, type Doc } from "./store";
  *  ★배율·자리 계산은 전부 `lib/zoomView` (검열·생성 쪽과 같은 함수). `fit` 이면 판 안에 맞추고(작은 그림은
  *    안 키운다), 배율을 정하면 넘치는 만큼 끌어 본다.
  *  ★붓 값은 `useUi.editorBrush` — 브러시와 지우개가 **따로** 기억된다 (사용자 지시 2026-09-22). */
+/** 회전 손잡이 위의 커서 — CSS 에 회전 커서가 없어 SVG(굽은 화살표, 검은 테두리에 흰 선)를 그려 넣는다. 가운데가 핫스팟 */
+const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'>"
+  + "<path d='M19 12a7 7 0 1 1-2.05-4.95M17 3v4.2h-4.2' stroke='#000' stroke-width='3.6'/>"
+  + "<path d='M19 12a7 7 0 1 1-2.05-4.95M17 3v4.2h-4.2' stroke='#fff' stroke-width='1.6'/></svg>",
+)}") 11 11, auto`;
+
 export function Stage({ doc }: { doc: Doc }) {
   const t = useI18n((s) => s.t);
   const tool = useEditor((s) => s.tool);
@@ -31,7 +38,8 @@ export function Stage({ doc }: { doc: Doc }) {
   const [box, setBox] = useState<Size>({ w: 0, h: 0 });
   const [pan, setPan] = useState<Pan>({ x: 0, y: 0 });
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
-  const [hover, setHover] = useState<string | null>(null);
+  /** 선택 도구에서 커서 아래에 있는 것의 커서 모양 — 손잡이면 크기·회전 커서, 레이어면 move, 없으면 null (사용자 지시 2026-09-22) */
+  const [hoverCur, setHoverCur] = useState<string | null>(null);
   /** 긋는 중 */
   const strokeRef = useRef<{ st: Stroke; last: { x: number; y: number } | null; layer: Layer } | null>(null);
   /** 손잡이를 끄는 중 */
@@ -287,8 +295,8 @@ export function Stage({ doc }: { doc: Doc }) {
     }
     if (strokeRef.current && p) return strokeAt(p);
     if (tool === "select" && p) {
-      const hit = sel && hitHandle(sel, p) ? sel : topLayerAt(p);
-      setHover(hit?.id ?? null);
+      const h = sel ? hitHandle(sel, p) : null;
+      setHoverCur(h ? ("rotate" in h ? ROTATE_CURSOR : resizeCursor(sel!.rot, h.handle)) : topLayerAt(p) ? "move" : null);
     }
   };
 
@@ -351,7 +359,7 @@ export function Stage({ doc }: { doc: Doc }) {
       : tool === "crop" || tool === "bucket" ? "crosshair"
         : tool === "text" ? "text"
           : tool === "brush" || tool === "eraser" ? "none"
-            : hover ? "move" : "default";
+            : hoverCur ?? "default";
 
   const line = 1.5 / scale;
   const hs = 7 / scale;
@@ -472,6 +480,9 @@ function TextEditBox({ l, scale, value }: { l: Layer; scale: number; value: stri
         top: l.y * scale,
         width: Math.max(L.w, meta.size * 2) * scale,
         height: L.h * scale,
+        // ★레이어의 변형(회전·반전)을 글 상자에도 건다 — 안 걸면 돌려 둔 글자가 고치는 동안 0° 로 보인다 (사용자 지적 2026-09-22)
+        transform: `rotate(${l.rot}deg) scale(${l.flipH ? -1 : 1}, ${l.flipV ? -1 : 1})`,
+        transformOrigin: "center",
         padding: L.pad * scale,
         boxSizing: "border-box",
         margin: 0,
