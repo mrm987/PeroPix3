@@ -158,7 +158,7 @@ export function Stage({ doc }: { doc: Doc }) {
       const hit = sel?.text && sel.on && hitLayer(sel, p.x, p.y) ? sel : topLayerAt(p, (l) => !!l.text);
       if (hit) {
         s.selectLayer(hit.id);
-        s.setTextEdit({ id: hit.id, fresh: false });
+        s.beginTextEdit(hit.id);
       } else s.addText(p);
       return;
     }
@@ -426,7 +426,7 @@ export function Stage({ doc }: { doc: Doc }) {
           )}
         </svg>
         {/* 글 상자 — 글자 레이어를 고치는 동안 그 자리에 뜬다 (그 레이어는 합성에서 뺀다) */}
-        {editing && textEdit && <TextEditBox key={editing.id} l={editing} scale={scale} fresh={textEdit.fresh} />}
+        {editing && textEdit && <TextEditBox key={editing.id} l={editing} scale={scale} value={textEdit.value} />}
       </div>
     </div>
   );
@@ -434,32 +434,16 @@ export function Stage({ doc }: { doc: Doc }) {
 
 /** 글자 레이어의 글 상자 — 레이어와 **같은 셈**(`textLayout`)으로 크기를 잡아 그 자리에 같은 글꼴로 뜬다.
  *  마무리는 세 갈래다: 밖을 누르거나(`blur`) Ctrl+Enter 면 반영, Esc 면 취소(방금 만든 것이면 레이어를 거둔다).
- *  ★언마운트에는 `onBlur` 이 안 온다 (데스크 지침 「잊기 쉬운 것」) — 도구를 바꾸거나 캔버스를 옮겨 사라질 때는
- *    정리 효과에서 마무리한다. `done` 이 두 번 반영을 막는다. */
-function TextEditBox({ l, scale, fresh }: { l: Layer; scale: number; fresh: boolean }) {
+ *  ★치는 글은 스토어(`textEdit.value`)에 있고 마무리도 스토어(`endTextEdit`)가 한다 — 여기에는 상태도 정리 효과도 없다.
+ *    언마운트에는 `onBlur` 이 안 오고(데스크 지침 「잊기 쉬운 것」), 정리 효과에 마무리를 걸면 개발 모드의 이중 마운트가
+ *    뜨자마자 「빈 글 반영」을 돌려 방금 만든 레이어를 거둔다 (사용자 지적 2026-09-22: 눌러도 아무것도 안 생겼다). */
+function TextEditBox({ l, scale, value }: { l: Layer; scale: number; value: string }) {
   const meta = l.text!;
-  const [value, setValue] = useState(meta.value);
-  const latest = useRef(value);
-  latest.current = value;
-  const done = useRef(false);
   const ref = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
     ref.current?.focus({ preventScroll: true });
     ref.current?.select();
   }, []);
-  const finish = useCallback((cancel: boolean) => {
-    if (done.current) return;
-    done.current = true;
-    const s = useEditor.getState();
-    const v = latest.current;
-    if (cancel) {
-      if (fresh) s.removeLayer(l.id);
-    } else if (v !== meta.value || (fresh && !v.trim())) {
-      s.patchText(l.id, { value: v });   // 빈 원문이면 레이어를 거둔다
-    }
-    if (s.textEdit?.id === l.id) s.setTextEdit(null);
-  }, [fresh, l.id, meta.value]);
-  useEffect(() => () => finish(false), [finish]);
 
   const L = textLayout({ ...meta, value });
   return (
@@ -468,12 +452,12 @@ function TextEditBox({ l, scale, fresh }: { l: Layer; scale: number; fresh: bool
       data-editor-text-input
       value={value}
       spellCheck={false}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => finish(false)}
+      onChange={(e) => useEditor.getState().updateTextEdit(e.target.value)}
+      onBlur={() => useEditor.getState().endTextEdit(true)}
       onKeyDown={(e) => {
         e.stopPropagation();
-        if (e.key === "Escape") { e.preventDefault(); finish(true); }
-        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); finish(false); }
+        if (e.key === "Escape") { e.preventDefault(); useEditor.getState().endTextEdit(false); }
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); useEditor.getState().endTextEdit(true); }
       }}
       onPointerDown={(e) => e.stopPropagation()}
       style={{
@@ -497,6 +481,7 @@ function TextEditBox({ l, scale, fresh }: { l: Layer; scale: number; fresh: bool
         resize: "none",
         outline: "none",
         caretColor: "var(--accent-ink)",
+        userSelect: "text",
         zIndex: 2,
       }}
     />

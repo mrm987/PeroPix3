@@ -5,7 +5,10 @@
  *  · 나머지(이름·크기·레이어 메타·원본 자리·고른 것·보기) → `PUT /api/edit/state` (통째로, 작다).
  *  · `keep` 에 지금 쓰는 키(현재 레이어 + 이력이 든 것)를 적어 보내면 서버가 나머지 픽셀을 지운다 —
  *    이력이 20걸음이라 디스크도 그 언저리에서 멈춘다. 닫힌 캔버스의 폴더는 서버가 휴지통으로 보낸다.
- *  · 이력은 남기지 않는다. 바뀔 때마다 1초 뒤 한 번 적으므로 **마지막 1초 안의 편집은 잃을 수 있다.**
+ *  · 이력은 남기지 않는다.
+ *  ★★**바뀌면 곧바로 적는다** (사용자 지적 2026-09-22: 1초 미루던 사이에 다시 켜면 편집이 사라졌다). 적는 중에 또 바뀌면
+ *    끝난 뒤 한 번 더 적는다 — 끌기처럼 잦은 변경은 서버 왕복 속도로 뭉쳐진다. 창을 닫을 때 적는 중이면 끝나기를
+ *    잠깐 기다린다 (`hookClose`, 최대 1.5초).
  *  ★★켜서 다 읽기 전에는 적지 않는다 (`store.ts` 의 `hydrated`) — 빈 상태로 덮어쓰면 남긴 것이 전부 휴지통으로 간다. */
 import { emptyHist, type LayerMeta } from "./model";
 import { getPx, loadState, putPx, putState, type PersistDoc } from "./io";
@@ -26,29 +29,45 @@ const metaOf = (l: Layer): LayerMeta => {
 const blobOf = (cv: HTMLCanvasElement) =>
   new Promise<Blob>((ok, no) => cv.toBlob((b) => (b ? ok(b) : no(new Error("toBlob"))), "image/png"));
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 type Snapshot = () => { docs: Doc[]; cur: string | null };
 
+let snapshot: Snapshot | null = null;
 let timer = 0;
 let running = false;
 let again = false;
 
-/** 바뀌었다 — 1초 뒤 한 번 적는다 (그 사이 또 바뀌면 그때부터 다시 1초) */
+/** 바뀌었다 — 이 틱이 끝나면 곧바로 적는다 (한 사건에서 여러 번 바뀐 것은 한 번으로) */
 export function scheduleFlush(get: Snapshot): void {
-  if (timer) clearTimeout(timer);
+  snapshot = get;
+  void hookClose();
+  if (timer) return;
   timer = window.setTimeout(() => {
     timer = 0;
-    void flush(get);
-  }, 1000);
+    void flush();
+  }, 0);
 }
 
-async function flush(get: Snapshot): Promise<void> {
+/** 적을 것이 남아 있으면 다 적힐 때까지 기다린다 */
+export async function drain(): Promise<void> {
+  if (timer) {
+    clearTimeout(timer);
+    timer = 0;
+    await flush();
+  }
+  while (running || again) await sleep(20);
+}
+
+async function flush(): Promise<void> {
+  if (!snapshot) return;
   if (running) {
     again = true;
     return;
   }
   running = true;
   try {
-    const { docs, cur } = get();
+    const { docs, cur } = snapshot();
     const keep: Record<string, string[]> = {};
     const out: PersistDoc[] = [];
     for (const d of docs) {
@@ -84,8 +103,27 @@ async function flush(get: Snapshot): Promise<void> {
     running = false;
     if (again) {
       again = false;
-      scheduleFlush(get);
+      void flush();
     }
+  }
+}
+
+/** 창을 닫을 때 적는 중이면 끝나기를 기다린다 (최대 1.5초). 아무것도 안 적는 중이면 그냥 닫힌다 */
+let closeHooked = false;
+async function hookClose(): Promise<void> {
+  if (closeHooked) return;
+  closeHooked = true;
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const w = getCurrentWindow();
+    await w.onCloseRequested(async (e) => {
+      if (!timer && !running && !again) return;
+      e.preventDefault();
+      await Promise.race([drain(), sleep(1500)]);
+      await w.destroy();
+    });
+  } catch {
+    /* 브라우저에서 띄운 화면 — 창이 없다 */
   }
 }
 

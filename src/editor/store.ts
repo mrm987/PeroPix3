@@ -56,8 +56,10 @@ type S = {
   /** 남겨 둔 캔버스를 다 읽었나 — 그 전에는 화면도 안 그리고(`Editor`) 적지도 않는다(`persist`) */
   hydrated: boolean;
   ready: Promise<void>;
-  /** 글자 도구로 고치는 중인 글자 레이어. `fresh` 는 방금 만든 것 — 빈 채로 끝나면 레이어를 거둔다 */
-  textEdit: { id: string; fresh: boolean } | null;
+  /** 글자 도구로 고치는 중인 글자 레이어. `fresh` 는 방금 만든 것 — 빈 채로 끝나면 레이어를 거둔다.
+   *  ★치는 글(`value`)은 **여기**에 있다 — 글 상자가 사라지는 경로(도구 바꾸기·캔버스 옮기기·개발 모드의 이중 마운트)가
+   *    여럿이라, 화면의 정리 효과가 아니라 스토어의 `endTextEdit` 하나가 마무리한다 (사용자 지적 2026-09-22: 눌러도 안 생겼다) */
+  textEdit: { id: string; fresh: boolean; value: string } | null;
 
   doc: () => Doc | null;
   layer: () => Layer | null;
@@ -95,7 +97,12 @@ type S = {
 
   /** 글자 레이어를 그 자리에 만들고(빈 글) 곧바로 고치기 상태로 */
   addText: (at: { x: number; y: number }) => void;
-  setTextEdit: (v: { id: string; fresh: boolean } | null) => void;
+  /** 있는 글자 레이어를 고치기 시작한다 (원문을 글 상자로) */
+  beginTextEdit: (id: string) => void;
+  /** 글 상자에 친 글 — 반영은 `endTextEdit` 에서 */
+  updateTextEdit: (value: string) => void;
+  /** 고치기를 끝낸다 — `apply` 면 친 글을 레이어에 굽고(빈 글이면 레이어를 거둔다), 아니면 버린다(방금 만든 것이면 레이어를 거둔다) */
+  endTextEdit: (apply: boolean) => void;
   /** 글자 레이어의 원문·글꼴을 고치고 픽셀을 새로 굽는다 (한 걸음). 어느 캔버스에 있든 찾는다. 빈 원문이면 레이어를 거둔다 */
   patchText: (id: string, p: Partial<TextMeta>) => void;
 
@@ -244,6 +251,7 @@ export const useEditor = create<S>((set, get) => {
     },
 
     async closeDoc(id) {
+      get().endTextEdit(true);
       const d = get().docs.find((x) => x.id === id);
       if (!d) return;
       if (d.dirty && !(await ask({ title: t("editor.unsavedClose", { name: d.name }), body: t("editor.unsavedBody"), ok: t("editor.closeAnyway"), cancel: t("common.cancel"), danger: true })))
@@ -256,8 +264,14 @@ export const useEditor = create<S>((set, get) => {
       });
     },
 
-    setCur: (id) => set({ cur: id, crop: null, textEdit: null }),
-    setTool: (tool) => set({ tool, crop: tool === "crop" ? get().crop : null }),
+    setCur(id) {
+      get().endTextEdit(true);
+      set({ cur: id, crop: null });
+    },
+    setTool(tool) {
+      get().endTextEdit(true);
+      set({ tool, crop: tool === "crop" ? get().crop : null });
+    },
     setAdjust(p, live = false) {
       const l = get().layer();
       if (!l) return;
@@ -322,8 +336,9 @@ export const useEditor = create<S>((set, get) => {
       });
     },
     removeLayer(id) {
-      commit((d) => without(d, id ?? d.sel ?? ""));
-      if (id && get().textEdit?.id === id) set({ textEdit: null });
+      const target = id ?? get().doc()?.sel ?? "";
+      if (get().textEdit?.id === target) set({ textEdit: null });
+      commit((d) => without(d, target));
     },
     orderLayers(ids) {
       commit((d) => {
@@ -365,9 +380,30 @@ export const useEditor = create<S>((set, get) => {
         layers.splice(i < 0 ? layers.length : i + 1, 0, l);
         return { layers, sel: l.id };
       });
-      if (made) set({ textEdit: { id: made, fresh: true } });
+      if (made) set({ textEdit: { id: made, fresh: true, value: "" } });
     },
-    setTextEdit: (v) => set({ textEdit: v }),
+    beginTextEdit(id) {
+      get().endTextEdit(true);
+      const l = get().docs.flatMap((d) => d.layers).find((x) => x.id === id);
+      if (!l?.text) return;
+      set({ textEdit: { id, fresh: false, value: l.text.value } });
+    },
+    updateTextEdit(value) {
+      const te = get().textEdit;
+      if (te) set({ textEdit: { ...te, value } });
+    },
+    endTextEdit(apply) {
+      const te = get().textEdit;
+      if (!te) return;
+      set({ textEdit: null });
+      const l = get().docs.flatMap((d) => d.layers).find((x) => x.id === te.id);
+      if (!l?.text) return;
+      if (!apply) {
+        if (te.fresh) get().removeLayer(te.id);
+        return;
+      }
+      if (te.value !== l.text.value || (te.fresh && !te.value.trim())) get().patchText(te.id, { value: te.value });
+    },
     patchText(id, p) {
       const d = get().docs.find((x) => x.layers.some((l) => l.id === id));
       if (!d) return;
