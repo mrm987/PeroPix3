@@ -3,7 +3,7 @@
  *  ★레이어 픽셀은 **불변**으로 다룬다: 획 하나·보정 적용·합치기는 언제나 **새 캔버스**를 만든다. 이력(`Hist`)이
  *    옛 캔버스를 그대로 들고 있으므로 되돌리기는 참조를 바꾸는 것으로 끝난다.
  *  ★합성은 **문서 좌표계**에서 한다 — 레이어의 변형(자리·크기·회전·반전)은 그릴 때 `ctx` 변환으로 건다 (비파괴). */
-import { centerOf, filterOf, layoutText, rad, type LayerMeta, type Rect, type Size, type TextMeta, type Xform } from "./model";
+import { centerOf, docToLayer, filterOf, hitLayer, layoutText, rad, type LayerMeta, type Rect, type Size, type TextMeta, type Xform } from "./model";
 
 export type Layer = LayerMeta & { cv: HTMLCanvasElement };
 
@@ -24,6 +24,18 @@ export function canvasFrom(img: ImageBitmap): HTMLCanvasElement {
   const cv = makeCanvas(img.width, img.height);
   cv.getContext("2d")!.drawImage(img, 0, 0);
   return cv;
+}
+
+/** 그 문서 좌표에 **보이는 픽셀**이 있나 — 상자 안이고 알파가 0 이 아니다. 글자 레이어는 글자 사이 틈도 잡히게 상자로 본다.
+ *  선택 도구가 「누른 자리의 맨 앞」을 고를 때 쓴다 (사용자 지시 2026-09-22): 빈 자리는 지나쳐 아래 레이어가 골라지고,
+ *  아무것도 없으면 선택이 풀린다. */
+export function hitPixel(l: Layer, px: number, py: number): boolean {
+  if (!hitLayer(l, px, py)) return false;
+  if (l.text) return true;
+  const p = docToLayer(l, px, py);
+  const x = Math.min(l.sw - 1, Math.max(0, Math.floor(p.x)));
+  const y = Math.min(l.sh - 1, Math.max(0, Math.floor(p.y)));
+  return l.cv.getContext("2d")!.getImageData(x, y, 1, 1).data[3] > 0;
 }
 
 /** 캔버스를 넓힐 때의 「빈 자리」 — 새 크기를 색으로 채우고 **지금 캔버스 자리(`hole`)만 비운** 캔버스 */

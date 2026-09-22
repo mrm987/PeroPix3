@@ -4,7 +4,7 @@ import { toast } from "../store/toast";
 import { useUi } from "../store/ui";
 import { canPan, centerPan, clampPan, drawSize, keepCenter, stepZoom, zoomFrom, ZOOM_MAX, ZOOM_MIN, type Pan, type Size } from "../lib/zoomView";
 import { brushScale, centerOf, cornersOf, docToLayer, hitLayer, normRect, rad } from "./model";
-import { composite, fontOf, makeCanvas, strokeTo, textLayout, type Layer, type Stroke } from "./pixels";
+import { composite, fontOf, hitPixel, makeCanvas, strokeTo, textLayout, type Layer, type Stroke } from "./pixels";
 import { useEditor, type Doc } from "./store";
 
 /** 무대 — 캔버스 한 장을 합성해 보여 주고, 도구에 따라 **누르고 끄는 것**을 받는다.
@@ -120,11 +120,11 @@ export function Stage({ doc }: { doc: Doc }) {
     for (const x of h.list) if (Math.hypot(x.p.x - p.x, x.p.y - p.y) <= tol) return { handle: x };
     return null;
   };
-  /** 그 자리의 맨 앞 레이어 (켜진 것만). `only` 로 종류를 거른다 */
+  /** 그 자리의 맨 앞 레이어 (켜진 것만, **픽셀이 있는 자리**로 — 빈 자리는 지나친다). `only` 로 종류를 거른다 */
   const topLayerAt = (p: { x: number; y: number }, only?: (l: Layer) => boolean) => {
     for (let i = doc.layers.length - 1; i >= 0; i--) {
       const l = doc.layers[i];
-      if (l.on && (!only || only(l)) && hitLayer(l, p.x, p.y)) return l;
+      if (l.on && (!only || only(l)) && hitPixel(l, p.x, p.y)) return l;
     }
     return null;
   };
@@ -178,9 +178,9 @@ export function Stage({ doc }: { doc: Doc }) {
       return;
     }
 
-    // 선택 도구 — 손잡이 → **고른 레이어 안이면 그 레이어** → 아니면 그 자리의 맨 앞 레이어
-    // ★★고른 레이어 위에 다른 레이어가 겹쳐 있어도 고른 것을 끈다 (사용자 지적 2026-09-22: 목록에서 골라 두고 무대를
-    //   누르면 앞의 레이어로 선택이 바뀌어 버렸다). 꺼진 레이어는 안 보이므로 예외다 — 그때는 보이는 것 중 맨 앞을 고른다.
+    // 선택 도구 — 고른 레이어의 손잡이 → **누른 자리의 맨 앞 레이어**(픽셀이 있는 것) → 아무것도 없으면 선택을 푼다
+    // ★사용자 결정 2026-09-22: 앞의 레이어를 누르면 곧바로 그것이 골라진다 (한때 「고른 레이어 안이면 고른 것을 끈다」로
+    //   두었다가 되돌렸다). 빈 자리는 상자가 아니라 픽셀로 본다 — 캔버스 크기의 빈 레이어가 위에 있어도 아래 그림이 골라진다.
     if (sel) {
       const h = hitHandle(sel, p);
       if (h && "rotate" in h) {
@@ -194,18 +194,13 @@ export function Stage({ doc }: { doc: Doc }) {
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
         return;
       }
-      if (sel.on && hitLayer(sel, p.x, p.y)) {
-        dragRef.current = { kind: "move", start: p, layer: sel };
-        (e.currentTarget as Element).setPointerCapture(e.pointerId);
-        return;
-      }
     }
     const hit = topLayerAt(p);
     if (hit) {
       if (hit.id !== doc.sel) s.selectLayer(hit.id);
       dragRef.current = { kind: "move", start: p, layer: hit };
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
-    }
+    } else if (doc.sel) s.selectLayer(null);
   };
 
   const strokeAt = (p: { x: number; y: number }) => {
@@ -284,7 +279,7 @@ export function Stage({ doc }: { doc: Doc }) {
     }
     if (strokeRef.current && p) return strokeAt(p);
     if (tool === "select" && p) {
-      const hit = sel && (hitHandle(sel, p) || hitLayer(sel, p.x, p.y)) ? sel : topLayerAt(p);
+      const hit = sel && hitHandle(sel, p) ? sel : topLayerAt(p);
       setHover(hit?.id ?? null);
     }
   };

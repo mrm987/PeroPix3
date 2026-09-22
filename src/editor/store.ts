@@ -78,7 +78,8 @@ type S = {
   setRatioLock: (v: boolean) => void;
   setView: (v: Partial<Doc["view"]>) => void;
 
-  selectLayer: (id: string) => void;
+  /** 레이어를 고른다. `null` 이면 선택을 푼다 (선택 도구로 빈 자리를 눌렀을 때) */
+  selectLayer: (id: string | null) => void;
   /** 변형·불투명도를 고친다. `live` 면 이력을 안 적는다 (끄는 중) — 놓을 때 `commit: true` 로 한 번 적는다 */
   patchLayer: (id: string, p: Partial<Layer>, live?: boolean) => void;
   /** 끌기 시작 전의 상태를 이력에 적어 둔다 (live 패치가 그 위에 쌓인다) */
