@@ -607,8 +607,33 @@ def _anthropic_images(messages: list[dict]) -> list[dict]:
     return out
 
 
+#: 앤트로픽이 아는 `tool_use` 조각의 키
+_TOOL_USE_KEYS = ("type", "id", "name", "input")
+
+
+def _anthropic_tool_uses(messages: list[dict]) -> list[dict]:
+    """`tool_use` 조각에서 앤트로픽이 모르는 키를 뺀다.
+
+    ★`raw` 는 제미나이가 다음 턴에 그대로 되돌려 받아야 하는 원본이라 정본에 남는다 (`_gemini`).
+      버텍스로 시작한 대화를 앤트로픽으로 이어 가면 그것이 그대로 실린다.
+    ★앤트로픽은 모르는 필드를 400 으로 돌려준다 (조수 메시지의 `usage` 가 실려 첫 턴부터 깨졌던 것과 같은 종류, 사용자 제보 2026-09-28)."""
+    out = []
+    for m in messages:
+        c = m.get("content")
+        if not isinstance(c, list) or not any(
+            isinstance(b, dict) and b.get("type") == "tool_use" and set(b) - set(_TOOL_USE_KEYS) for b in c
+        ):
+            out.append(m)
+            continue
+        out.append({**m, "content": [
+            {k: b[k] for k in _TOOL_USE_KEYS if k in b} if isinstance(b, dict) and b.get("type") == "tool_use" else b
+            for b in c
+        ]})
+    return out
+
+
 async def _anthropic(key, model, system, messages, tools, max_tokens, url, effort="") -> dict:
-    messages = _anthropic_images(messages)
+    messages = _anthropic_tool_uses(_anthropic_images(messages))
     body: dict = {
         # ★여기만 `max_tokens` 를 **꼭** 보낸다 — Messages API 가 요구한다 (문서 확인).
         #   다른 경로는 안 보내고 모델 기본값을 쓴다 (`chat()` 주석).
