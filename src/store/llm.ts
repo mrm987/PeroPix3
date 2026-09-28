@@ -217,8 +217,10 @@ export function withNameFirst(msgs: Wire[], on: boolean): Wire[] {
 export function forProvider(wire: Wire[]): Wire[] {
   return wire
     .map((m) => ({
-      ...m,
-      /* ★`hidden` 표식은 벗긴다 — 앤트로픽은 모르는 필드를 400 으로 돌려준다 (`backend/llm.py` 가 그대로 넘긴다) */
+      /* ★★메시지는 `role`·`content` 둘만 보낸다 — 앤트로픽은 모르는 필드를 400 으로 돌려준다 (`backend/llm.py` 가 그대로 넘긴다).
+         조수 메시지의 `usage` 를 그대로 실었다가 앤트로픽 직결이 첫 턴부터 깨졌다 (messages.1.usage, 사용자 제보 2026-09-28) */
+      role: m.role,
+      /* ★`hidden` 표식도 같은 이유로 벗긴다 */
       content: m.content
         .filter((b) => b.type !== "error" && b.type !== "note")
         .map((b) => (b.type === "text" ? { type: "text" as const, text: b.text } : b)),
