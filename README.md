@@ -100,4 +100,6 @@ described in **[docs/release.md](docs/release.md)**.
 
 ## License
 
+Copyright (C) 2026 mrm987
+
 [AGPL-3.0-or-later](LICENSE). Bundled third-party components are listed in [THIRD-PARTY.md](THIRD-PARTY.md).

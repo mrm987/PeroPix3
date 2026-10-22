@@ -96,4 +96,6 @@ npm run tauri dev     # 프런트(1420) + 백엔드(8770) + 창
 
 ## 라이선스
 
+Copyright (C) 2026 mrm987
+
 [AGPL-3.0-or-later](LICENSE). 함께 담긴 third-party 구성 요소는 [THIRD-PARTY.md](THIRD-PARTY.md) 에 있습니다.
