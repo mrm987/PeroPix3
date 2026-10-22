@@ -161,13 +161,13 @@ fn check_at(root: &Path, app: &Path) -> std::io::Result<()> {
         return Err(other("앱을 응용 프로그램 폴더로 옮긴 뒤 다시 켜서 업데이트해 주세요"));
     }
     if !stage_dir(root).join("new").join(BUNDLE).join("Contents").join("MacOS").is_dir() {
-        return Err(other("받아 둔 새 판에 PeroPix.app 이 없습니다"));
+        return Err(other("받아 둔 새 버전에 PeroPix.app 이 없습니다"));
     }
     // ★앱이 든 폴더에 쓸 수 있어야 바꿔 놓는다 (관리자가 아닌 계정의 응용 프로그램 폴더)
     let parent = app.parent().ok_or_else(|| other("앱이 든 폴더를 모릅니다"))?;
     let c = std::ffi::CString::new(parent.as_os_str().as_bytes()).map_err(|_| other("앱 자리가 이상합니다"))?;
     if unsafe { libc::access(c.as_ptr(), libc::W_OK) } != 0 {
-        return Err(other("앱이 든 폴더에 쓸 수 없습니다. 새 판을 받아 직접 바꿔 주세요"));
+        return Err(other("앱이 든 폴더에 쓸 수 없습니다. 새 버전을 받아 직접 바꿔 주세요"));
     }
     Ok(())
 }
