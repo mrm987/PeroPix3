@@ -52,3 +52,118 @@ jobs:
       #   여기서는 **적어도 임포트가 되는지**를 본다: 의존성이 빠지면 앱이 켜지지 않는다.
       - name: 백엔드가 임포트되는가
         run: python -c "import sys; sys.path.insert(0, 'backend'); import server; print('ok')"
+
+  # ★★맥 판의 확인 (사용자 결정 2026-10-22: 맥 판은 베타, 실제 화면 문제는 제보로 고친다).
+  #   실제 맥이 없으므로 **맥에서 도는 확인은 여기가 전부다** — Rust 판정(맥 갈래) · 꾸러미 조립과 서명 ·
+  #   함께 담은 파이썬으로 백엔드 확인 · 앱을 켜서 백엔드가 뜨고 꺼지는지까지 본다.
+  #   ★화면이 맞게 보이는지는 여기서도 모른다 — 켠 화면을 찍어 아티팩트로 남긴다 (사람이 본다).
+  # ★macos-14 는 우리가 받쳐 주는 가장 낮은 판이다 (`tauri.macos.conf.json` 의 `minimumSystemVersion`).
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - run: npm ci
+
+      # ★Rust 는 화면 빌드(`dist/`)를 실행 파일에 싣는다 — 판정을 돌리기 전에 만들어 둔다
+      - run: npm run build
+
+      - name: Rust 판정 (맥 갈래 — 잠금 · 업데이트 교체 · 로그 중계)
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: 맥 꾸러미
+        run: bash scripts/macos-package.sh
+
+      # ★Finder 로 켠 앱처럼 짧은 PATH 로 돌린다 (`cliagent._mac_path` 가 덧붙이는지 본다)
+      - name: 함께 담은 파이썬으로 백엔드 확인
+        run: |
+          RES="$PWD/src-tauri/target/release/bundle/macos/PeroPix.app/Contents/Resources"
+          DATA=$(mktemp -d)
+          PEROPIX_DATA_DIR="$DATA" PYTHONDONTWRITEBYTECODE=1 PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+            "$RES/python/bin/python3" - "$RES" "$DATA" <<'PY'
+          import json, os, subprocess, sys, tempfile
+          from pathlib import Path
+          res, data = Path(sys.argv[1]), Path(sys.argv[2])
+          sys.path.insert(0, str(res / "backend"))
+          import censor, files, server, tagger, trash, update
+          bad = 0
+          def chk(name, cond, extra=""):
+              global bad
+              print(("OK   " if cond else "FAIL ") + name + (f" - {extra}" if extra and not cond else ""))
+              bad += not cond
+          chk("데이터는 넘겨받은 자리", server.APP_DIR == data, str(server.APP_DIR))
+          chk("앱 것은 Resources", server.INNER_DIR == res.resolve(), str(server.INNER_DIR))
+          chk("버전은 Resources 의 version.json", server.APP_VERSION == json.loads((res / "version.json").read_text())["version"], server.APP_VERSION)
+          chk("나중에 받는 모델은 데이터 자리", str(tagger.MODEL_DIR).startswith(str(data)), str(tagger.MODEL_DIR))
+          chk("검열 모델이 보인다", bool(censor.models()))
+          chk("Homebrew 자리가 PATH 에 붙는다", "/opt/homebrew/bin" in os.environ["PATH"].split(os.pathsep), os.environ["PATH"])
+          from fastapi.testclient import TestClient
+          with TestClient(server.app) as c:
+              h = c.get("/api/health")
+              chk("백엔드가 답한다", h.status_code == 200 and h.json().get("ok"), h.text[:300])
+              for p in ("/plug/_app/base.css", "/plug/_app/peropix.js"):
+                  chk(f"공통 자산 {p}", c.get(p).status_code == 200)
+          tmp = Path(tempfile.mkdtemp())
+          f = tmp / "trash-me.txt"
+          f.write_text("x")
+          sent = trash.send_os([f])
+          chk("앱 밖 파일을 Finder 휴지통으로", sent == [f] and not f.exists(), str(sent))
+          r = subprocess.run(["/usr/bin/osacompile", "-e", files._PICK_DIR_MAC, "-o", str(tmp / "pick.scpt")], capture_output=True, text=True)
+          chk("폴더 고르기 스크립트가 컴파일된다", r.returncode == 0, r.stderr)
+          z = tmp / "app.zip"
+          subprocess.run(["/usr/bin/ditto", "-c", "-k", "--keepParent", str(res.parent.parent), str(z)], check=True)
+          err = update._unpack(z, tmp / "new")
+          chk("업데이트 꾸러미가 풀린다", err is None, str(err))
+          app = tmp / "new" / "PeroPix.app" / "Contents"
+          chk("푼 실행 파일에 실행 권한", os.access(app / "MacOS" / "peropix", os.X_OK))
+          r = subprocess.run([str(app / "Resources" / "python" / "bin" / "python3"), "-c", "import onnxruntime"], capture_output=True, text=True)
+          chk("푼 파이썬이 돈다", r.returncode == 0, r.stderr[-300:])
+          sys.exit(1 if bad else 0)
+          PY
+
+      # ★진짜로 켠다 — 껍데기가 함께 담은 파이썬을 찾고, 데이터 자리에 로그를 쓰고, 백엔드가 뜨는지.
+      #   ★끈 뒤에 파이썬이 남지 않는지(부모 감시, `server.watch_parent`)와 **서명이 그대로인지**(앱이 제 안에
+      #     아무것도 안 썼는지)까지 본다.
+      - name: 앱을 켜 본다
+        run: |
+          APP="$PWD/src-tauri/target/release/bundle/macos/PeroPix.app"
+          DATA="$HOME/Library/Application Support/PeroPix"
+          rm -rf "$DATA"
+          "$APP/Contents/MacOS/peropix" > app-stdout.log 2>&1 &
+          PID=$!
+          for i in $(seq 1 120); do
+            grep -q "Application startup complete" "$DATA/logs/peropix.log" 2>/dev/null && break
+            sleep 1
+          done
+          sleep 10
+          screencapture -x app-screen.png || echo "화면을 찍지 못했습니다"
+          kill $PID || true
+          sleep 6
+          cp "$DATA/logs/peropix.log" app-peropix.log || true
+          cat app-peropix.log || true
+          grep -q "Application startup complete" app-peropix.log
+          if grep -n "Traceback\|ERROR \[ui\]" app-peropix.log; then echo "::error::로그에 오류가 있습니다"; exit 1; fi
+          if pgrep -f "$APP/Contents/Resources/python"; then echo "::error::앱을 끈 뒤에도 파이썬이 남았습니다"; exit 1; fi
+          codesign --verify --deep --strict "$APP"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-check
+          path: |
+            app-*.log
+            app-screen.png
+          if-no-files-found: ignore

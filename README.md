@@ -10,7 +10,7 @@ Lay scenes out on a lane, queue them once, and get the whole set.
 [![Release](https://img.shields.io/github/v/release/mrm987/PeroPix3?label=download&color=5865F2)](https://github.com/mrm987/PeroPix3/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/mrm987/PeroPix3/total?color=5865F2)](https://github.com/mrm987/PeroPix3/releases)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-informational)](LICENSE)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 [![Website](https://img.shields.io/badge/website-peropix.mori--mo.com-5865F2)](https://peropix.mori-mo.com/)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/morimo_)
 
@@ -51,6 +51,7 @@ to a queue.
 - **Generating costs Anlas.** Sizes and step counts within your plan's free limits cost
   nothing, and the generate button always shows the current price before you press it.
 - **Windows 10 or 11.** The WebView2 runtime is required and is usually already there.
+- **Or a Mac with Apple silicon on macOS 14 or later** (beta, see below).
 
 ## Install
 
@@ -64,6 +65,21 @@ is written to the registry. To move or remove PeroPix, move or delete the folder
 
 > You can unzip several copies and run them side by side — each folder keeps its own
 > port, storage and settings. Only opening the *same* folder twice is blocked.
+
+### macOS (beta)
+
+For Macs with Apple silicon on macOS 14 or later. The Mac build is maintained together
+with the community and gets less testing than the Windows one, so please report anything
+that looks off.
+
+1. Download `PeroPix-<version>-macos-arm64.zip` from the [latest release](https://github.com/mrm987/PeroPix3/releases/latest) and unzip it.
+2. Move `PeroPix.app` into **Applications** and run it from there. Updates replace the app
+   where it is.
+3. The app is not notarized by Apple, so macOS blocks the first launch. Open
+   **System Settings ▸ Privacy & Security** and press **Open Anyway** for PeroPix.
+
+On a Mac your files are in `~/Library/Application Support/PeroPix`, not next to the app.
+The folders inside are the same as below.
 
 ## Your files
 

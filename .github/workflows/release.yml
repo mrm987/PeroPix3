@@ -180,3 +180,56 @@ jobs:
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ★★맥 판 (사용자 결정 2026-10-22: 커뮤니티 유지 · 베타). 윈도우 잡이 초안을 만든 **뒤에** 돌아 그 초안에
+  #   전체 zip 하나만 보탠다 (`needs: windows`, 이슈 #1) — 각자 초안을 만들면 같은 태그에 초안이 둘 생긴다.
+  # ★맥은 패치가 없다 — 업데이트는 언제나 이 zip 으로 `.app` 을 통째로 바꾼다 (`src-tauri/src/update.rs` 의 맥 `apply`).
+  # ★조립은 `scripts/macos-package.sh` 하나가 한다. 확인(켜 보기까지)은 `check.yml` 의 맥 잡이 한다.
+  macos:
+    needs: windows
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: 의존성 설치
+        run: npm ci
+
+      # ★윈도우 잡과 같다 — 버전은 태그가 정본이다
+      - name: 버전을 태그에 맞춘다
+        run: |
+          tag="$GITHUB_REF_NAME"
+          [[ "$tag" =~ ^v[0-9] ]] || tag="v0.0.0"
+          ver="${tag#v}"
+          node -e 'const fs=require("fs"),f="src-tauri/tauri.conf.json",c=JSON.parse(fs.readFileSync(f,"utf8"));c.version=process.argv[1];fs.writeFileSync(f,JSON.stringify(c,null,2)+"\n")' "$ver"
+          npm version "$ver" --no-git-tag-version --allow-same-version
+          echo "VERSION=$ver" >> "$GITHUB_ENV"
+          echo "version = $ver"
+
+      - name: 맥 꾸러미
+        run: bash scripts/macos-package.sh
+
+      - name: 손으로 돌린 것은 아티팩트로만
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: PeroPix-macOS
+          path: _dist/PeroPix-*-macos-arm64.zip
+
+      # ★윈도우 잡이 만든 초안에 보탠다. `gh` 는 태그로 초안도 찾는다
+      - name: 릴리즈 초안에 보탠다
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: gh release upload "$GITHUB_REF_NAME" "_dist/PeroPix-$VERSION-macos-arm64.zip" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

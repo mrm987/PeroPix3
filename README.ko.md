@@ -10,7 +10,7 @@
 [![Release](https://img.shields.io/github/v/release/mrm987/PeroPix3?label=download&color=5865F2)](https://github.com/mrm987/PeroPix3/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/mrm987/PeroPix3/total?color=5865F2)](https://github.com/mrm987/PeroPix3/releases)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-informational)](LICENSE)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 [![Website](https://img.shields.io/badge/website-peropix.mori--mo.com-5865F2)](https://peropix.mori-mo.com/ko/)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/morimo_)
 
@@ -47,6 +47,7 @@
 - **생성에는 Anlas 가 듭니다.** 요금제의 무료 범위(크기·스텝) 안이면 들지 않고, 생성
   단추가 누르기 전에 늘 지금 값을 보여 줍니다.
 - **Windows 10 또는 11.** WebView2 런타임이 필요하고, 대개 이미 깔려 있습니다.
+- **또는 애플 실리콘 맥, macOS 14 이상** (베타, 아래 참고).
 
 ## 설치
 
@@ -60,6 +61,20 @@
 
 > 여러 벌을 풀어 **나란히 켜도 됩니다** — 폴더마다 포트·저장소·설정이 따로입니다.
 > 막히는 것은 *같은* 폴더를 두 번 여는 것뿐입니다.
+
+### macOS (베타)
+
+애플 실리콘 맥, macOS 14 이상용입니다. 맥 판은 커뮤니티와 함께 유지하고 있어 Windows 판보다
+확인이 덜 되어 있습니다. 이상한 점이 보이면 알려 주세요.
+
+1. [최신 릴리즈](https://github.com/mrm987/PeroPix3/releases/latest)에서 `PeroPix-<버전>-macos-arm64.zip` 을 받아 풉니다.
+2. `PeroPix.app` 을 **응용 프로그램** 폴더로 옮기고 거기서 켭니다. 업데이트는 그 자리의 앱을
+   바꿉니다.
+3. 애플의 공증을 받지 않은 앱이라 처음 켤 때 막힙니다. **시스템 설정 ▸ 개인정보 보호 및 보안**에서
+   PeroPix 의 **그래도 열기**를 누릅니다.
+
+맥에서는 내 파일이 앱 옆이 아니라 `~/Library/Application Support/PeroPix` 에 있습니다.
+그 안의 폴더는 아래와 같습니다.
 
 ## 내 파일이 있는 자리
 
