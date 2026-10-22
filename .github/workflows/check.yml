@@ -98,7 +98,7 @@ jobs:
           from pathlib import Path
           res, data = Path(sys.argv[1]), Path(sys.argv[2])
           sys.path.insert(0, str(res / "backend"))
-          import censor, files, server, tagger, trash, update
+          import agent, censor, files, server, tagger, trash, update
           bad = 0
           def chk(name, cond, extra=""):
               global bad
@@ -109,6 +109,8 @@ jobs:
           chk("버전은 Resources 의 version.json", server.APP_VERSION == json.loads((res / "version.json").read_text())["version"], server.APP_VERSION)
           chk("나중에 받는 모델은 데이터 자리", str(tagger.MODEL_DIR).startswith(str(data)), str(tagger.MODEL_DIR))
           chk("검열 모델이 보인다", bool(censor.models()))
+          chk("AI 조수의 태그 사전이 보인다", len(agent._tags()) > 1000, str(len(agent._tags())))
+          chk("AI 조수의 용어표가 보인다", bool(agent._terms()))
           chk("Homebrew 자리가 PATH 에 붙는다", "/opt/homebrew/bin" in os.environ["PATH"].split(os.pathsep), os.environ["PATH"])
           from fastapi.testclient import TestClient
           with TestClient(server.app) as c:

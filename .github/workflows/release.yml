@@ -121,6 +121,9 @@ jobs:
           #   패치에만 없어서, 전체로 받은 쪽에서는 멀쩡해 보였다. 앱 판과 짝이 맞아야 하는 파일이라
           #   backend 와 같은 자격으로 간다.
           Copy-Item "_dist/PeroPix/app/plug-app" "$p/app" -Recurse
+          # ★AI 조수의 태그 사전·용어표 (2026-10-22). 빠져 있던 것이라 패치로 받는 사람에게도 가야 한다 (`portable.ps1` 의 ★★주)
+          Copy-Item "_dist/PeroPix/app/public" "$p/app" -Recurse
+          Copy-Item "_dist/PeroPix/app/shared" "$p/app" -Recurse
           Copy-Item "_dist/PeroPix/app/version.json" "$p/app"
           Compress-Archive -Path "$p/*" -DestinationPath "_dist/patch-${{ env.VERSION }}.zip"
 

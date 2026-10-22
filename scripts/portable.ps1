@@ -6,7 +6,7 @@
 #   나쁘며, 언인스톨러가 설치 폴더를 통째로 지운다 — 데이터가 그 안에 있다.
 # ★★배치는 **두 층**이다 (2026-08-27): 바깥에는 실행 파일·읽을거리와 **사람이 여는 폴더**
 #   (`gallery`·`logs`·`workspaces`·`data`, 앱이 처음 쓸 때 생긴다)만 두고, 앱이 도는 데
-#   필요한 것은 전부 `app/` 안에 넣는다 (`backend`·`python`·`models`·`webview`·`version.json`).
+#   필요한 것은 전부 `app/` 안에 넣는다 (`backend`·`python`·`models`·`webview`·`plug-app`·`public`·`shared`·`version.json`).
 #   껍데기는 `app/backend/server.py` 와 `backend/server.py` 를 **둘 다** 알아본다
 #   (`backend.rs` 의 `inner`·`find_repo_root`) — 저장소에서 개발할 때는 `app/` 이 없다.
 #   ★★코드는 이미 이 배치를 전제로 쓰여 있다: `find_repo_root` 가 exe 옆에서
@@ -126,6 +126,15 @@ Copy-Item (Join-Path $root "plug-app") -Destination $inner -Recurse
 #   그러면 플러그인 화면이 `/plug/_app/base.css` 를 404 로 받아 **흰 바탕에 글자만** 나온다.
 #   조용히 빠지면 실행해 보기 전에는 모르므로, 여기서 끊는다.
 if (-not (Test-Path (Join-Path $inner "plug-app/base.css"))) { throw "plug-app 이 담기지 않았습니다" }
+# ★★**AI 조수가 읽는 태그 사전·용어표도 담는다** (2026-10-22 에 빠진 것을 찾았다). 백엔드가 `app/public`·`app/shared`
+#   에서 읽는다 (`backend/agent.py` 의 `_PUBLIC`·`TERMS_JSON`). 없으면 오류 없이 태그 검색이 비고 용어 별칭이 사라진다.
+#   ★`public/` 의 나머지(boot.js·소리)는 화면 것이라 실행 파일에 이미 들어 있다 — 백엔드가 읽는 셋만 담는다.
+#   ★맥 꾸러미(`scripts/macos-package.sh`)와 패치(`release.yml`)도 같은 것을 담는다.
+New-Item -ItemType Directory -Force -Path (Join-Path $inner "public"), (Join-Path $inner "shared") | Out-Null
+foreach ($n in @("public/tags.json", "public/tags-extra.json", "shared/terms.json")) {
+  Copy-Item (Join-Path $root $n) -Destination (Join-Path $inner $n)
+}
+if (-not (Test-Path (Join-Path $inner "public/tags.json"))) { throw "태그 사전이 담기지 않았습니다" }
 
 # ★★검열은 **기본 모델만** 담는다 (사용자 지시 2026-08-26). 무거운 XL(251MB)을 빼면
 #   `censor.models()` 가 폴더를 훑어 가벼운 것부터 내므로, 남은 하나가 그대로 기본이 된다

@@ -64,6 +64,9 @@ find "$RES/backend" \( -name '__pycache__' -o -name 'test_*.py' \) -prune -exec 
 # ★플러그인은 담지 않는다 — 앱과 함께 가는 것은 공통 자산뿐이다 (`portable.ps1` 의 ★★주)
 ditto "$ROOT/plug-app" "$RES/plug-app"
 test -f "$RES/plug-app/base.css" || { echo "[맥] plug-app 이 담기지 않았습니다" >&2; exit 1; }
+# ★AI 조수의 태그 사전·용어표 — 백엔드가 읽는 셋만 (`portable.ps1` 의 ★★주)
+mkdir -p "$RES/public" "$RES/shared"
+for n in public/tags.json public/tags-extra.json shared/terms.json; do cp "$ROOT/$n" "$RES/$n"; done
 # ★검열은 가장 가벼운 모델 하나만 (`portable.ps1` 과 같다)
 mkdir -p "$RES/models/censor"
 MODEL=$(ls -Sr "$ROOT"/models/censor/*.onnx | head -1)
