@@ -3,10 +3,11 @@
  *  ★레이어 픽셀은 **불변**으로 다룬다: 획 하나·보정 적용·합치기는 언제나 **새 캔버스**를 만든다. 이력(`Hist`)이
  *    옛 캔버스를 그대로 들고 있으므로 되돌리기는 참조를 바꾸는 것으로 끝난다.
  *  ★합성은 **문서 좌표계**에서 한다 — 레이어의 변형(자리·크기·회전·반전)은 그릴 때 `ctx` 변환으로 건다 (비파괴). */
-import { centerOf, filterOf, floodFill, hexRgb, layoutText, rad, textBaseline, type LayerMeta, type Rect, type Size, type TextMeta, type Xform } from "./model";
+import { adjustOps, centerOf, filterOf, floodFill, hexRgb, layoutText, rad, textBaseline, type LayerMeta, type Rect, type Size, type TextMeta, type Xform } from "./model";
 import { bodyFor, bubbleBounds, bubbleShape, panelPts, wrapLines, type BubbleMeta, type ComicMeta, type PanelMeta, type Pt } from "./comic";
 import { SFX_FALLBACK, layoutSfx, primaryFamily, sfxBounds, type Glyph, type SfxMeta } from "./sfx";
 import { FX_AMT, applyFx, applyFxList, fxListKey, liveFx, type Fx, type FxKind } from "./fx";
+import { canvasFilterOk, colorPixels } from "../lib/canvasFilter";
 
 export type Layer = LayerMeta & { cv: HTMLCanvasElement };
 
@@ -168,6 +169,20 @@ export function fxThumb(cv: HTMLCanvasElement, kind: FxKind | null, w: number, h
   return url;
 }
 
+/** 보정을 **픽셀로** 입힌 사본 — `ctx.filter` 를 못 쓰는 웹뷰(맥, `lib/canvasFilter` 머리 주석)에서만 쓴다.
+ *  ★레이어 픽셀은 불변이라(머리 주석) 캔버스마다 마지막 보정 하나를 들고 있으면 된다 (효과의 `fxDone` 과 같은 이유) */
+const adjDone = new WeakMap<HTMLCanvasElement, { key: string; out: HTMLCanvasElement }>();
+function withAdjust(cv: HTMLCanvasElement, a: LayerMeta["adj"]): HTMLCanvasElement {
+  const key = filterOf(a);
+  const hit = adjDone.get(cv);
+  if (hit?.key === key) return hit.out;
+  const data = cv.getContext("2d")!.getImageData(0, 0, cv.width, cv.height).data;
+  colorPixels(data, adjustOps(a));
+  const out = fxCanvasOf(cv.width, cv.height, data);
+  adjDone.set(cv, { key, out });
+  return out;
+}
+
 /** 레이어 하나를 문서 좌표계의 `ctx` 에 그린다 (불투명도·보정·효과·긋는 중인 획까지).
  *  ★보정(`l.adj`)·효과(`l.fx`)는 레이어의 속성이라 **언제나** 건다 — 합치기·저장이 이 함수를 거치므로 그때 픽셀에 굽힌다.
  *    효과를 먼저 입히고 보정(CSS 필터)은 그 위에 건다. 긋는 중인 획은 놓은 뒤에 효과가 입혀진다 */
@@ -183,19 +198,21 @@ export function drawLayer(ctx: CanvasRenderingContext2D, l: Layer, opt?: { strok
   }
   ctx.globalAlpha = l.opacity / 100;
   const f = filterOf(l.adj);
-  if (f) ctx.filter = f;
+  if (f && canvasFilterOk()) ctx.filter = f;
+  // ★`ctx.filter` 를 못 쓰면(맥) 보정을 픽셀로 입힌 사본을 그린다
+  const pic = f && !canvasFilterOk() ? withAdjust(px, l.adj) : px;
   applyXform(ctx, l);
   const st = opt?.stroke;
   if (st?.erase) {
     // ★지우개는 **레이어 안에서만** 지워야 한다 — 미리보기도 사본에서 지워서 그린다
-    const tmp = cloneCanvas(px);
+    const tmp = cloneCanvas(pic);
     const g = tmp.getContext("2d")!;
     g.globalCompositeOperation = "destination-out";
     g.globalAlpha = st.alpha;
     g.drawImage(st.cv, 0, 0);
     ctx.drawImage(tmp, -l.w / 2, -l.h / 2, l.w, l.h);
   } else {
-    ctx.drawImage(px, -l.w / 2, -l.h / 2, l.w, l.h);
+    ctx.drawImage(pic, -l.w / 2, -l.h / 2, l.w, l.h);
     if (st) {
       ctx.globalAlpha = (l.opacity / 100) * st.alpha;
       ctx.drawImage(st.cv, -l.w / 2, -l.h / 2, l.w, l.h);

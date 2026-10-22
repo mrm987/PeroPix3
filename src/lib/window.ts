@@ -55,6 +55,11 @@ export const appWindow = {
     const w = await win();
     return w ? await w.isMaximized() : false;
   },
+  /** 맥의 전체 화면 — 그때는 신호등 버튼이 숨으므로 그 자리를 비워 두지 않는다 (`TitleBar`) */
+  async isFullscreen(): Promise<boolean> {
+    const w = await win();
+    return w ? await w.isFullscreen() : false;
+  },
   async startResize(dir: ResizeDir) {
     (await win())?.startResizeDragging(dir as never);
   },

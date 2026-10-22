@@ -18,6 +18,7 @@
 import { cloudScale, fadeStartOf, plateRGBA, prepRegion, regionCoverRows, regionReach } from "./steam.ts";
 import { makeNoise } from "./noise.ts";
 import { methodIndex, rectEmpty, type Mask, type Rect } from "./censorMask.ts";
+import { drawBlurred } from "./canvasFilter.ts";
 import type { RegionCloud } from "./steam.ts";
 
 /** 한 장에 그릴 것. ★★두 갈래다 (`censorMask` 머리의 ★★주): 스팀은 **사각형 목록**으로(비트맵을 8px
@@ -282,9 +283,8 @@ export class CensorRenderer {
       g.drawImage(small, 0, 0, W, H);
       g.imageSmoothingEnabled = true;
     } else if (how === "blur") {
-      g.filter = `blur(${Math.max(1, s.blur * scale)}px)`;
-      g.drawImage(this.src, 0, 0, W, H);
-      g.filter = "none";
+      // ★맥(WKWebView)은 `ctx.filter` 가 꺼져 있어 픽셀로 흐린다 (`canvasFilter` 머리 주석)
+      drawBlurred(g, this.src, W, H, Math.max(1, s.blur * scale));
       // ★가장자리가 비쳐 어두워지는 것을 막는다. 흐리기는 판 밖을 투명으로 보므로,
       //   그 자리에 **원본을 깔아** 메운다 (박스가 그림 끝에 붙었을 때만 보이던 결함)
       g.globalCompositeOperation = "destination-over";
@@ -421,9 +421,8 @@ export class CensorRenderer {
     const cg = cut.getContext("2d")!;
     cg.setTransform(1, 0, 0, 1, 0, 0);
     cg.clearRect(0, 0, PW, PH);
-    cg.filter = feather > 0 ? `blur(${feather / 2}px)` : "none";
-    cg.drawImage(pad, 0, 0);
-    cg.filter = "none";
+    if (feather > 0) drawBlurred(cg, pad, PW, PH, feather / 2);
+    else cg.drawImage(pad, 0, 0);
     // 마스크가 남긴 자리에만 재료를 남긴다 (재료는 그림 자리에만 — 여백은 어차피 잘려 나간다)
     cg.globalCompositeOperation = "source-in";
     cg.drawImage(this.layer(how, s, scale, W, H), m, m);

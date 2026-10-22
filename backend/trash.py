@@ -308,10 +308,13 @@ def send_os(paths: list[Path]) -> list[Path]:
       그런데 일괄 변환은 탐색기에서 끌어다 놓은 **아무 자리의 파일**도 받는다 —
       그것을 덮어쓸 때 원본을 앱 안으로 끌고 들어오면 사용자는 자기 폴더에서 파일이
       사라진 것으로만 보이고, 앱을 지우면 함께 사라진다. **사용자가 아는 자리**로 보낸다.
-    ★win32 밖에서는 아무것도 안 한다 (빈 목록) — 부르는 쪽이 그때는 덮어쓰지 않는다.
+    ★윈도우·맥 밖에서는 아무것도 안 한다 (빈 목록) — 부르는 쪽이 그때는 덮어쓰지 않는다.
       조용히 지우는 길을 만들지 말 것: 되돌릴 수 없는 삭제가 된다.
     ★`SHFileOperationW` 의 `FOF_ALLOWUNDO` 가 「휴지통으로」다. 목록은 NUL 로 잇고
-      **끝을 하나 더** 둔다 (그 API 의 규약)."""
+      **끝을 하나 더** 둔다 (그 API 의 규약).
+    ★맥은 Finder 의 휴지통으로 보낸다 (`_send_os_mac`)."""
+    if sys.platform == "darwin" and paths:
+        return _send_os_mac(paths)
     if sys.platform != "win32" or not paths:
         return []
     import ctypes
@@ -344,6 +347,50 @@ def send_os(paths: list[Path]) -> list[Path]:
     if rc != 0:
         print(f"[trash] OS 휴지통이 거절했습니다 (코드 {rc})")
         return []
+    return [p for p in paths if not p.exists()]
+
+
+def _send_os_mac(paths: list[Path]) -> list[Path]:
+    """맥 — `NSFileManager.trashItemAtURL` 로 휴지통에 넣는다 (Finder 의 「되돌려 놓기」가 된다).
+
+    ★Finder 를 AppleScript 로 부르지 않는다 — 그쪽은 「PeroPix 가 Finder 를 제어하려 합니다」 허락을
+      묻고, 서명이 바뀌는 업데이트마다 다시 묻는다. 이 API 는 아무것도 묻지 않는다.
+    ★덧붙는 것 없이 ctypes 로 Objective-C 를 부른다. `objc_msgSend` 는 **부를 때마다 꼴을 정해** 쓴다
+      (애플 실리콘은 가변 인자 꼴로 부르면 인자가 엉뚱한 자리로 간다)."""
+    import ctypes
+    import ctypes.util
+
+    try:
+        objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc"))
+        ctypes.cdll.LoadLibrary(ctypes.util.find_library("Foundation"))  # NSFileManager 를 싣는다
+    except Exception as e:
+        print(f"[trash] OS 휴지통을 못 열었습니다 ({e})")
+        return []
+    vp = ctypes.c_void_p
+    objc.objc_getClass.restype, objc.objc_getClass.argtypes = vp, [ctypes.c_char_p]
+    objc.sel_registerName.restype, objc.sel_registerName.argtypes = vp, [ctypes.c_char_p]
+    objc.objc_autoreleasePoolPush.restype = vp
+    objc.objc_autoreleasePoolPop.argtypes = [vp]
+    addr = ctypes.cast(objc.objc_msgSend, vp).value
+
+    def msg(restype, *argtypes):
+        return ctypes.CFUNCTYPE(restype, vp, vp, *argtypes)(addr)
+
+    cls, sel = objc.objc_getClass, objc.sel_registerName
+    pool = objc.objc_autoreleasePoolPush()
+    try:
+        fm = msg(vp)(cls(b"NSFileManager"), sel(b"defaultManager"))
+        for p in paths:
+            s = msg(vp, ctypes.c_char_p)(cls(b"NSString"), sel(b"stringWithUTF8String:"), str(p).encode("utf-8"))
+            url = msg(vp, vp)(cls(b"NSURL"), sel(b"fileURLWithPath:"), s)
+            err = vp()
+            ok = msg(ctypes.c_bool, vp, vp, vp)(fm, sel(b"trashItemAtURL:resultingItemURL:error:"), url, None, ctypes.byref(err))
+            if not ok:
+                print(f"[trash] OS 휴지통이 거절했습니다: {p}")
+    except Exception as e:
+        print(f"[trash] OS 휴지통으로 못 보냈습니다 ({e})")
+    finally:
+        objc.objc_autoreleasePoolPop(pool)
     return [p for p in paths if not p.exists()]
 
 

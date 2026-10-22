@@ -5,6 +5,7 @@
 import type { BubbleMeta, CutTake, PanelMeta } from "./comic";
 import type { SfxMeta } from "./sfx";
 import type { Fx } from "./fx";
+import type { ColorOp } from "../lib/canvasFilter";
 
 export type Size = { w: number; h: number };
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -18,10 +19,20 @@ export type Xform = { x: number; y: number; w: number; h: number; rot: number; f
 export type Adjust = { bri: number; con: number; sat: number; hue: number };
 export const NO_ADJUST: Adjust = { bri: 0, con: 0, sat: 0, hue: 0 };
 export const hasAdjust = (a: Adjust) => !!(a.bri || a.con || a.sat || a.hue);
+/** 보정 값 → CSS 필터 함수 차례. 전부 0 이면 빈 목록 (필터 없음).
+ *  ★`ctx.filter` 를 못 쓰는 웹뷰(맥)는 이 차례를 픽셀로 입힌다 (`lib/canvasFilter` 의 `colorPixels`) */
+export function adjustOps(a: Adjust): ColorOp[] {
+  if (!hasAdjust(a)) return [];
+  return [
+    { kind: "brightness", v: 1 + a.bri / 100 },
+    { kind: "contrast", v: 1 + a.con / 100 },
+    { kind: "saturate", v: 1 + a.sat / 100 },
+    { kind: "hue-rotate", deg: a.hue },
+  ];
+}
 /** 보정 값 → CSS 필터 문자열. 전부 0 이면 빈 문자열 (필터 없음) */
 export function filterOf(a: Adjust): string {
-  if (!hasAdjust(a)) return "";
-  return `brightness(${1 + a.bri / 100}) contrast(${1 + a.con / 100}) saturate(${1 + a.sat / 100}) hue-rotate(${a.hue}deg)`;
+  return adjustOps(a).map((o) => (o.kind === "hue-rotate" ? `hue-rotate(${o.deg}deg)` : `${o.kind}(${o.v})`)).join(" ");
 }
 
 /** 글자 레이어의 **글꼴** — 새 글자 레이어의 기본값(`useUi.editorText`)이자 레이어마다 든 값 */

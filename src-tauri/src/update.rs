@@ -40,6 +40,7 @@ pub fn staged(root: &Path) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(not(target_os = "macos"))]
 /// `.update/new/` 의 것들을 제자리로 옮긴다.
 ///
 /// ★한 항목이라도 실패하면 **거기서 멈춘다.** 이미 옮긴 것은 그대로 두는데, 그래도
@@ -54,6 +55,7 @@ pub fn apply(root: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(not(target_os = "macos"))]
 /// 새 파일을 제자리에 **겹쳐 놓는다** — 폴더는 통째로 바꾸지 않고 **안으로 들어간다.**
 ///
 /// ★★**폴더를 통째로 옮기면 패치가 앱을 부순다** (2026-08-27 배치 정리). 새 배치에서는
@@ -86,6 +88,7 @@ fn move_tree(from: &Path, to: &Path, park: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(not(target_os = "macos"))]
 /// 새 exe 를 띄운다. ★부모가 죽어도 살아 있어야 하므로 **잡에 매달지 않는다**
 /// (사이드카와 정반대다 — 그쪽은 함께 죽어야 하고 이쪽은 살아남아야 한다).
 pub fn relaunch(root: &Path) -> std::io::Result<()> {
@@ -111,7 +114,158 @@ pub fn relaunch(root: &Path) -> std::io::Result<()> {
 }
 
 
-#[cfg(test)]
+// ── 맥 ─────────────────────────────────────────────────────────────
+//
+// ★★맥은 `.app` 을 **통째로** 바꾼다 (사용자 결정 2026-10-22: 안정성 우선, 전체 zip 만 받는다).
+//   서명이 `.app` 안의 파일 전부를 묶고 있어서, 윈도우처럼 몇 개만 겹쳐 놓으면 봉인이 깨진다.
+//   돌고 있는 앱도 이름은 바꿀 수 있다 — 옛 `.app` 을 `.update/old/` 로 비켜 놓고 새것을 그 자리에 놓는다.
+// ★윈도우와 달리 **실패하면 되돌린다.** 옮기는 것이 둘뿐이라 되돌리기가 단순하고, 안 되돌리면
+//   응용 프로그램 폴더에서 앱이 사라진다.
+
+#[cfg(target_os = "macos")]
+const BUNDLE: &str = "PeroPix.app";
+
+#[cfg(target_os = "macos")]
+fn other(msg: &str) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::Other, msg.to_string())
+}
+
+/// 지금 도는 `.app` — 실행 파일(`…/PeroPix.app/Contents/MacOS/peropix`)에서 세 단계 위
+#[cfg(target_os = "macos")]
+fn running_bundle() -> std::io::Result<PathBuf> {
+    let exe = std::env::current_exe()?;
+    exe.parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .filter(|p| p.extension().is_some_and(|e| e == "app"))
+        .map(Path::to_path_buf)
+        .ok_or_else(|| other("앱 꾸러미(.app) 안에서 돌고 있지 않습니다"))
+}
+
+/// 바꿀 수 있는가 — ★**백엔드를 내리기 전에** 본다 (`lib.rs` 의 `apply_update`). 내린 뒤에 막히면 앱이 백엔드 없이 남는다
+#[cfg(target_os = "macos")]
+pub fn ready(root: &Path) -> std::io::Result<()> {
+    check_at(root, &running_bundle()?)
+}
+
+#[cfg(target_os = "macos")]
+pub fn apply(root: &Path) -> std::io::Result<()> {
+    apply_to(root, &running_bundle()?)
+}
+
+#[cfg(target_os = "macos")]
+fn check_at(root: &Path, app: &Path) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+    // ★맥이 앱을 옮겨 실행 중이면(App Translocation) 지금 자리는 읽기 전용 사본이고 원래 자리는 알 수 없다
+    if app.to_string_lossy().contains("/AppTranslocation/") {
+        return Err(other("앱을 응용 프로그램 폴더로 옮긴 뒤 다시 켜서 업데이트해 주세요"));
+    }
+    if !stage_dir(root).join("new").join(BUNDLE).join("Contents").join("MacOS").is_dir() {
+        return Err(other("받아 둔 새 판에 PeroPix.app 이 없습니다"));
+    }
+    // ★앱이 든 폴더에 쓸 수 있어야 바꿔 놓는다 (관리자가 아닌 계정의 응용 프로그램 폴더)
+    let parent = app.parent().ok_or_else(|| other("앱이 든 폴더를 모릅니다"))?;
+    let c = std::ffi::CString::new(parent.as_os_str().as_bytes()).map_err(|_| other("앱 자리가 이상합니다"))?;
+    if unsafe { libc::access(c.as_ptr(), libc::W_OK) } != 0 {
+        return Err(other("앱이 든 폴더에 쓸 수 없습니다. 새 판을 받아 직접 바꿔 주세요"));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn apply_to(root: &Path, app: &Path) -> std::io::Result<()> {
+    check_at(root, app)?;
+    let new = stage_dir(root).join("new").join(BUNDLE);
+    let park = stage_dir(root).join("old").join(BUNDLE);
+    std::fs::create_dir_all(park.parent().unwrap_or(root))?;
+    let _ = std::fs::remove_dir_all(&park);
+    move_dir(app, &park)?;
+    if let Err(e) = move_dir(&new, app) {
+        let _ = move_dir(&park, app); // ★되돌린다 (위 ★주)
+        return Err(e);
+    }
+    let _ = std::fs::remove_dir_all(stage_dir(root).join("new"));
+    Ok(())
+}
+
+/// 이름 바꾸기로 옮긴다. ★다른 디스크면(외장 디스크에 둔 앱) 이름 바꾸기가 안 되므로 `ditto` 로 베끼고 지운다
+#[cfg(target_os = "macos")]
+fn move_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    match std::fs::rename(from, to) {
+        Err(e) if e.raw_os_error() == Some(libc::EXDEV) => {
+            if !std::process::Command::new("/usr/bin/ditto").arg(from).arg(to).status()?.success() {
+                let _ = std::fs::remove_dir_all(to);
+                return Err(other("다른 디스크로 옮기지 못했습니다"));
+            }
+            std::fs::remove_dir_all(from)
+        }
+        r => r,
+    }
+}
+
+/// 바꿔 놓은 `.app` 을 새로 띄운다. ★`open -n` — 지금 것이 아직 살아 있어도 새 것을 하나 더 띄운다
+#[cfg(target_os = "macos")]
+pub fn relaunch(_root: &Path) -> std::io::Result<()> {
+    let app = running_bundle()?;
+    std::process::Command::new("/usr/bin/open").arg("-n").arg(&app).spawn().map(|_| ())
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod mac_tests {
+    use super::{apply_to, stage_dir, BUNDLE};
+    use std::path::{Path, PathBuf};
+
+    fn put(p: &Path, body: &str) {
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, body).unwrap();
+    }
+
+    /// 데이터 자리와 응용 프로그램 폴더의 `.app` 하나
+    fn setup(name: &str, apps: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let base = std::env::temp_dir().join(format!("peropix-macapply-{name}"));
+        let _ = std::fs::remove_dir_all(&base);
+        let root = base.join("data");
+        let app = base.join(apps).join(BUNDLE);
+        put(&app.join("Contents/MacOS/peropix"), "옛");
+        put(&root.join("workspaces/내작업/spec.json"), "사용자 것");
+        (base, root, app)
+    }
+
+    #[test]
+    fn 앱을_통째로_바꾼다() {
+        let (base, root, app) = setup("swap", "Applications");
+        put(&stage_dir(&root).join("new").join(BUNDLE).join("Contents/MacOS/peropix"), "새");
+        apply_to(&root, &app).unwrap();
+        assert_eq!(std::fs::read_to_string(app.join("Contents/MacOS/peropix")).unwrap(), "새");
+        assert_eq!(
+            std::fs::read_to_string(stage_dir(&root).join("old").join(BUNDLE).join("Contents/MacOS/peropix")).unwrap(),
+            "옛",
+            "옛것은 지우지 않고 비켜 놓는다 (다음에 켤 때 `sweep` 이 치운다)"
+        );
+        assert_eq!(std::fs::read_to_string(root.join("workspaces/내작업/spec.json")).unwrap(), "사용자 것");
+        assert!(!stage_dir(&root).join("new").exists());
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn 새_판이_없으면_그대로다() {
+        let (base, root, app) = setup("none", "Applications");
+        assert!(apply_to(&root, &app).is_err());
+        assert_eq!(std::fs::read_to_string(app.join("Contents/MacOS/peropix")).unwrap(), "옛");
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn 옮겨_실행_중이면_안_바꾼다() {
+        let (base, root, app) = setup("transloc", "AppTranslocation/X1");
+        put(&stage_dir(&root).join("new").join(BUNDLE).join("Contents/MacOS/peropix"), "새");
+        assert!(apply_to(&root, &app).is_err());
+        assert_eq!(std::fs::read_to_string(app.join("Contents/MacOS/peropix")).unwrap(), "옛");
+        let _ = std::fs::remove_dir_all(base);
+    }
+}
+
+#[cfg(all(test, not(target_os = "macos")))]
 mod apply_tests {
     use super::{apply, stage_dir};
     use std::path::{Path, PathBuf};

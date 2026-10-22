@@ -156,8 +156,23 @@ pub fn backend_key() -> &'static str {
 /// ★★**데이터도 여기 쌓인다** (`server.py` 의 `APP_DIR`): `data/`·`workspaces/`·`gallery/`.
 ///   그래서 이 값이 곧 **인스턴스의 신원**이다 — 웹뷰 저장소를 가르는 것도, 같은 폴더를
 ///   두 번 열지 못하게 막는 것도, 화면이 「내 백엔드가 맞나」를 묻는 것도 이 값으로 한다.
+#[cfg(not(target_os = "macos"))]
 pub fn root() -> PathBuf {
     find_repo_root().unwrap_or_else(app_dir)
+}
+
+/// ★★**맥은 데이터를 앱 밖에 둔다** — `~/Library/Application Support/PeroPix` (사용자 결정 2026-10-22).
+///   앱이 서명된 `.app` 이라 그 안에 쓰면 서명이 깨지고, 맥이 앱을 임의의 자리로 옮겨 실행하면
+///   (App Translocation) 앱 옆은 읽기 전용이다. 저장소에서 개발할 때는 윈도우와 같이 저장소 뿌리다.
+/// ★백엔드에는 이 자리를 환경변수로 넘긴다 (`spawn` 의 `PEROPIX_DATA_DIR`).
+#[cfg(target_os = "macos")]
+pub fn root() -> PathBuf {
+    if let Some(repo) = find_repo_root() {
+        return repo;
+    }
+    std::env::var_os("HOME")
+        .map(|h| PathBuf::from(h).join("Library").join("Application Support").join("PeroPix"))
+        .unwrap_or_else(app_dir)
 }
 
 /// 자식을 **Job Object 에 매단다** — 부모가 어떻게 죽든 함께 내려간다.
@@ -246,13 +261,24 @@ fn kill_tree(child: &Child) {
         .status();
 }
 
-#[cfg(not(windows))]
+/// ★맥 — 백엔드는 자기 프로세스 그룹의 우두머리로 뜬다 (`spawn` 의 `process_group(0)`).
+///   그룹째 내리면 자손(개발 중의 uvicorn 워커·CLI)까지 함께 내려간다.
+#[cfg(unix)]
+fn kill_tree(child: &Child) {
+    unsafe {
+        libc::kill(-(child.id() as i32), libc::SIGKILL);
+    }
+}
+
+#[cfg(not(any(windows, unix)))]
 fn kill_tree(_child: &Child) {}
 
 impl Drop for Backend {
     fn drop(&mut self) {
         if let Ok(mut guard) = self.0.lock() {
             if let Some(child) = guard.as_mut() {
+                #[cfg(unix)]
+                kill_tree(child); // ★맥에는 잡(Job)이 없어 자손을 직접 거둔다
                 let _ = child.kill();
                 let _ = child.wait();
             }
@@ -274,6 +300,7 @@ fn app_dir() -> PathBuf {
 ///   바깥에는 **사람이 여는 것만** 남는다 (`gallery`·`logs`·`workspaces`·`data`).
 /// ★저장소에서 개발할 때는 `app/` 이 없다. 그때는 뿌리가 곧 그 자리다 — 두 배치를
 ///   **한 함수가** 가른다. 자리를 아는 곳이 여럿이면 한쪽만 고쳐진다.
+#[cfg(not(target_os = "macos"))]
 pub fn inner(root: &Path) -> PathBuf {
     let nested = root.join("app");
     if nested.join("backend").join("server.py").exists() {
@@ -281,6 +308,19 @@ pub fn inner(root: &Path) -> PathBuf {
     } else {
         root.to_path_buf()
     }
+}
+
+/// ★맥 — 앱 것은 `.app/Contents/Resources` 에 있다 (`tauri.macos.conf.json` 의 `resources`).
+///   뿌리(데이터)와 다른 자리라 뿌리에서 셈하지 않는다. 저장소에서 개발할 때는 뿌리가 곧 그 자리다.
+#[cfg(target_os = "macos")]
+pub fn inner(root: &Path) -> PathBuf {
+    if root.join("backend").join("server.py").exists() {
+        return root.to_path_buf();
+    }
+    app_dir()
+        .parent()
+        .map(|contents| contents.join("Resources"))
+        .unwrap_or_else(app_dir)
 }
 
 /// 개발 중에는 실행 파일이 `src-tauri/target/debug` 에 있으므로 저장소 루트를 거슬러 찾는다.
@@ -299,12 +339,24 @@ fn find_repo_root() -> Option<PathBuf> {
 }
 
 /// 번들된 파이썬 → PATH 의 python 순으로 찾는다.
+#[cfg(not(target_os = "macos"))]
 fn find_python(root: &PathBuf) -> PathBuf {
     let bundled = inner(root).join("python").join("python.exe");
     if bundled.exists() {
         return bundled;
     }
     PathBuf::from("python")
+}
+
+/// ★맥 — 함께 담은 파이썬(python-build-standalone) → PATH 의 python3.
+///   ★Homebrew·시스템 파이썬으로 따로 떨어지지 않는다 (이슈 #1): 의존성 없는 파이썬으로 조용히 떠서 실패 원인을 가린다.
+#[cfg(target_os = "macos")]
+fn find_python(root: &PathBuf) -> PathBuf {
+    let bundled = inner(root).join("python").join("bin").join("python3");
+    if bundled.exists() {
+        return bundled;
+    }
+    PathBuf::from("python3")
 }
 
 /// **같은 폴더를 두 번 열지 못하게** 잡아 두는 표식 (사용자 지시 2026-08-26).
@@ -327,7 +379,29 @@ pub fn lock_app_dir() -> Option<File> {
         .ok()
 }
 
-#[cfg(not(windows))]
+/// ★맥 — `flock` 으로 잠근다. 윈도우의 「공유 없이 열기」와 같이 프로세스가 죽으면 커널이 풀어 준다.
+///   ★데이터 자리(`~/Library/Application Support/PeroPix`)는 처음 켤 때 없으므로 여기서 만든다.
+#[cfg(unix)]
+pub fn lock_app_dir() -> Option<File> {
+    let root = root();
+    std::fs::create_dir_all(&root).ok()?;
+    lock_file(&root.join(".instance.lock"))
+}
+
+#[cfg(unix)]
+fn lock_file(path: &Path) -> Option<File> {
+    use std::os::fd::AsRawFd;
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+        .ok()?;
+    let locked = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0;
+    locked.then_some(f)
+}
+
+#[cfg(not(any(windows, unix)))]
 pub fn lock_app_dir() -> Option<File> {
     File::create(root().join(".instance.lock")).ok()
 }
@@ -644,6 +718,19 @@ pub fn spawn() -> std::io::Result<Child> {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    // ★맥 — 자기 프로세스 그룹으로 띄워 그룹째 내린다 (`kill_tree`)
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    /* ★★맥 — 데이터 자리를 알려 준다 (`root` 의 ★★주, `server.py` 의 `DATA_OUTSIDE`).
+         ★`.pyc` 를 쓰지 않는다 — 앱 것은 서명된 `.app` 안이라 한 파일만 생겨도 서명이 깨진다.
+           미리 구운 것은 그대로 읽는다 (`scripts/macos-package.sh`). */
+    #[cfg(target_os = "macos")]
+    if root != inner(&root) {
+        cmd.env("PEROPIX_DATA_DIR", &root).env("PYTHONDONTWRITEBYTECODE", "1");
+    }
 
     // ★띄우기 **전에** 모르는 상태로 되돌린다. 띄우지 못했으면 기다리는 쪽을 바로 풀어 준다
     let gen = live_begin();
@@ -705,6 +792,20 @@ mod port_tests {
         live_end(g3);
         assert_eq!(backend_port(), wanted_port().0);
         assert!(at.elapsed() < Duration::from_secs(1), "끝난 자식을 한도까지 기다렸다");
+    }
+}
+
+/// ★맥 — 같은 폴더는 두 번 못 잠그고, 놓으면 다시 잠긴다 (윈도우는 공유 없이 열기가 같은 일을 한다)
+#[cfg(all(test, unix))]
+mod lock_tests {
+    #[test]
+    fn 같은_폴더는_두_번_못_잠근다() {
+        let path = std::env::temp_dir().join(format!("peropix-lock-{}", std::process::id()));
+        let first = super::lock_file(&path).expect("첫 잠금");
+        assert!(super::lock_file(&path).is_none(), "둘째 잠금은 거절되어야 한다");
+        drop(first);
+        assert!(super::lock_file(&path).is_some(), "놓으면 다시 잠겨야 한다");
+        let _ = std::fs::remove_file(path);
     }
 }
 
@@ -828,7 +929,6 @@ mod log_tests {
     ///   파이프에서 읽어 파일에 닿기까지가 실제로 이어져 있는지는 프로세스를 띄워 봐야 안다.
     ///   여기를 갈아엎었으므로(파일 핸들 상속 → 파이프 중계) 가장 큰 위험이 「로그가 통째로
     ///   안 남는다」이고, 그것은 앱을 켜 보기 전에는 눈에 안 띈다.
-    #[cfg(windows)]
     #[test]
     fn 자식의_출력이_파일까지_온다() {
         use std::process::{Command, Stdio};
@@ -839,8 +939,19 @@ mod log_tests {
         let f = std::fs::OpenOptions::new().create(true).append(true).open(&path).unwrap();
         let sink = Arc::new(Mutex::new(super::Sink::new(f, 0)));
 
-        let mut child = Command::new("cmd")
-            .args(["/c", "echo repeat&echo repeat&echo repeat&echo last"])
+        #[cfg(windows)]
+        let mut cmd = {
+            let mut c = Command::new("cmd");
+            c.args(["/c", "echo repeat&echo repeat&echo repeat&echo last"]);
+            c
+        };
+        #[cfg(unix)]
+        let mut cmd = {
+            let mut c = Command::new("/bin/sh");
+            c.args(["-c", "printf 'repeat\\nrepeat\\nrepeat\\nlast\\n'"]);
+            c
+        };
+        let mut child = cmd
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()

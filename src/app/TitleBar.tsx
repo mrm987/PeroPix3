@@ -4,6 +4,7 @@ import { Icon } from "../components/Icon";
 import { appWindow } from "../lib/window";
 import { useWs } from "../store/workspace";
 import { useHealth } from "../store/health";
+import { IS_MAC } from "../lib/platform";
 
 /** 커스텀 타이틀바 — 시스템 타이틀바를 끄고(`decorations: false`) 그 기능을 전부 대신한다.
  *
@@ -16,11 +17,17 @@ import { useHealth } from "../store/health";
  *  - 최소화 / 최대화·복원 / 닫기 버튼
  *  - 최대화 상태에 따라 아이콘이 바뀐다
  *
- *  창 가장자리 리사이즈는 `WindowFrame` 이 담당한다. */
+ *  창 가장자리 리사이즈는 `WindowFrame` 이 담당한다.
+ *
+ *  ★★맥은 시스템 제목 표시줄을 화면 위에 겹쳐 쓴다 (`tauri.macos.conf.json` 의 `titleBarStyle: "Overlay"`).
+ *    신호등 버튼·크기 조절·전체 화면은 macOS 가 맡으므로 우리 창 버튼을 안 그리고, 왼쪽에 신호등 자리를 비운다.
+ *    끌기는 그대로 `data-tauri-drag-region` 이다 (맥은 최대화된 창도 그냥 끌린다). */
 export function TitleBar({ left, right }: { left?: ReactNode; right?: ReactNode }) {
   const t = useI18n((s) => s.t);
   const version = useHealth((s) => s.health?.version ?? "");
   const [maxed, setMaxed] = useState(false);
+  /** 맥의 전체 화면 — 신호등 버튼이 숨는다 */
+  const [full, setFull] = useState(false);
 
   useEffect(() => {
     let un: (() => void) | undefined;
@@ -32,6 +39,7 @@ export function TitleBar({ left, right }: { left?: ReactNode; right?: ReactNode 
          더 묻는다. 누르는 순간의 판정은 아래 `isMaximizedNow` 가 창 크기로도 본다. */
       un = await appWindow.onResized(async () => {
         setMaxed(await appWindow.isMaximized());
+        if (IS_MAC) setFull(await appWindow.isFullscreen());
         clearTimeout(timer);
         timer = setTimeout(async () => setMaxed(await appWindow.isMaximized()), 250);
       });
@@ -53,7 +61,7 @@ export function TitleBar({ left, right }: { left?: ReactNode; right?: ReactNode 
 
   /** 최대화 상태의 제목줄 누름 — 드래그 영역이 아닌 곳(단추·글)은 그대로 둔다 */
   const onDragDown = (e: ReactMouseEvent<HTMLElement>) => {
-    if (e.button !== 0 || !isMaximizedNow()) return;
+    if (IS_MAC || e.button !== 0 || !isMaximizedNow()) return;
     const el = e.target as HTMLElement | null;
     if (!el?.hasAttribute?.("data-tauri-drag-region")) return;
     /* ★Tauri 가 주입한 스크립트(document 의 mousedown)는 이 창에서 죽은 드래그를 시작하므로 막는다 */
@@ -91,7 +99,8 @@ export function TitleBar({ left, right }: { left?: ReactNode; right?: ReactNode 
         display: "flex",
         alignItems: "center",
         gap: "var(--sp-4)",
-        padding: "0 0 0 var(--sp-5)",
+        // ★맥 — 왼쪽은 신호등 버튼 자리 (전체 화면에서는 숨으므로 비우지 않는다), 오른쪽은 창 버튼이 없으니 여백
+        padding: IS_MAC ? `0 var(--sp-4) 0 ${full ? "var(--sp-5)" : "78px"}` : "0 0 0 var(--sp-5)",
         background: "var(--surface)",
         borderBottom: "1px solid var(--line)",
         userSelect: "none",
@@ -113,7 +122,7 @@ export function TitleBar({ left, right }: { left?: ReactNode; right?: ReactNode 
 
       {right}
 
-      <div style={{ display: "flex", alignSelf: "stretch" }}>
+      {!IS_MAC && <div style={{ display: "flex", alignSelf: "stretch" }}>
         <WinBtn title={t("window.minimize")} onClick={() => appWindow.minimize()}>
           {Icon.minimize}
         </WinBtn>
@@ -126,7 +135,7 @@ export function TitleBar({ left, right }: { left?: ReactNode; right?: ReactNode 
         <WinBtn title={t("window.close")} danger onClick={() => appWindow.close()}>
           {Icon.close}
         </WinBtn>
-      </div>
+      </div>}
     </header>
   );
 }

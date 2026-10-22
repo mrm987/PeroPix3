@@ -3,6 +3,7 @@ mod window_edge;
 mod update;
 mod winstate;
 
+#[cfg(windows)]
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -87,6 +88,9 @@ fn update_staged() -> bool {
 #[tauri::command]
 fn apply_update(app: tauri::AppHandle) -> Result<(), String> {
     let root = backend::root();
+    // ★맥 — 바꿀 수 없으면 **백엔드를 내리기 전에** 알린다 (`update::ready` 의 ★주). 그러면 앱은 그대로 돈다
+    #[cfg(target_os = "macos")]
+    update::ready(&root).map_err(|e| format!("갈아 끼우지 못했습니다: {e}"))?;
     if let Some(state) = app.try_state::<backend::Backend>() {
         state.kill();
     }
@@ -169,6 +173,8 @@ struct InstanceLock(std::sync::Mutex<Option<std::fs::File>>);
 ///   전부 localStorage 다. 한쪽에서 모델을 바꾸면 다른 쪽도 바뀐다.
 /// ★자리를 옮기면 **앱을 지웠을 때 밖에 아무것도 안 남는다** — 포터블의 본뜻에 맞다.
 /// ★WebView2 로더가 읽는 환경변수로 지정한다. **웹뷰가 만들어지기 전에** 놓아야 한다.
+/// ★윈도우만이다 — 맥의 WKWebView 는 앱 식별자 자리(`~/Library/WebKit`)에 두고, 앱 자리는 서명된 `.app` 이라 쓸 수 없다.
+#[cfg(windows)]
 fn use_local_webview_profile() {
     /* ★웹뷰 저장소도 **앱 것**이라 `app/` 안이다 (2026-08-27 배치 정리).
        ★★옛 자리(`webview/`)에 있던 것은 **옮겨 온다** — 거기에 localStorage 가 들어 있어
@@ -194,6 +200,7 @@ fn use_local_webview_profile() {
 /// ★**설정만** 데려온다 (`Local Storage`·`IndexedDB`). 캐시·쿠키는 다시 만들어지는 것이라
 ///   옮길 이유가 없고, 통째로 복사하면 수백 MB 가 든다.
 /// ★실패해도 조용히 넘어간다 — 못 옮기면 설정이 기본값으로 시작할 뿐이다.
+#[cfg(windows)]
 fn migrate_webview_profile(dir: &Path) {
     if dir.join("EBWebView").exists() {
         return; // 이미 이 자리에서 돌고 있다
@@ -212,6 +219,7 @@ fn migrate_webview_profile(dir: &Path) {
     println!("[webview] 옛 저장소에서 설정을 옮겨 왔습니다: {}", old.display());
 }
 
+#[cfg(windows)]
 fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
     if !from.exists() {
         return Ok(());
@@ -245,6 +253,7 @@ pub fn run() {
          두 번 여는 것으로 보이기 때문이다. `apply_update` 가 띄우기 직전에 여기서 놓는다. */
     let lock = std::sync::Mutex::new(Some(lock));
     // ★웹뷰가 만들어지기 전에 저장소 자리를 정한다 (아래 ★주)
+    #[cfg(windows)]
     use_local_webview_profile();
     // ★지난 업데이트가 남긴 옛 파일을 치운다 — 그때는 우리가 그 exe 위에서 돌고 있었다
     update::sweep(&backend::root());

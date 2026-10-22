@@ -105,10 +105,17 @@ def _app_dir() -> Path:
     return here.parent if here.name == "app" else here
 
 
-APP_DIR = _app_dir()
-#: **앱 것이 사는 자리** — 배포판은 `app/`, 저장소에서는 뿌리와 같다.
+#: ★★**맥은 데이터가 앱 밖에 산다** (`~/Library/Application Support/PeroPix`, 사용자 결정 2026-10-22).
+#  앱이 서명된 `.app` 이라 그 안에 쓰면 서명이 깨지고, 맥이 앱을 옮겨 실행하면 그 자리는 읽기 전용이다.
+#  자리는 껍데기가 넘겨준다 (`src-tauri/src/backend.rs` 의 맥 `root`). 안 넘겨받았으면 위의 규칙 그대로다.
+DATA_OUTSIDE = bool(os.environ.get("PEROPIX_DATA_DIR"))
+APP_DIR = Path(os.environ["PEROPIX_DATA_DIR"]) if DATA_OUTSIDE else _app_dir()
+#: **앱 것이 사는 자리** — 배포판은 `app/`, 맥은 `.app/Contents/Resources`, 저장소에서는 뿌리와 같다.
 #  ★`version.json`·`models/` 처럼 **갈아 끼워지는 것**이 여기 있다 (`censor.MODEL_DIR` 도 같다).
 INNER_DIR = Path(__file__).resolve().parent.parent
+# ★앱 자리가 읽기 전용이면 **나중에 받는 모델**은 데이터 자리에 둔다 — 업데이트로 `.app` 을 바꿔도 남는다
+if DATA_OUTSIDE:
+    tagger.MODEL_DIR = APP_DIR / "models" / "tagger"
 # ★★**버전은 파일이 정본이다** (`version.json`, 사용자 결정 2026-08-26). 포터블을 묶을 때
 #   `scripts/portable.ps1` 이 `tauri.conf.json` 의 버전을 그대로 적어 넣는다 — 업데이트가
 #   「지금 무엇을 쓰고 있나」를 이걸로 안다. 소스의 상수는 **개발 중에만** 쓰는 기본값이다.
@@ -4141,10 +4148,27 @@ def pick_port(want: int, fallback: bool) -> int:
     return want
 
 
+def watch_parent() -> None:
+    """껍데기가 죽으면 따라 내려간다 — ★맥에는 윈도우의 Job Object 가 없다 (`backend.rs` 의 `adopt_into_job`).
+
+    ★부모가 사라지면 `getppid()` 가 다른 값(보통 1)으로 바뀐다. 2초마다 본다."""
+    ppid = os.getppid()
+
+    def loop() -> None:
+        while True:
+            time.sleep(2)
+            if os.getppid() != ppid:
+                os._exit(0)
+
+    threading.Thread(target=loop, daemon=True, name="parent-watch").start()
+
+
 def main():
     import uvicorn
 
     global CURRENT_PORT
+    if sys.platform != "win32" and os.environ.get("PEROPIX_KEY"):
+        watch_parent()  # ★껍데기가 띄웠을 때만 (열쇠는 껍데기만 넣는다)
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8770)

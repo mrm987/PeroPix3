@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { IS_MAC } from "./platform";
 
 /** 밖에서 떨군 그림을 받는다 — **앱과 브라우저는 받는 방법이 다르다.**
  *
@@ -45,7 +46,9 @@ export function useTauriDrop(
     void (async () => {
       const { getCurrentWebview } = await import("@tauri-apps/api/webview");
       const mine = (p: { x: number; y: number }) => {
-        const dpr = window.devicePixelRatio || 1;
+        /* ★★맥은 좌표가 **이미 논리 픽셀**로 온다 — wry 가 `draggingLocation`(포인트)을 그대로 넘기고 Tauri 는
+             이름만 물리 좌표로 붙인다 (wry 0.55 `wkwebview/drag_drop.rs`). 윈도우는 물리 픽셀이라 배율로 나눈다. */
+        const dpr = IS_MAC ? 1 : window.devicePixelRatio || 1;
         const el = document.elementFromPoint(p.x / dpr, p.y / dpr);
         if (el && ref.current?.contains(el)) return true;
         // ★넓게 받는 자리: **다른 드롭존이 아닌 곳**이면 내 것이다

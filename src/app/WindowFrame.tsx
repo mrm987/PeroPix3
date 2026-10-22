@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { appWindow, type ResizeDir } from "../lib/window";
+import { IS_MAC } from "../lib/platform";
 
 /** 창 가장자리 리사이즈 손잡이.
  *
@@ -11,7 +12,9 @@ import { appWindow, type ResizeDir } from "../lib/window";
  *    투명 덧창(`TAURI_DRAG_RESIZE_BORDERS`)을 따로 깔아 안쪽 4px 을 제 것으로 삼는데, 거기서는
  *    커서만 바뀌고 화면은 누름을 못 본다 — 그래서 손잡이의 위쪽 절반이 죽어 있었다. 껍데기가
  *    부팅 때 그 덧창을 걷는다 (`src-tauri/src/window_edge.rs`). 이제 커서를 바꾸는 요소와
- *    누름·더블클릭을 받는 요소가 같은 것이라 어긋날 자리가 없다. */
+ *    누름·더블클릭을 받는 요소가 같은 것이라 어긋날 자리가 없다.
+ *  ★★맥은 손잡이도 경계선도 없다 — 창틀을 macOS 가 그린다 (`tauri.macos.conf.json`). tao 는 맥에서
+ *    `startResizeDragging` 을 지원하지 않아 손잡이를 둬도 안 끌린다 (tao 0.35 `drag_resize_window`). */
 /** 가장자리 두께. ★★손잡이는 창의 **첫 픽셀 줄부터** 선다 — 한때 「보이지 않는 OS 테두리」를
  *  셈해 4px 안쪽으로 물렸는데, 그 겹은 없었다(DWM 실측 0). 물린 만큼 맨 윗줄에 손잡이가
  *  없는 상태를 우리가 만들었던 것이라 되돌렸다. */
@@ -67,11 +70,11 @@ export function WindowFrame({ children }: { children: ReactNode }) {
         height: "100%",
         overflow: "hidden",
         boxSizing: "border-box",
-        border: maxed ? undefined : "1px solid var(--line-strong)",
+        border: maxed || IS_MAC ? undefined : "1px solid var(--line-strong)",
       }}
     >
       {children}
-      {!maxed && <ResizeHandles />}
+      {!maxed && !IS_MAC && <ResizeHandles />}
     </div>
   );
 }

@@ -30,6 +30,10 @@ windows-sys = { version = "0.59", features = [
   "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi",
 ] }
 
+# ★맥 — 같은 폴더 잠금(`flock`)과 백엔드를 프로세스 그룹째 내리기(`kill`). tauri 가 이미 끌어오는 크레이트다
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [profile.release]
 codegen-units = 1
 lto = true

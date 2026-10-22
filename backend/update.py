@@ -210,7 +210,21 @@ def _unpack(zpath: Path, new: Path) -> str | None:
             p = (new / m).resolve()
             if not str(p).startswith(str(new.resolve())):
                 return f"수상한 경로가 들어 있습니다: {m}"
-        z.extractall(new)
+        if sys.platform != "darwin":
+            z.extractall(new)
+
+    # ★★**맥은 `ditto` 로 푼다** — `zipfile` 은 실행 권한과 심볼릭 링크를 되살리지 못해서, 풀린 앱의
+    #   실행 파일과 함께 담은 파이썬이 아예 안 돈다. 꾸러미도 CI 가 `ditto` 로 묶는다 (`scripts/macos-package.sh`).
+    #   맥 꾸러미는 맨 위가 `PeroPix.app` 하나이고 그대로 둔다 — 껍데기가 그 `.app` 을 통째로 바꾼다 (`update.rs`).
+    if sys.platform == "darwin":
+        import subprocess
+
+        r = subprocess.run(["/usr/bin/ditto", "-x", "-k", str(zpath), str(new)], capture_output=True, text=True)
+        if r.returncode:
+            return f"풀지 못했습니다: {(r.stderr or '').strip()[:200]}"
+        if not (new / "PeroPix.app" / "Contents" / "MacOS").is_dir():
+            return "받은 꾸러미에 PeroPix.app 이 없습니다"
+        return None
 
     # ★전체 zip 은 `PeroPix/` 한 겹을 쓰고 있다 (`Compress-Archive` 가 폴더째 담는다) —
     #   한 겹이면 벗겨서 **패치와 같은 모습**으로 맞춘다. 껍데기가 갈래를 몰라도 되게.

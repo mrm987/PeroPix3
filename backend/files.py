@@ -338,6 +338,23 @@ ole32.CoTaskMemFree(name)
 '''
 
 
+#: 맥의 폴더 고르기. 인자 하나(처음 보일 폴더, 빈 글이면 기본)를 받고, 취소(-128)는 빈 글이다
+_PICK_DIR_MAC = '''
+on run argv
+    try
+        if (count of argv) > 0 and item 1 of argv is not "" then
+            set chosen to choose folder default location (POSIX file (item 1 of argv))
+        else
+            set chosen to choose folder
+        end if
+        return POSIX path of chosen
+    on error number -128
+        return ""
+    end try
+end run
+'''
+
+
 def pick_dir(start: str = "") -> str | None:
     """윈도우 **폴더 찾기** 창을 띄우고 고른 경로를 돌려준다. 취소하면 `None`.
 
@@ -349,14 +366,22 @@ def pick_dir(start: str = "") -> str | None:
     ★맨 앞에 세울 자리(`start`)는 부르는 쪽이 준다 (첫 그림이 있는 폴더).
     ★★**못 띄우면 조용히 `None` 을 돌려주지 않는다** (같은 제보). 취소와 구분이 안 돼서,
       창이 아예 안 뜨는 동안에도 화면은 아무 말이 없었다 — 부르는 쪽은 `null` 을 「취소」로
-      읽는다. 실패는 예외로 올려 보내 화면이 까닭을 띄우게 한다."""
+      읽는다. 실패는 예외로 올려 보내 화면이 까닭을 띄우게 한다.
+    ★맥은 시스템의 `choose folder` 창을 쓴다 (`_PICK_DIR_MAC`, 맥 포크가 실기에서 쓰던 것)."""
+    if sys.platform == "darwin":
+        start = start if start and Path(start).is_dir() else ""
+        cmd = ["/usr/bin/osascript", "-e", _PICK_DIR_MAC, start]
+    else:
+        cmd = [sys.executable, "-c", _PICK_DIR, start or ""]
     try:
-        r = subprocess.run([sys.executable, "-c", _PICK_DIR, start or ""],
-                           capture_output=True, text=True, timeout=300)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     except Exception as e:
         raise OSError(f"폴더 찾기 창을 띄우지 못했습니다 ({e})") from e
     if r.returncode:
         why = (r.stderr or "").strip().splitlines()[-1:] or [""]
         raise OSError(f"폴더 찾기 창을 띄우지 못했습니다 ({why[0][:200]})")
     out = (r.stdout or "").strip()
+    # ★맥의 `POSIX path` 는 폴더 끝에 `/` 를 붙인다 — 윈도우 쪽과 같은 모양으로
+    if sys.platform == "darwin" and len(out) > 1:
+        out = out.rstrip("/")
     return out or None

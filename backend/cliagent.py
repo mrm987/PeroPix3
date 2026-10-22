@@ -73,6 +73,31 @@ def _extra_dirs() -> list[Path]:
     return [home.joinpath(*r) for r in rel]
 
 
+def _mac_path() -> None:
+    """★★맥은 Finder·Dock 으로 켠 앱이 짧은 PATH(`/usr/bin:/bin:/usr/sbin:/sbin`)만 받는다.
+
+    그러면 Homebrew·npm 으로 깐 CLI 를 못 찾고, 찾아도 그 안의 `#!/usr/bin/env node` 가 node 를 못 찾는다.
+    흔한 자리를 PATH **뒤에** 덧붙여 이 프로세스와 자식이 함께 쓰게 한다 (터미널에서 켰으면 이미 있어 건너뛴다)."""
+    home = Path.home()
+    dirs = [Path("/opt/homebrew/bin"), Path("/usr/local/bin"), home / ".local" / "bin",
+            home / ".npm-global" / "bin", home / ".bun" / "bin", home / ".cargo" / "bin", home / ".volta" / "bin"]
+
+    def ver(p: Path) -> tuple[int, ...]:
+        return tuple(int(x) for x in p.parent.name.lstrip("v").split(".") if x.isdigit())
+
+    nvm = sorted((home / ".nvm" / "versions" / "node").glob("*/bin"), key=ver)
+    if nvm:
+        dirs.append(nvm[-1])  # 가장 높은 판
+    have = os.environ.get("PATH", "").split(os.pathsep)
+    add = [str(d) for d in dirs if d.is_dir() and str(d) not in have]
+    if add:
+        os.environ["PATH"] = os.pathsep.join([*have, *add])
+
+
+if sys.platform == "darwin":
+    _mac_path()
+
+
 def find(bins: list[str]) -> str | None:
     for b in bins:
         p = shutil.which(b)
