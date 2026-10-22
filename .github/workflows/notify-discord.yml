@@ -4,8 +4,8 @@
 #   때문이다 — 초안을 실수로 공개하는 순간 알림까지 나가면 늦다. 공개한 뒤 눌러서 보낸다.
 # ★`releases/latest` 는 **초안과 프리릴리즈를 건너뛴다.** 그래서 태그를 비워 두고 돌리면
 #   「지금 공개되어 있는 판」이 잡힌다 (아직 초안이면 그 앞 판이 잡히니 태그를 적어 준다).
-# ★v2 와 다른 점: 이쪽은 **윈도우 한 벌**이라 플랫폼을 고르는 칸이 없고, 자산 이름에
-#   버전이 들어간다 (`PeroPix-3.0.0-win64.zip`).
+# ★v2 와 다른 점: 플랫폼을 고르는 칸이 없고, 자산 이름에 버전이 들어간다 (`PeroPix-3.0.0-win64.zip`).
+#   맥 설치용 dmg 가 올라간 릴리즈(v3.7.0 부터)면 맥 내려받기 링크를 함께 단다.
 #
 # ★★**시크릿이 있어야 돈다**: 저장소 설정에 `DISCORD_WEBHOOK` 을 넣어 둘 것.
 name: Notify Discord
@@ -39,6 +39,7 @@ jobs:
           {
             echo "tag=$(echo "$REL" | jq -r '.tag_name')"
             echo "draft=$(echo "$REL" | jq -r '.draft')"
+            echo "mac=$(echo "$REL" | jq -r '[.assets[].name] | any(endswith("-macos-arm64.dmg"))')"
           } >> "$GITHUB_OUTPUT"
 
       - name: 디스코드로 보내기
@@ -46,6 +47,7 @@ jobs:
           HOOK: ${{ secrets.DISCORD_WEBHOOK }}
           TAG: ${{ steps.rel.outputs.tag }}
           DRAFT: ${{ steps.rel.outputs.draft }}
+          MAC: ${{ steps.rel.outputs.mac }}
         run: |
           set -euo pipefail
           # ★★**「없음」과 「비어 있음」을 갈라 준다** (실측 2026-08-27: 시크릿은 등록되어
@@ -68,7 +70,12 @@ jobs:
           fi
 
           VER="${TAG#v}"
-          DL="https://github.com/${{ github.repository }}/releases/download/${TAG}/PeroPix-${VER}-win64.zip"
+          BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          DL="📥 [Download]($BASE/PeroPix-${VER}-win64.zip)"
+          # ★맥 버전이 함께 나간 릴리즈면 링크를 둘로 나눈다 — 하나만 두면 맥 사용자가 윈도우 zip 을 받는다
+          if [ "$MAC" = "true" ]; then
+            DL="📥 [Windows]($BASE/PeroPix-${VER}-win64.zip)  ·  📥 [macOS]($BASE/PeroPix-${VER}-macos-arm64.dmg)"
+          fi
 
           # ★★**디스코드 상한(2,000자)을 넘지 않게만 자른다.** 넘으면 400 으로 되돌아오고,
           #   머리말과 내려받기 줄이 차지하는 만큼을 빼고 남는 자리를 본문에 준다 — 짧으면 안 자른다.
@@ -81,7 +88,7 @@ jobs:
             --arg dl "$DL" \
             --arg repo "https://github.com/${{ github.repository }}" \
             '"🚀 **PeroPix \($tag)** 릴리즈!" as $head
-             | "\n\n📥 [Download](\($dl))  ·  🔗 [GitHub](\($repo))" as $tail
+             | "\n\n\($dl)  ·  🔗 [GitHub](\($repo))" as $tail
              | (2000 - ($head | length) - ($tail | length) - 3) as $room
              | ($body | if length > $room then .[0:$room] + "…" else . end) as $b
              | (if ($b | gsub("\\s"; "")) == "" then "" else "\n\n" + $b end) as $mid
