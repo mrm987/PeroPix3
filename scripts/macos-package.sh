@@ -12,7 +12,7 @@
 # ★맥 창 설정은 `src-tauri/tauri.macos.conf.json` 에 있다. 창 목록은 기본 설정 위에 **통째로 바뀌므로**
 #   기본 설정(`tauri.conf.json`)의 창 값을 고치면 그쪽에도 같이 적는다.
 #
-# 쓰는 법: bash scripts/macos-package.sh   → _dist/PeroPix-<버전>-macos-arm64.zip
+# 쓰는 법: bash scripts/macos-package.sh   → _dist/PeroPix-<버전>-macos-arm64.zip (업데이트용) · .dmg (처음 설치용)
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -100,3 +100,24 @@ ditto -x -k "$ZIP" "$CHECK"
 codesign --verify --deep --strict "$CHECK/PeroPix.app"
 rm -rf "$CHECK"
 echo "[맥] $ZIP ($(du -h "$ZIP" | cut -f1))"
+
+# ── 설치용 dmg ─────────────────────────────────────────────────────
+# ★★처음 설치하는 사람이 받는 것이다. 앱 안 업데이트는 위의 zip 을 받는다 (`backend/update.py` 의 `full_asset_name`).
+#   창에 앱과 응용 프로그램 폴더 바로가기가 나란히 있어 끌어다 놓으면 설치가 끝난다. 다운로드 폴더에서 그대로 켜면
+#   맥이 앱을 읽기 전용 자리로 옮겨 실행해 앱 안 업데이트가 안 된다 (`src-tauri/src/update.rs` 의 `check_at`).
+# ★dmgbuild 는 빌드에만 쓴다 — 함께 담는 파이썬이 아니라 따로 만든 가상 환경에 깐다. 창 모양은 `scripts/dmg-settings.py`.
+DMG="$DIST/PeroPix-$VERSION-macos-arm64.dmg"
+VENV="$DIST/dmg-venv"
+if [[ ! -x "$VENV/bin/dmgbuild" ]]; then
+  python3 -m venv "$VENV"
+  "$VENV/bin/pip" install --disable-pip-version-check -q "dmgbuild==1.6.7"
+fi
+rm -f "$DMG"
+"$VENV/bin/dmgbuild" -s "$ROOT/scripts/dmg-settings.py" -D app="$APP" -D icon="$RES/icon.icns" PeroPix "$DMG"
+# ★붙여서 앱과 바로가기가 들었는지, 서명이 그대로인지 본다 (dmgbuild 는 복사 실패를 알리지 않는다)
+MNT=$(mktemp -d)
+hdiutil attach -nobrowse -readonly -mountpoint "$MNT" "$DMG" >/dev/null
+codesign --verify --deep --strict "$MNT/PeroPix.app"
+[[ $(readlink "$MNT/Applications") == /Applications ]] || { echo "[맥] dmg 에 응용 프로그램 바로가기가 없습니다" >&2; exit 1; }
+hdiutil detach "$MNT" >/dev/null
+echo "[맥] $DMG ($(du -h "$DMG" | cut -f1))"

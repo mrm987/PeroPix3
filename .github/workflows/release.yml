@@ -228,11 +228,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PeroPix-macOS
-          path: _dist/PeroPix-*-macos-arm64.zip
+          path: |
+            _dist/PeroPix-*-macos-arm64.zip
+            _dist/PeroPix-*-macos-arm64.dmg
 
       # ★윈도우 잡이 만든 초안에 보탠다. `gh` 는 태그로 초안도 찾는다
+      #   zip 은 앱 안 업데이트가, dmg 는 처음 설치하는 사람이 받는다
       - name: 릴리즈 초안에 보탠다
         if: startsWith(github.ref, 'refs/tags/v')
-        run: gh release upload "$GITHUB_REF_NAME" "_dist/PeroPix-$VERSION-macos-arm64.zip" --clobber
+        run: gh release upload "$GITHUB_REF_NAME" "_dist/PeroPix-$VERSION-macos-arm64.zip" "_dist/PeroPix-$VERSION-macos-arm64.dmg" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

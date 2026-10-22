@@ -161,6 +161,17 @@ jobs:
           if pgrep -f "$APP/Contents/Resources/python"; then echo "::error::앱을 끈 뒤에도 파이썬이 남았습니다"; exit 1; fi
           codesign --verify --deep --strict "$APP"
 
+      # ★설치용 dmg 를 Finder 로 열어 창을 찍는다 — 앱과 응용 프로그램 바로가기가 나란히 보이는지는 사람이 본다
+      #   (든 것과 서명은 `macos-package.sh` 가 이미 봤다)
+      - name: dmg 창을 찍는다
+        run: |
+          DMG=$(ls _dist/PeroPix-*-macos-arm64.dmg)
+          hdiutil attach "$DMG" -mountpoint /Volumes/PeroPix >/dev/null
+          open /Volumes/PeroPix
+          sleep 6
+          screencapture -x dmg-screen.png || echo "화면을 찍지 못했습니다"
+          hdiutil detach /Volumes/PeroPix || hdiutil detach -force /Volumes/PeroPix
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -168,4 +179,5 @@ jobs:
           path: |
             app-*.log
             app-screen.png
+            dmg-screen.png
           if-no-files-found: ignore

@@ -72,9 +72,9 @@ For Macs with Apple silicon on macOS 14 or later. The Mac build is maintained to
 with the community and gets less testing than the Windows one, so please report anything
 that looks off.
 
-1. Download `PeroPix-<version>-macos-arm64.zip` from the [latest release](https://github.com/mrm987/PeroPix3/releases/latest) and unzip it.
-2. Move `PeroPix.app` into **Applications** and run it from there. Updates replace the app
-   where it is.
+1. Download `PeroPix-<version>-macos-arm64.dmg` from the [latest release](https://github.com/mrm987/PeroPix3/releases/latest) and open it.
+2. In the window that appears, drag **PeroPix** onto the **Applications** folder, then run it
+   from Applications. Updates replace the app where it is.
 3. The app is not notarized by Apple, so macOS blocks the first launch. Open
    **System Settings ▸ Privacy & Security** and press **Open Anyway** for PeroPix.
 

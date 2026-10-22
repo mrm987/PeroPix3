@@ -67,9 +67,9 @@
 애플 실리콘 맥, macOS 14 이상용입니다. 맥 판은 커뮤니티와 함께 유지하고 있어 Windows 판보다
 확인이 덜 되어 있습니다. 이상한 점이 보이면 알려 주세요.
 
-1. [최신 릴리즈](https://github.com/mrm987/PeroPix3/releases/latest)에서 `PeroPix-<버전>-macos-arm64.zip` 을 받아 풉니다.
-2. `PeroPix.app` 을 **응용 프로그램** 폴더로 옮기고 거기서 켭니다. 업데이트는 그 자리의 앱을
-   바꿉니다.
+1. [최신 릴리즈](https://github.com/mrm987/PeroPix3/releases/latest)에서 `PeroPix-<버전>-macos-arm64.dmg` 를 받아 엽니다.
+2. 열린 창에서 **PeroPix** 를 **Applications** 폴더 위로 끌어다 놓고, 응용 프로그램 폴더에서
+   켭니다. 업데이트는 그 자리의 앱을 바꿉니다.
 3. 애플의 공증을 받지 않은 앱이라 처음 켤 때 막힙니다. **시스템 설정 ▸ 개인정보 보호 및 보안**에서
    PeroPix 의 **그래도 열기**를 누릅니다.
 

@@ -71,9 +71,9 @@
 Apple シリコン搭載 Mac、macOS 14 以降向けです。Mac 版はコミュニティと一緒に保守しており、
 Windows 版より確認が少なめです。おかしな点があれば教えてください。
 
-1. [最新リリース](https://github.com/mrm987/PeroPix3/releases/latest)から `PeroPix-<バージョン>-macos-arm64.zip` をダウンロードして展開します。
-2. `PeroPix.app` を**アプリケーション**フォルダに移し、そこから起動します。アップデートはその場所の
-   アプリを置き換えます。
+1. [最新リリース](https://github.com/mrm987/PeroPix3/releases/latest)から `PeroPix-<バージョン>-macos-arm64.dmg` をダウンロードして開きます。
+2. 開いたウィンドウで **PeroPix** を **Applications** フォルダにドラッグし、アプリケーション
+   フォルダから起動します。アップデートはその場所のアプリを置き換えます。
 3. Apple の公証を受けていないため、初回の起動はブロックされます。**システム設定 ▸ プライバシーと
    セキュリティ**で PeroPix の**このまま開く**を押します。
 
