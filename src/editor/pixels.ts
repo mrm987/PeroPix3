@@ -6,7 +6,7 @@
 import { adjustOps, centerOf, filterOf, floodFill, hexRgb, layoutText, rad, textBaseline, type LayerMeta, type Rect, type Size, type TextMeta, type Xform } from "./model";
 import { bodyFor, bubbleBounds, bubbleShape, panelPts, wrapLines, type BubbleMeta, type ComicMeta, type PanelMeta, type Pt } from "./comic";
 import { SFX_FALLBACK, layoutSfx, primaryFamily, sfxBounds, type Glyph, type SfxMeta } from "./sfx";
-import { FX_AMT, applyFx, applyFxList, fxListKey, liveFx, type Fx, type FxKind } from "./fx";
+import { applyFxList, fxListKey, liveFx, type Fx } from "./fx";
 import { canvasFilterOk, colorPixels } from "../lib/canvasFilter";
 
 export type Layer = LayerMeta & { cv: HTMLCanvasElement };
@@ -149,24 +149,6 @@ export function withFx(cv: HTMLCanvasElement, list: readonly Fx[] | null | undef
   fxWant.set(cv, fx);
   pumpFx(cv, wk);
   return fxLast.get(cv) ?? cv;
-}
-
-/** 효과 칸의 작은 미리보기 — 레이어를 칸 크기로 줄여 입힌다 (크기에 매인 값이 짧은 변에 비례하므로 모양이 같다) */
-const fxThumbs = new WeakMap<HTMLCanvasElement, Map<string, string>>();
-export function fxThumb(cv: HTMLCanvasElement, kind: FxKind | null, w: number, h: number): string {
-  const key = `${kind}:${w}x${h}`;
-  let m = fxThumbs.get(cv);
-  if (!m) fxThumbs.set(cv, (m = new Map()));
-  const had = m.get(key);
-  if (had) return had;
-  const k = Math.max(w / cv.width, h / cv.height);
-  const small = makeCanvas(w, h);
-  const g = small.getContext("2d")!;
-  g.drawImage(cv, (w - cv.width * k) / 2, (h - cv.height * k) / 2, cv.width * k, cv.height * k);
-  const out = kind ? fxCanvasOf(w, h, applyFx(g.getImageData(0, 0, w, h).data, w, h, { kind, amt: FX_AMT, seed: 7 })) : small;
-  const url = out.toDataURL("image/png");
-  m.set(key, url);
-  return url;
 }
 
 /** 보정을 **픽셀로** 입힌 사본 — `ctx.filter` 를 못 쓰는 웹뷰(맥, `lib/canvasFilter` 머리 주석)에서만 쓴다.

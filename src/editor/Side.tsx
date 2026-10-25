@@ -13,7 +13,7 @@ import { toast } from "../store/toast";
 import { useUi } from "../store/ui";
 import { Hint, Line, Sec, box, dropFocus, num, on } from "../panels/censor/ui";
 import { NO_ADJUST, hasAdjust, withRatio } from "./model";
-import { fxThumb, thumbOf, type Layer } from "./pixels";
+import { thumbOf, type Layer } from "./pixels";
 import { FX_AMT, FX_KINDS, FX_SEEDED, newSeed, type Fx, type FxKind } from "./fx";
 import { curPage, mergeBelow, pageView, primaryOf, saveName, useEditor, whereOf, type Doc } from "./store";
 import { CanvasSizeDialog, ImageSizeDialog } from "./dialogs";
@@ -386,10 +386,7 @@ const FX_LABEL = {
   pixel: "editor.fxPixel",
   vignette: "editor.fxVignette",
 } as const satisfies Record<FxKind, string>;
-/** 효과 칸의 미리보기 크기 (화면 크기의 두 배로 굽는다) */
-const FX_TILE = { w: 168, h: 112 };
-
-/** 효과 — 칸마다 고른 레이어에 그 효과를 입힌 작은 그림이 뜨고, 누르면 걸리고 다시 누르면 빠진다. **여럿을 겹쳐 건다**
+/** 효과 — 칸에는 효과 이름만 둔다 (사용자 지시 2026-10-25: 미리보기 그림을 뺐다). 누르면 걸리고 다시 누르면 빠진다. **여럿을 겹쳐 건다**
  *  (사용자 지시 2026-09-28) — 건 차례대로 입히고, 칸에 그 차례 번호가 붙는다. 걸린 것마다 아래에 강도 한 줄 (무작위가 드는 것은
  *  다시 섞기). 한꺼번에 떼는 것은 보정과 같이 머리의 「초기화」다 */
 function FxSection({ sel, many, n }: { sel: Layer | null; many: boolean; n: number }) {
@@ -424,25 +421,18 @@ function FxSection({ sel, many, n }: { sel: Layer | null; many: boolean; n: numb
                   data-on={cur ? "" : undefined}
                   onMouseDown={dropFocus}
                   onClick={() => toggle(k)}
-                  style={{ ...box, ...(cur ? on : {}), position: "relative", padding: 3, display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3 }}
+                  style={{ ...box, ...(cur ? on : {}), minWidth: 0, padding: "4px 6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
                 >
-                  <img
-                    src={fxThumb(sel.cv, k, FX_TILE.w, FX_TILE.h)}
-                    draggable={false}
-                    style={{ display: "block", width: "100%", aspectRatio: `${FX_TILE.w} / ${FX_TILE.h}`, objectFit: "cover", borderRadius: 3, background: "var(--bg)" }}
-                  />
                   {/* 건 차례 — 겹칠 때 먼저 건 것이 먼저 입혀진다 */}
                   {cur && list.length > 1 && (
                     <span
                       data-editor-fx-order={at + 1}
-                      style={{ position: "absolute", top: 6, left: 6, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8, background: "var(--accent)", color: "#fff", fontSize: 10, fontWeight: "var(--w-semi)", display: "grid", placeItems: "center", fontVariantNumeric: "tabular-nums" }}
+                      style={{ flex: "none", minWidth: 14, height: 14, padding: "0 3px", borderRadius: 7, background: "var(--accent)", color: "#fff", fontSize: 10, fontWeight: "var(--w-semi)", display: "grid", placeItems: "center", fontVariantNumeric: "tabular-nums" }}
                     >
                       {at + 1}
                     </span>
                   )}
-                  <span style={{ fontSize: "var(--text-3xs)", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: cur ? "var(--ink)" : "var(--ink-soft)" }}>
-                    {t(FX_LABEL[k])}
-                  </span>
+                  <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t(FX_LABEL[k])}</span>
                 </button>
               );
             })}
