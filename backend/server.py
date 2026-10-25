@@ -2473,6 +2473,8 @@ async def _process_job(job: dict) -> None:
                 # ★취소는 **다음 장부터** 먹는다 — 이미 NAI 에 돈을 낸 장은 버리지 않는다
                 left = lane.total_images - lane.completed_images
                 lane.total_images = lane.completed_images
+                # ★끝을 알리기 **전에** 「지금 만드는 씬」을 비운다 (아래 `job_done` 의 ★★주와 같다)
+                lane.current_cell = None
                 await Q.broadcast({"type": "job_cancelled", "job_id": job_id, "account": acc,
                                    "cancelled_images": left, "progress": Q.progress()})
                 return
@@ -2524,6 +2526,11 @@ async def _process_job(job: dict) -> None:
             msg["progress"] = Q.progress()
             await Q.broadcast(msg)
 
+    # ★★**끝을 알리기 전에 「지금 만드는 씬」을 비운다** (디스코드 제보 2026-10-23: 생성이 끝났는데도 씬 그룹 이름을
+    #   바꾸면 「생성 중인 씬이 있습니다」로 막혔다). 비우는 것은 `genqueue._run_one` 도 하지만 그것은 이 방송 **뒤**이고
+    #   그 뒤로는 방송이 없다. 화면은 이 방송의 진행률을 마지막으로 들고 있어서, 마지막 장의 씬 그룹을 계속
+    #   「생성 중」으로 보고 이름 바꾸기·옮기기를 거절했다 (`store/workspace.ts` 의 `generating`).
+    lane.current_cell = None
     await Q.broadcast({"type": "job_done", "job_id": job_id, "account": acc, "progress": Q.progress()})
     # ★★차선의 큐가 비면 진행률 회계를 0 으로 되돌린다 (v2 `backend.py:3209-3211` 이식).
     #   안 되돌리면 completed/total 이 앱을 켠 뒤로 계속 쌓여서, 다음 배치가 "0/2" 가 아니라

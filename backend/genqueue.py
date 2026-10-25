@@ -301,6 +301,8 @@ async def _run_one(q: GenerationQueue, ln: Lane, process_job) -> None:
         print(f"[queue] job {job['id']} 실패: {e}")
         # ★남은 장은 안 나온다 — 총량을 완료에 맞춰 화면의 「돌고 있음」이 영영 안 남게 한다 (진행률도 실어 준다)
         ln.total_images = ln.completed_images
+        # ★알리기 전에 비운다 — 그 뒤로는 방송이 없어 화면이 이 씬을 계속 「생성 중」으로 본다 (`server._process_job` 의 `job_done` ★★주)
+        ln.current_cell = None
         await q.broadcast({"type": "job_error", "job_id": job["id"], "account": ln.id, "error": str(e),
                            "progress": q.progress()})
     ln.is_processing = False
