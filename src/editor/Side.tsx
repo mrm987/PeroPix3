@@ -387,8 +387,9 @@ const FX_LABEL = {
   vignette: "editor.fxVignette",
 } as const satisfies Record<FxKind, string>;
 /** 효과 — 칸에는 효과 이름만 둔다 (사용자 지시 2026-10-25: 미리보기 그림을 뺐다). 누르면 걸리고 다시 누르면 빠진다. **여럿을 겹쳐 건다**
- *  (사용자 지시 2026-09-28) — 건 차례대로 입히고, 칸에 그 차례 번호가 붙는다. 걸린 것마다 아래에 강도 한 줄 (무작위가 드는 것은
- *  다시 섞기). 한꺼번에 떼는 것은 보정과 같이 머리의 「초기화」다 */
+ *  (사용자 지시 2026-09-28) — 걸린 것마다 아래에 강도 한 줄 (무작위가 드는 것은 다시 섞기). 한꺼번에 떼는 것은 보정과 같이 머리의 「초기화」다.
+ *  ★강도 줄의 차례가 **입히는 차례**다 (위가 먼저). 줄 앞 손잡이로 끌어 바꾼다 (사용자 지시 2026-10-25: 칸의 차례 번호 대신) —
+ *    레이어 목록과 같은 `useReorder` · `moveTo` · `DropLine` 이고 잔상은 안 그린다. 한 번 옮기는 것이 되돌리기 한 걸음이다 */
 function FxSection({ sel, many, n }: { sel: Layer | null; many: boolean; n: number }) {
   const t = useI18n((st) => st.t);
   const s = useEditor();
@@ -396,6 +397,8 @@ function FxSection({ sel, many, n }: { sel: Layer | null; many: boolean; n: numb
   const toggle = (k: FxKind) =>
     s.setFx(list.some((f) => f.kind === k) ? list.filter((f) => f.kind !== k) : [...list, { kind: k, amt: FX_AMT, seed: newSeed() }]);
   const patch = (k: FxKind, p: Partial<Fx>, live = false) => s.setFx(list.map((f) => (f.kind === k ? { ...f, ...p } : f)), live);
+  const rowsRef = useRef<HTMLDivElement | null>(null);
+  const { register, handleProps, dragIdx, overIdx } = useReorder(list.length, (from, to) => s.setFx(moveTo(list, from, to)), { within: rowsRef });
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
       <span style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", fontSize: "var(--text-xs)", fontWeight: "var(--w-semi)", color: "var(--ink-soft)" }}>
@@ -412,8 +415,7 @@ function FxSection({ sel, many, n }: { sel: Layer | null; many: boolean; n: numb
         <>
           <div data-editor-fx-grid style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "var(--sp-2)" }}>
             {FX_KINDS.map((k) => {
-              const at = list.findIndex((f) => f.kind === k);
-              const cur = at >= 0;
+              const cur = list.some((f) => f.kind === k);
               return (
                 <button
                   key={k}
@@ -421,50 +423,58 @@ function FxSection({ sel, many, n }: { sel: Layer | null; many: boolean; n: numb
                   data-on={cur ? "" : undefined}
                   onMouseDown={dropFocus}
                   onClick={() => toggle(k)}
-                  style={{ ...box, ...(cur ? on : {}), minWidth: 0, padding: "4px 6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                  style={{ ...box, ...(cur ? on : {}), minWidth: 0, padding: "4px 6px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
                 >
-                  {/* 건 차례 — 겹칠 때 먼저 건 것이 먼저 입혀진다 */}
-                  {cur && list.length > 1 && (
-                    <span
-                      data-editor-fx-order={at + 1}
-                      style={{ flex: "none", minWidth: 14, height: 14, padding: "0 3px", borderRadius: 7, background: "var(--accent)", color: "#fff", fontSize: 10, fontWeight: "var(--w-semi)", display: "grid", placeItems: "center", fontVariantNumeric: "tabular-nums" }}
-                    >
-                      {at + 1}
-                    </span>
-                  )}
-                  <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t(FX_LABEL[k])}</span>
+                  {t(FX_LABEL[k])}
                 </button>
               );
             })}
           </div>
-          {list.map((f) => (
-            <div key={f.kind} data-editor-fx-row={f.kind}>
-              <Line label={t(FX_LABEL[f.kind])}>
-                <input
-                  type="range"
-                  data-editor-fx-amount={f.kind}
-                  min={0}
-                  max={100}
-                  value={f.amt}
-                  onPointerDown={() => s.markBefore()}
-                  onChange={(e) => patch(f.kind, { amt: Number(e.target.value) }, true)}
-                  style={{ flex: 1, minWidth: 0 }}
-                />
-                <span style={num}>{f.amt}</span>
-                {FX_SEEDED.includes(f.kind) && (
-                  <button
-                    data-editor-fx-reseed={f.kind}
-                    data-tip={t("editor.fxReseed")}
-                    onMouseDown={dropFocus}
-                    onClick={() => patch(f.kind, { seed: newSeed() })}
-                    style={{ ...box, display: "grid", padding: "3px 5px" }}
-                  >
-                    {Icon.dice}
-                  </button>
-                )}
-              </Line>
+          {list.length > 0 && (
+            // ★줄 사이 간격은 줄의 위아래 여백으로 준다 — 품의 gap 이면 끼움선(높이 0)도 칸으로 쳐서 간격이 두 배가 되고, 선이 틈 가운데에 안 온다
+            <div ref={rowsRef} data-editor-fx-rows style={{ display: "flex", flexDirection: "column", margin: "-3px 0" }}>
+              {list.map((f, i) => (
+                <Fragment key={f.kind}>
+                  <DropLine on={dragIdx != null && overIdx === i} />
+                  <div ref={register(i)} data-editor-fx-row={f.kind} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 0", opacity: dragIdx === i ? 0.35 : 1 }}>
+                    {/* 하나뿐이면 바꿀 차례가 없다 */}
+                    {list.length > 1 && (
+                      <span data-editor-fx-grip={f.kind} {...handleProps(i)} style={{ ...handleProps(i).style, display: "grid", color: "var(--ink-faint)" }}>
+                        {Icon.grip}
+                      </span>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Line label={t(FX_LABEL[f.kind])}>
+                        <input
+                          type="range"
+                          data-editor-fx-amount={f.kind}
+                          min={0}
+                          max={100}
+                          value={f.amt}
+                          onPointerDown={() => s.markBefore()}
+                          onChange={(e) => patch(f.kind, { amt: Number(e.target.value) }, true)}
+                          style={{ flex: 1, minWidth: 0 }}
+                        />
+                        <span style={num}>{f.amt}</span>
+                        {FX_SEEDED.includes(f.kind) && (
+                          <button
+                            data-editor-fx-reseed={f.kind}
+                            data-tip={t("editor.fxReseed")}
+                            onMouseDown={dropFocus}
+                            onClick={() => patch(f.kind, { seed: newSeed() })}
+                            style={{ ...box, display: "grid", padding: "3px 5px" }}
+                          >
+                            {Icon.dice}
+                          </button>
+                        )}
+                      </Line>
+                    </div>
+                  </div>
+                </Fragment>
+              ))}
+              <DropLine on={dragIdx != null && overIdx === list.length} />
             </div>
-          ))}
+          )}
         </>
       )}
     </div>
