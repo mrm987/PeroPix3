@@ -9,7 +9,7 @@ import { withBusy } from "./busy";
 import { clearUndo, dropUndoZone, pushUndo } from "../lib/undo";
 import { uniqueName } from "../lib/uniqueName";
 import { makeBlock, parseSegs, type Block } from "../lib/blocks";
-import { wrapSetTabInCard } from "../lib/sceneCards";
+import { liftCardLock, lockCard, wrapSetTabInCard } from "../lib/sceneCards";
 export { takesOf, takesOfScene, dedupeByFile, type Rec } from "../lib/takes";
 import { dedupeByFile, takesOf } from "../lib/takes";
 import type { Rec } from "../lib/takes";
@@ -107,8 +107,6 @@ export type SceneCard = {
   srcId?: string;
   /** 배너 그라데이션. ★지금은 **종류가 정한다** (`cards/kindColor`) — 저장된 값은 옛 자국이다 */
   color?: [string, string];
-  /** ★카드째 잠근다 — 옛 「전체 잠금」이 이 자리로 왔다 (사용자 결정 2026-08-11).
-   *  잠긴 카드의 씬은 생성에서 빠진다. 씬 하나하나의 `locked` 와 **함께** 걸린다. */
   /** ★머리에 거는 그림 (사용자 지시 2026-08-21) — 프롬프트 섹션 배너와 **같은 물건**이다.
    *  바이트는 공용 저장소에 하나뿐이고(`/api/pin/<tid>`) 여기 담는 것은 「어느 것을 어떻게
    *  볼지」뿐이다 (schema.md 1-1절). ★덱의 씬 세트 카드와는 다른 자리다 — 저장할 때
@@ -116,7 +114,8 @@ export type SceneCard = {
   thumb?: Thumb;
   /** 카드째 접혔나 — ★머리를 누르면 바뀐다. 화면 상태지만 탭에 남겨 껐다 켜도 유지된다 */
   folded?: boolean;
-  locked?: boolean;
+  /* ★카드는 잠금을 따로 들지 않는다 (2026-10-28) — 카드 버튼은 씬을 한꺼번에 잠그고 켠다 (`setCard` 의 `locked`,
+     `lib/sceneCards` 의 `cardLocked`). 옛 파일의 `locked` 는 읽을 때 씬으로 옮긴다 (`migrate`) */
   cells: Slot[];
 };
 
@@ -386,7 +385,8 @@ type S = {
   /** 카드를 뺀다. ★확인을 받지 않는다 — `Ctrl+Z` 로 되돌린다 (사용자 결정 2026-08-11) */
   removeCard: (groupId: string, cardId: string) => void;
   /** 카드의 필드를 갈아 끼운다 (이름·씬 목록) */
-  setCard: (groupId: string, cardId: string, patch: Partial<SceneCard>) => void;
+  /** 카드를 고친다. `locked` 는 그 카드의 씬을 전부 잠그거나 전부 켠다 */
+  setCard: (groupId: string, cardId: string, patch: Partial<SceneCard> & { locked?: boolean }) => void;
   /** 씬을 **어느 카드의 어느 자리로든** 옮긴다 — 같은 카드 안이든, 다른 카드로든
    *  (v2 `index.html:11860-12002` 의 슬롯 드래그. 그쪽은 슬롯이 한 줄이라 카드 층이 없었다).
    *  `toIndex` 는 **틈 번호**다 (0..n, `useReorder` 규약과 같다). 음수면 그 카드의 끝. */
@@ -799,6 +799,17 @@ function migrate(spec: Spec): Spec {
         };
       });
       if (!touched) return tb;
+      changed = true;
+      return { ...tb, cards };
+    }),
+  };
+  // ★카드 잠금을 씬 잠금으로 (2026-10-28). 카드는 잠금을 따로 들지 않는다 (`lib/sceneCards` 의 `cardLocked`)
+  spec = {
+    ...spec,
+    sceneGroups: spec.sceneGroups.map((tb) => {
+      if (tb.kind !== "sceneGroup") return tb;
+      const cards = tb.cards.map((k) => liftCardLock(k));
+      if (cards.every((k, i) => k === tb.cards[i])) return tb;
       changed = true;
       return { ...tb, cards };
     }),
@@ -2075,8 +2086,14 @@ export const useWs = create<S>((set, get) => ({
     const spec = get().spec;
     const tab = spec?.sceneGroups.find((x) => x.id === groupId);
     if (!spec || tab?.kind !== "sceneGroup") return;
+    // ★`locked` 는 카드에 적지 않고 **씬 전부에** 쓴다 (`SceneCard` 의 ★주)
+    const { locked, ...rest } = patch;
     get().patchSceneGroup(groupId, {
-      cards: tab.cards.map((k) => (k.id === cardId ? { ...k, ...patch } : k)),
+      cards: tab.cards.map((k) => {
+        if (k.id !== cardId) return k;
+        const next = { ...k, ...rest };
+        return locked === undefined ? next : lockCard(next, locked);
+      }),
     });
   },
 

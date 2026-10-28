@@ -69,14 +69,10 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
   const sceneSet = tab?.kind === "sceneGroup" ? tab : null;
   const perSlot = useUi((s) => s.perSlot);
   const setPerSlot = useUi((s) => s.setPerSlot);
-  /** ★잠긴 것은 생성에서 빠지므로 장 수도 그만큼 줄여야 한다.
-   *
-   *  ★★**카드 잠금도 함께 본다** — `gen.ts generateAll` 은 `!cell.locked && !card.locked` 로
-   *    거르는데 여기는 씬 잠금만 세고 있었다. 카드를 잠그면 **푸터가 실제보다 많이 세고**,
-   *    비용도 그만큼 부풀었다 (실측 장치가 「예상 > 실제」로 잡아낸 자리, `lib/anlasMeter`).
-   *    세는 규칙이 둘이면 어느 쪽이 맞는지 화면으로는 알 수 없다. */
+  /** ★잠긴 것은 생성에서 빠지므로 장 수도 그만큼 줄여야 한다. 거르는 규칙은 `gen.ts generateAll` 과 같다
+   *  (`!cell.locked` — 카드 잠금은 씬 잠금의 묶음이다, `lib/sceneCards` 의 `cardLocked`). */
   const slots = sceneSet
-    ? allScenes(sceneSet).filter((x) => !x.cell.locked && !x.card.locked).length
+    ? allScenes(sceneSet).filter((x) => !x.cell.locked).length
     : 1;
   /** ★★**세는 자리는 `countNow` 하나다** — 순차 생성 모드의 인물 수까지 거기서 곱한다
    *  (`lib/costNow`). 여기서 따로 셈하면 푸터와 비용·조수가 갈린다. */

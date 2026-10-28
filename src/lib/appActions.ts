@@ -26,6 +26,7 @@ import { useLlm } from "../store/llm";
 import { usePrompt } from "../store/prompt";
 import { MAX_VIBES, useImageInput } from "../store/imageInput";
 import { costNow, countNow } from "./costNow.ts";
+import { cardLocked } from "./sceneCards.ts";
 import { t } from "../i18n";
 import { addComicBackground, addComicPage, editComicCut, readComic } from "../editor/comicAgent";
 
@@ -711,6 +712,7 @@ defineAction({
   desc: "★**이름·잠금 같은 단순한 값을 고친다.** «씬 그룹 이름을 표정으로»·«미소 씬 잠가줘» 가 "
     + "이것이다. `what` 은 tab·sceneGroup·scene·sceneCard 중 하나이고, `patch` 에 고칠 값을 준다. "
     + "고칠 수 있는 값 — tab·sceneGroup: name / scene: name·locked / sceneCard: name·locked·folded. "
+    + "sceneCard 의 locked 는 그 카드의 씬을 전부 잠그거나 전부 켠다 (카드 잠금이 따로 있지 않다). "
     + "★프롬프트·블록은 여기가 아니라 `edit_style_card`·`edit_character`·`edit_scene` 으로 고친다.",
   args: {
     what: { type: "string", desc: '"tab" | "sceneGroup" | "scene" | "sceneCard"', required: true },
@@ -779,8 +781,9 @@ defineAction({
         return err("not_found", `그런 씬 카드가 없습니다: ${key}`, {
           what: "sceneCard", given: key, candidates: nearBy(key, cur.cards.map((k) => k.name)),
         });
+      // ★카드 잠금은 씬 잠금의 묶음이다 — 옛 값도 씬에서 센다 (`cardLocked`)
       const wasCard = Object.fromEntries(
-        Object.keys(patch).map((k) => [k, (card as Record<string, unknown>)[k]]),
+        Object.keys(patch).map((k) => [k, k === "locked" ? cardLocked(card) : (card as Record<string, unknown>)[k]]),
       );
       ws.setCard(cur.id, card.id, patch as never);
       return { ok: true, did: `씬 카드 「${card.name}」 → ${done}`,

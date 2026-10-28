@@ -109,7 +109,8 @@ def _scenes(st: dict) -> list[dict]:
             out.append({
                 "id": c.get("id"), "name": c.get("name"),
                 "card": k.get("name"), "prefix": k.get("prefix", ""),
-                "blocks": _view(c.get("blocks")), "locked": bool(c.get("locked")),
+                # ★옛 파일의 카드 잠금(`card.locked`)은 그 카드의 씬이 전부 잠긴 것과 같다 (`lib/sceneCards.ts`)
+                "blocks": _view(c.get("blocks")), "locked": bool(c.get("locked")) or bool(k.get("locked")),
             })
     return out
 
@@ -862,9 +863,12 @@ class Tools:
                 # ★★**카드 층을 함께 준다** (선결 조건 3-6). 씬을 옮기려면 **받을 카드의 id** 가
                 #   필요한데 `_scenes` 는 카드 **이름**만 실어 줘서, 같은 이름의 카드가 둘이면
                 #   조수가 고를 수 없었다.
+                # ★카드 잠금은 씬 잠금의 묶음이다 — 씬이 전부 잠겼으면 잠긴 카드다 (`src/lib/sceneCards.ts` 의
+                #   `cardLocked`). 화면이 아직 안 연 옛 파일의 `locked` 는 같은 뜻이라 함께 본다
                 row["cards"] = [
                     {"id": k.get("id"), "name": k.get("name"),
-                     "locked": bool(k.get("locked")), "scenes": len(k.get("cells") or [])}
+                     "locked": bool(k.get("locked")) or (bool(k.get("cells")) and all(c.get("locked") for c in k["cells"])),
+                     "scenes": len(k.get("cells") or [])}
                     for k in (t.get("cards") or [])
                 ]
             scene_groups.append(row)

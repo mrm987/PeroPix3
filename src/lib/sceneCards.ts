@@ -42,3 +42,31 @@ export function wrapSetTabInCard(tab: OldSetTab): Record<string, unknown> | null
     cardSeq: 1,
   };
 }
+
+// ── 카드 잠금 = 씬 잠금의 묶음 (사용자 지시 2026-10-28) ─────────────────────────────
+//
+// ★카드는 잠금을 **따로 들지 않는다.** 카드 버튼은 그 카드의 씬을 한꺼번에 잠그고 켜는 것이고,
+//   카드가 잠겼다는 것은 **씬이 전부 잠겼다**는 뜻이다. 그래서 카드를 잠근 뒤 씬 하나를 켜면 카드 잠금이
+//   저절로 풀린다 — 「전부 잠그고 몇 개만 켜기」가 이 버튼의 쓰임이다.
+//   예전에는 카드가 `locked` 를 따로 들어 씬 버튼은 켜진 채로 보였고, 씬을 켜도 생성에서 빠졌다.
+
+type LockCell = { locked?: boolean };
+type LockCard<C extends LockCell> = { cells: C[]; locked?: boolean };
+
+/** 카드가 잠겼나 — 씬이 하나라도 있고 **전부** 잠겼으면. 빈 카드는 잠긴 것이 아니다 */
+export function cardLocked(card: { cells: LockCell[] }): boolean {
+  return card.cells.length > 0 && card.cells.every((c) => c.locked);
+}
+
+/** 카드의 씬을 전부 잠그거나(`on`) 전부 켠다 */
+export function lockCard<K extends LockCard<C>, C extends LockCell>(card: K, on: boolean): K {
+  return { ...card, cells: card.cells.map((c) => ({ ...c, locked: on || undefined })) };
+}
+
+/** 옛 카드 잠금(`card.locked`)을 씬 잠금으로 옮긴다 — 읽을 때 한 번. 옮길 것이 없으면 같은 카드를 돌려준다.
+ *  ★생성 결과가 같다: 옛 잠긴 카드는 씬이 무엇이든 전부 빠졌으므로, 씬을 전부 잠그면 똑같이 빠진다 */
+export function liftCardLock<K extends LockCard<C>, C extends LockCell>(card: K): K {
+  if (!("locked" in card)) return card;
+  const { locked, ...rest } = card;
+  return (locked ? lockCard(rest as K, true) : rest) as K;
+}

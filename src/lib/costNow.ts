@@ -17,14 +17,14 @@ import { allScenes, useWs } from "../store/workspace";
 import { useUi } from "../store/ui";
 import { usePrompt } from "../store/prompt";
 
-/** 지금 세트에서 **한 바퀴에 나가는 장 수** — 잠긴 씬·잠긴 카드는 빠진다.
+/** 지금 세트에서 **한 바퀴에 나가는 장 수** — 잠긴 씬은 빠진다.
  *
- *  ★★세는 규칙이 `gen.ts generateAll` 과 **같아야** 한다 (`!cell.locked && !card.locked`).
- *    한때 씬 잠금만 세어 푸터가 실제보다 많이 세고 비용도 부풀었다. */
+ *  ★★세는 규칙이 `gen.ts generateAll` 과 **같아야** 한다 (`!cell.locked`). 카드 잠금은 씬 잠금의 묶음이라
+ *    따로 보지 않는다 (`lib/sceneCards` 의 `cardLocked`). */
 export function slotsNow(): number {
   const tab = useWs.getState().activeSceneGroup();
   if (tab?.kind !== "sceneGroup") return 1;
-  return allScenes(tab).filter((x) => !x.cell.locked && !x.card.locked).length;
+  return allScenes(tab).filter((x) => !x.cell.locked).length;
 }
 
 /** ★★**순차 생성 모드면 켜 둔 인물 수만큼 장이 는다** (2026-09-15). 그 모드는 인물을 한 장에

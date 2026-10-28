@@ -7,6 +7,7 @@ import { runningPendingId, stepKey, useQueue } from "../store/queue";
 import { LANE_MAX, LANE_MIN, useUi } from "../store/ui";
 import { allCells, useWs, takesOfScene, type Rec, type SceneCard, type Slot } from "../store/workspace";
 import { newestFirst } from "../lib/takes";
+import { cardLocked } from "../lib/sceneCards";
 import { applyCard } from "../lib/applyCard";
 import { TYPE } from "../styles/type";
 
@@ -1272,7 +1273,8 @@ type GroupProps = {
   headw: number;
   base: string;
   ws: string;
-  onPatch: (patch: Partial<SceneCard>) => void;
+  /** `locked` 는 그 카드의 씬을 전부 잠그거나 켠다 (`useWs.setCard`) */
+  onPatch: (patch: Partial<SceneCard> & { locked?: boolean }) => void;
   onRemove: () => void;
   onAddScene: () => void;
   /** 씬 복제 — 그 씬을 그대로 베껴 바로 뒤에 꽂는다 (v2 슬롯 복제) */
@@ -1315,6 +1317,7 @@ function CardGroup(p: GroupProps) {
   /** 이름을 그 자리에서 고치는 중 — `null` 이면 아니다 (프롬프트 카드와 같은 방식) */
   /** 이름 고치기 — ★규칙은 **앱에 하나**다 (`useRename`): 단추를 다시 누르면 저장하고 끝 */
   const rename = useRename(p.card.name, (v) => p.onPatch({ name: v }));
+  const locked = cardLocked(p.card);
   /** ★블록과 **같은 포인터 드래그**로 순서를 바꾼다 — HTML5 드래그를 쓰면 안의 칩을
    *  끄는 순간 씬이 딸려 끌리고, WebView2 가 그걸 파일 드롭으로 가로챈다.
    *  ★판은 **줄 전체**다 (`useLaneReorder`) — 카드를 넘어 씬을 옮길 수 있어야 하고,
@@ -1528,7 +1531,8 @@ function CardGroup(p: GroupProps) {
               />
             )}
           </div>
-          {/* ★잠금은 **카드째**다 — 옛 「전체 잠금」이 이 자리로 왔다 (사용자 결정) */}
+          {/* ★카드 버튼은 그 카드의 **씬을 한꺼번에** 잠그고 켠다 (사용자 지시 2026-10-28: 전부 잠그고 몇 개만 켜기).
+              카드가 잠겨 보이는 것은 씬이 전부 잠겼을 때뿐이라, 씬 하나를 켜면 카드 잠금이 저절로 풀린다 (`cardLocked`) */}
           <div
             style={{
               position: "absolute",
@@ -1551,14 +1555,16 @@ function CardGroup(p: GroupProps) {
             </button>
             <button
               data-card-lock={p.card.id}
-              onClick={() => p.onPatch({ locked: !p.card.locked })}
-              data-tip={t("scenes.lockCard")}
-              style={{ ...bannerBtn, color: p.card.locked ? "var(--warn)" : "rgba(255,255,255,0.72)" }}
+              data-on={locked ? "" : undefined}
+              disabled={!p.card.cells.length}
+              onClick={() => p.onPatch({ locked: !locked })}
+              data-tip={t(locked ? "scenes.unlockCard" : "scenes.lockCard")}
+              style={{ ...bannerBtn, color: locked ? "var(--warn)" : "rgba(255,255,255,0.72)" }}
             >
               {/* ★블록의 켜기/끄기와 **같은 모양**이다 (사용자 지시 2026-08-16) —
                   "이번 생성에서 뺀다"는 뜻이 같으므로 생김새도 같아야 한다.
                   ★잠김 = **꺼짐**이다 (자물쇠와 반대로 읽히지 않게) */}
-              {p.card.locked ? Icon.dotOff : Icon.dotOn}
+              {locked ? Icon.dotOff : Icon.dotOn}
             </button>
             <button
               data-card-remove={p.card.id}
@@ -1734,7 +1740,7 @@ function SceneRow(
               borderBottom: "1px solid var(--line-soft)",
             }),
         // ★끌고 있는 줄은 흐리게 — 자리는 지킨 채다 (칩 드래그와 같은 규칙, CLAUDE.md)
-        opacity: p.dragId === c.id ? 0.4 : c.locked || p.card.locked ? 0.62 : 1,
+        opacity: p.dragId === c.id ? 0.4 : c.locked ? 0.62 : 1,
       }}
     >
       <div

@@ -292,9 +292,10 @@ export async function queueGroup(src: GenSource): Promise<{ queued: number } | {
   if (tab.kind !== "sceneGroup") return { empty: "none" };
   const params = src.params;
   // ★락은 **생성에서 뺀다** (v2 슬롯의 락). 지운 것이 아니라 이번에만 건너뛴다.
+  //   카드 잠금은 씬 잠금의 묶음이라 씬만 본다 (`lib/sceneCards` 의 `cardLocked`)
   // ★공통 접두는 **카드마다 다르다** (2026-08-11) — 그래서 씬을 카드와 함께 편다.
   const all = allScenes(tab);
-  const live = all.filter((x) => !x.cell.locked && !x.card.locked);
+  const live = all.filter((x) => !x.cell.locked);
   if (!live.length) return { empty: all.length ? "locked" : "none" };
 
   const raw = compilePrompt(src.prompt);

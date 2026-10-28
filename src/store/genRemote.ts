@@ -5,6 +5,7 @@ import { usePrompt } from "./prompt";
 import { payloadOfSnap, useImageInput } from "./imageInput";
 import { resolveAccount, useAccounts } from "./accounts";
 import { randomSeed } from "../lib/seedRounds";
+import { liftCardLock } from "../lib/sceneCards";
 
 /** **보고 있지 않은 씬 그룹**으로 생성을 넣는다 — 같은 워크스페이스의 다른 씬 그룹이든, 다른 워크스페이스든
  *  (사용자 지시 2026-08-08: "워크스페이스2에 큐 10개").
@@ -43,9 +44,12 @@ export async function queueToWorkspace(
      **절대 안 맞고 언제나 `tabs[0]`(첫 세트)으로 떨어졌다** (적대 검토 2026-08-24). */
   /* ★★**id 가 먼저다** (2026-10-12 발견) — 도구 명세는 씬 그룹을 id 로 달라고 하는데 여기서 이름만 보고 있어
        조수가 명세대로 `tab_1` 을 보내면 「'tab_1' 세트가 없습니다」로 생성이 통째로 안 됐다. 이름도 받아 준다. */
-  const group = setName
+  const found = setName
     ? groups.find((t) => t.id === setName) ?? groups.find((t) => t.name === setName)
     : (groups.find((t) => t.id === spec!.activeSceneGroup) ?? groups[0]);
+  /* ★서버에서 막 읽은 spec 은 `migrate` 를 안 거쳤다 — 옛 카드 잠금(`card.locked`)을 씬 잠금으로 옮겨야
+       잠근 카드의 씬이 생성에 안 섞인다 (`lib/sceneCards` 의 `liftCardLock`) */
+  const group = found?.kind === "sceneGroup" ? { ...found, cards: found.cards.map((k) => liftCardLock(k)) } : found;
   if (!group) return { error: setName ? `'${setName}' 세트가 없습니다.` : "세트가 없습니다." };
   if (group.kind !== "sceneGroup") return { error: `'${group.name}' 은 씬 세트가 아닙니다.` };
 
