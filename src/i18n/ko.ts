@@ -1211,6 +1211,7 @@ export const ko: Dict = {
     modelLoading: "모델 로드 중…",
     targets: "찾을 것",
     noClasses: "모델을 고르면 찾을 것이 뜹니다.",
+    modelFailed: "검열 모델을 열지 못했습니다.",
     needTarget: "찾을 것을 하나 이상 고르세요.",
     needBox: "칠한 곳이 없습니다.",
     confHint: "오른쪽 숫자가 그 종류의 문턱입니다.",

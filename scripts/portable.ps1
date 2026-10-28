@@ -109,6 +109,27 @@ if (-not $keepPython) {
   if ($LASTEXITCODE -ne 0) { throw "파이썬 줄이기 실패" }
 }
 
+# ── C++ 런타임 (msvcp140) ──────────────────────────────────────────
+# ★★**onnxruntime 이 msvcp140.dll · msvcp140_1.dll 을 쓰는데 임베드 파이썬에는 vcruntime 둘만 들어 있다**
+#   (유저 제보 2026-10-28). VC++ 재배포 패키지를 안 깐 윈도우에서는 `import onnxruntime` 이 「DLL load failed」로
+#   죽고, 검열의 찾을 것 목록이 빈 채로 남았다. 깨끗한 게스트(Windows Sandbox)에서 그대로 재현됐다.
+# ★파이썬 폴더(python.exe 옆)에 둔다 — 확장 모듈의 의존 DLL 을 찾는 자리라 vcruntime 과 같은 곳이다.
+# ★출처는 VS 의 재배포 폴더다 (앱과 함께 배포해도 되는 사본). `-SkipPython` 으로 남겨 둔 파이썬에도 넣는다.
+$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+if (-not (Test-Path $vswhere)) { throw "vswhere 가 없습니다 — C++ 런타임을 찾을 VS 가 필요합니다" }
+$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+#   폴더 이름이 판 번호(14.44.35112)인 것만 본다 — 곁에 `v143` 같은 폴더가 함께 있다
+$crt = Get-ChildItem (Join-Path $vs "VC/Redist/MSVC") -Directory -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
+  Sort-Object { [version]$_.Name } -Descending |
+  ForEach-Object { Get-ChildItem (Join-Path $_.FullName "x64") -Directory -Filter "Microsoft.VC*.CRT" -ErrorAction SilentlyContinue } |
+  Select-Object -First 1
+if (-not $crt) { throw "VS 재배포 폴더에서 C++ 런타임을 못 찾았습니다: $vs" }
+foreach ($n in "msvcp140.dll", "msvcp140_1.dll") {
+  Copy-Item (Join-Path $crt.FullName $n) -Destination (Join-Path $inner "python") -Force
+}
+Write-Host "[포터블] C++ 런타임: $($crt.FullName)"
+
 # ── 앱 ─────────────────────────────────────────────────────────────
 Copy-Item $exe -Destination (Join-Path $app "PeroPix.exe")
 # ★백엔드는 **소스 그대로** 간다 (파이썬이라 컴파일이 없다). `__pycache__` 는 뺀다 —

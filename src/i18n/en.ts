@@ -1185,6 +1185,7 @@ export const en = {
     modelLoading: "Loading models…",
     targets: "Look for",
     noClasses: "Pick a model to see what it can find.",
+    modelFailed: "Could not open the censor model.",
     needTarget: "Pick at least one thing to find.",
     needBox: "Nothing has been painted.",
     confHint: "The number on the right is that class's threshold.",

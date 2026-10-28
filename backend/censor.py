@@ -67,12 +67,16 @@ def models() -> list[dict]:
       첫 검열이 몇 배 느려진다. 크기는 곧 무게라 따로 표를 두지 않아도 순서가 유지된다."""
     out = []
     for p in sorted(MODEL_DIR.glob("*.onnx"), key=lambda f: f.stat().st_size):
+        error = None
         try:
             # ★세션 생성은 잠그고 한다 (`_RUN` 의 ★주) — 서버가 뜰 때 `warm()` 이 뒤에서 같은 모델을 열고 있을 수 있다
             with _RUN:
                 _, names, size, _, _ = _load(p.name)
-        except Exception:
-            names, size = {}, (0, 0)
+        except Exception as e:  # noqa: BLE001 — 무엇이든 화면에 그대로 올린다
+            # ★★**못 연 이유를 올려 보낸다** (유저 제보 2026-10-28: 찾을 것 목록이 빈 채로 「찾을 것을 하나 이상
+            #   고르세요」만 나오고 영영 그대로였다). 예전에는 여기서 삼켜 빈 목록만 갔고 화면은 아무 말도 못 했다.
+            #   실제로 본 것: VC++ 런타임(msvcp140)이 없는 윈도우에서 `import onnxruntime` 이 DLL 을 못 찾는다
+            names, size, error = {}, (0, 0), f"{type(e).__name__}: {e}"
         out.append(
             {
                 "id": p.stem,
@@ -80,6 +84,7 @@ def models() -> list[dict]:
                 "classes": list(names.values()),
                 "bytes": p.stat().st_size,
                 "imgsz": size[0],
+                "error": error,
             }
         )
     return out

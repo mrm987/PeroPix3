@@ -20,7 +20,10 @@ import { card, box, on, num, dropFocus, Hint, Line, Sec } from "./ui";
 export function CensorSide() {
   const t = useI18n((s) => s.t);
   const c = useCensor();
-  const classes = c.models.find((m) => m.file === c.model)?.classes ?? [];
+  const curModel = c.models.find((m) => m.file === c.model);
+  const classes = curModel?.classes ?? [];
+  /** 찾을 것이 비어 있는 이유 — 모델을 못 열었거나(`error`) 목록을 아예 못 받았다 (`loadModels` 의 `error`) */
+  const failed = curModel?.error ?? (c.models.length ? null : c.error);
   const editable = c.tab !== "before";
   const curIm = c.cur();
   const painted = !!curIm && !isEmpty(c.paint[curIm.id]);
@@ -93,7 +96,16 @@ export function CensorSide() {
                     />
                   </label>
                 ))}
-                {!classes.length && <Hint>{t("censor.noClasses")}</Hint>}
+                {/* ★★못 연 이유를 그 자리에 둔다 (유저 제보 2026-10-28: 찾을 것이 빈 채로 이유 없이 영영 그대로였다).
+                    「다시 시도」 버튼은 두지 않는다 (사용자 지시 2026-10-28). 관측된 원인(msvcp140)은 앱이 DLL 을 담아 없앴고,
+                    다른 원인을 고친 뒤에는 다른 모드에 갔다 오면 목록을 다시 받는다 (`Censor` 가 열릴 때 `loadModels`) */}
+                {!classes.length && !c.modelsLoading && failed && (
+                  <div data-censor-model-error style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)", padding: "2px var(--sp-1)" }}>
+                    <Hint>{t("censor.modelFailed")}</Hint>
+                    <span style={{ fontSize: "var(--text-3xs)", color: "var(--err)", wordBreak: "break-all", lineHeight: "var(--lh-normal)" }}>{failed}</span>
+                  </div>
+                )}
+                {!classes.length && !failed && <Hint>{t("censor.noClasses")}</Hint>}
               </div>
             </Sec>
 

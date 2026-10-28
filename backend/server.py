@@ -3415,8 +3415,13 @@ async def translate_text(body: TranslateReq):
 @app.get("/api/censor/models")
 def censor_models():
     """번들된 모델 목록. ★`def` 다 — 클래스 이름을 읽으려면 세션을 만들어야 해서(첫 호출 ~1초, 디스크가
-    차가우면 더), `async` 로 두면 그동안 서버 전체가 멈춘다 (`censor.warm` 의 ★★주)."""
-    return {"models": censor.models()}
+    차가우면 더), `async` 로 두면 그동안 서버 전체가 멈춘다 (`censor.warm` 의 ★★주).
+    ★못 연 모델은 `error` 를 들고 간다 — 로그에도 남긴다 (제보를 받았을 때 볼 자리)."""
+    models = censor.models()
+    for m in models:
+        if m["error"]:
+            say("warn", "censor", f"{m['file']} 을 못 열었습니다: {m['error']}")
+    return {"models": models}
 
 
 @app.post("/api/censor/detect")

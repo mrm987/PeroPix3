@@ -38,7 +38,8 @@ export type Box = {
   manual?: boolean;
 };
 
-export type CensorModel = { id: string; file: string; classes: string[]; bytes: number; imgsz: number };
+/** `error` — 서버가 그 모델을 못 열었으면 그 이유 (`censor.models`). 그때 `classes` 는 비어 있다 */
+export type CensorModel = { id: string; file: string; classes: string[]; bytes: number; imgsz: number; error?: string | null };
 
 /** 검열할 그림 한 장. 세 갈래로 온다 (백엔드 `CensorSource` 와 같은 계약) */
 export type CensorImage = {
@@ -390,6 +391,8 @@ export const useCensor = create<S>((set, get) => ({
     set({
       models: r.models,
       modelsLoading: false,
+      // ★다시 받았으면 앞서 뜬 오류(목록을 못 받았다 · 찾을 것을 고르라)를 지운다
+      error: null,
       model,
       // ★처음엔 **전부** 대상이다. 켜는 것을 잊어 아무것도 안 찾는 일이 없게
       targets: targets.length ? targets : classes,

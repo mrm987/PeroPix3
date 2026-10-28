@@ -1183,6 +1183,7 @@ export const ja: Dict = {
     modelLoading: "モデルを読み込み中…",
     targets: "検出対象",
     noClasses: "モデルを選ぶと検出対象が表示されます。",
+    modelFailed: "検閲モデルを開けませんでした。",
     needTarget: "検出対象を一つ以上選んでください。",
     needBox: "塗った場所がありません。",
     confHint: "右の数字がその種類のしきい値です。",
