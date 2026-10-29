@@ -240,6 +240,8 @@ export const en = {
     toggleOn: "Enable",
     toggleOff: "Disable",
     remove: "Delete block",
+    group: "Group same weights",
+    ungroup: "Ungroup",
     clickToInput: "Click to type…",
     emptySummary: "(empty)",
     defaults: {
@@ -1334,6 +1336,7 @@ export const en = {
     undone: "Undone: {what}",
     undoTag: "chip removal",
     undoWeight: "weight change",
+    undoGroup: "Weight grouping",
     undoSettings: "settings import",
     undoBlockAdd: "adding a block",
     undoBlockRemove: "removing a block",

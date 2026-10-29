@@ -85,9 +85,18 @@ def _view(blocks: list[dict] | None) -> list[dict]:
     """블록 목록을 읽기 쉬운 줄로 (LLM 이 다루기 쉬운 모양)."""
     out = []
     for b in blocks or []:
+        # ★묶음(`g` — 앞 칩과 가중치 하나를 함께 쓴다)은 묶어서 보인다. 화면과 보내는 글이 그렇다 (`lib/blocks.tagRuns`)
+        runs: list[list[dict]] = []
+        for x in b.get("tags", []):
+            w = x.get("w")
+            if x.get("g") and runs and w not in (None, 1) and runs[-1][0].get("w") == w:
+                runs[-1].append(x)
+            else:
+                runs.append([x])
         tags = ", ".join(
-            (f"{x['w']}::{x['t']}::" if x.get("w") not in (None, 1) else str(x.get("t", "")))
-            for x in b.get("tags", [])
+            (f"{r[0]['w']}::{', '.join(str(x.get('t', '')) for x in r)}::" if r[0].get("w") not in (None, 1)
+             else str(r[0].get("t", "")))
+            for r in runs
         )
         out.append({"id": b.get("id"), "label": b.get("label"), "on": b.get("on", True), "tags": tags})
     return out

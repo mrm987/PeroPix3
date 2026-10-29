@@ -240,6 +240,8 @@ export const ja: Dict = {
     toggleOn: "有効にする",
     toggleOff: "無効にする",
     remove: "ブロックを削除",
+    group: "同じ重みをまとめる",
+    ungroup: "まとめを解除",
     clickToInput: "クリックして入力…",
     emptySummary: "（空）",
     defaults: {
@@ -1332,6 +1334,7 @@ export const ja: Dict = {
     undone: "元に戻しました: {what}",
     undoTag: "チップ削除",
     undoWeight: "重み変更",
+    undoGroup: "重みのまとめ",
     undoSettings: "設定の読み込み",
     undoBlockAdd: "ブロック追加",
     undoBlockRemove: "ブロック削除",

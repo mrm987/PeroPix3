@@ -9,7 +9,14 @@
 
 import { guardedRanges, isGuarded } from "./naiText.ts";
 
-export type Tag = { t: string; w: number | null };
+export type Tag = {
+  t: string;
+  w: number | null;
+  /** ★★**앞 칩과 한 묶음** — `0.95::a, b::` 처럼 가중치 하나를 함께 쓴다 (사용자 지시 2026-10-29: 같은 가중치
+   *  묶기는 버튼으로 켜는 별도 기능, 묶인 것은 화면에도 묶여 보이게). 가중치가 앞 칩과 같을 때만 뜻이 있다
+   *  (`joined`). 묶음 단위로 다루는 것은 전부 `tagRuns` 하나를 거친다. */
+  g?: boolean;
+};
 
 export type BlockColor = "blue" | "teal" | "purple" | "amber" | "red" | "green" | null;
 
@@ -82,6 +89,8 @@ export function effW(x: Tag): number | null {
  *  ★필요할 때만 넣는다 — 늘 넣으면 공홈이 내보내는 문자열과 달라진다. */
 const closeEmph = (inner: string) => (/[-.\d]$/.test(inner) ? `${inner} ::` : `${inner}::`);
 
+/** ★묶음(`g`)은 **안 견준다** — 묶음을 몰랐던 때 저장한 칩에는 `g` 가 없어서, 견주면 묶어 친 원문이
+ *  전부 「고친 것」이 되어 보내는 글이 바뀐다. 묶음만 바꾸는 조작(묶기 버튼)은 원문을 지운다 (`groupAll`). */
 const sameTags = (a: Tag[], b: Tag[]) =>
   a.length === b.length && a.every((x, i) => x.t === b[i].t && (x.w ?? null) === (b[i].w ?? null));
 
@@ -90,6 +99,88 @@ const sameTags = (a: Tag[], b: Tag[]) =>
  *    옛 글자가 조용히 나간다. 매번 다시 읽는 편이 싸고 틀릴 데가 없다. */
 export const untouched = (bl: Block): boolean =>
   bl.src != null && sameTags(parseSegs(bl.src), bl.tags);
+
+/** ★★화면과 편집이 보는 칩 — 원문을 그대로 보내는 블록은 **원문의 묶음**까지 읽는다.
+ *  보내는 글이 원문이므로, 화면도 원문이 묶은 대로 보여야 한다 (묶음을 몰랐던 때 저장한 칩에는 `g` 가 없다).
+ *  ★칩을 고치는 자리는 전부 이것에서 시작한다 — `block.tags` 에서 시작하면 고치는 순간 묶음이 풀린다. */
+export function liveTags(bl: Block): Tag[] {
+  if (bl.src == null) return bl.tags;
+  const p = parseSegs(bl.src);
+  return sameTags(p, bl.tags) ? p : bl.tags;
+}
+
+/** `i` 번째 칩이 앞 칩과 한 묶음인가 — 표시(`g`)가 있어도 **가중치가 같지 않으면 아니다**
+ *  (가중치를 하나만 바꾸거나 칩을 옮기면 표시가 남아도 묶음은 끝난다). */
+export const joined = (tags: Tag[], i: number): boolean => {
+  if (i <= 0 || !tags[i]?.g) return false;
+  const e = effW(tags[i]);
+  return e != null && e === effW(tags[i - 1]);
+};
+
+/** 칩 줄을 **묶음 단위로** — `[from, to)`. 묶이지 않은 칩은 하나짜리 묶음이다.
+ *  ★보내는 글·글 상자·화면이 이것 하나로 묶음을 정한다. 셋이 따로 정하면 보이는 것과 보내는 것이 갈린다. */
+export function tagRuns(tags: Tag[]): { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = [];
+  for (let i = 0; i < tags.length; i++) {
+    if (joined(tags, i) && out.length) out[out.length - 1].to = i + 1;
+    else out.push({ from: i, to: i + 1 });
+  }
+  return out;
+}
+
+/** `g` 를 정리한다 — 뜻이 없는 표시(맨 앞 · 가중치가 다름 · 가중치 없음)는 떼어 낸다.
+ *  ★남겨 두면 나중에 가중치가 우연히 같아질 때 묶으려 한 적 없는 칩이 묶인다. */
+export function tidyGroups(tags: Tag[]): Tag[] {
+  return tags.map((x, i) => (x.g && !joined(tags, i) ? { t: x.t, w: x.w } : x));
+}
+
+/** 이 블록에 **묶을 수 있는 자리**가 있나 — 가중치가 같은 칩이 묶이지 않은 채 이어진 곳 */
+export function canGroup(tags: Tag[]): boolean {
+  return tags.some((x, i) => i > 0 && !joined(tags, i) && effW(x) != null && effW(x) === effW(tags[i - 1]));
+}
+
+/** 묶음이 하나라도 있나 */
+export const hasGroup = (tags: Tag[]): boolean => tags.some((_, i) => joined(tags, i));
+
+/** 묶기 버튼 — 묶을 자리가 있으면 **가중치가 같은 칩이 이어진 곳을 전부** 묶고, 없으면 전부 푼다.
+ *  ★★원문(`src`)을 지운다. 묶음은 `untouched` 가 안 견주므로(`sameTags` 의 ★주), 원문을 남기면
+ *    묶음을 바꿔도 원문이 그대로 나가 버튼이 아무 일도 안 한 것이 된다. */
+export function groupAll(bl: Block): Block {
+  const tags = liveTags(bl);
+  const next = canGroup(tags)
+    ? tags.map((x, i) => (i > 0 && effW(x) != null && effW(x) === effW(tags[i - 1]) ? { ...x, g: true } : x))
+    : tags.map((x) => ({ t: x.t, w: x.w }));
+  const { src: _drop, ...rest } = bl;
+  return { ...rest, tags: next };
+}
+
+/** `i` 번째 칩의 가중치를 바꾼다 — ★묶음 안의 칩이면 **묶음 전체**가 함께 바뀐다 (가중치가 하나뿐이다).
+ *  가중치를 지우면(1) 묶음도 끝난다. */
+export function setWeight(tags: Tag[], i: number, w: number | null): Tag[] {
+  const r = tagRuns(tags).find((x) => i >= x.from && i < x.to) ?? { from: i, to: i + 1 };
+  return tidyGroups(tags.map((x, j) => (j >= r.from && j < r.to ? { ...x, w } : x)));
+}
+
+/** `i` 번째 칩을 뺀다 — ★묶음의 **첫 칩**을 빼면 다음 칩이 묶음의 머리가 된다.
+ *  그냥 빼면 다음 칩의 표시가 그 앞의 다른 칩을 가리켜, 가중치가 같으면 엉뚱한 칩과 묶인다. */
+export function takeTag(tags: Tag[], i: number): { tag: Tag | undefined; rest: Tag[] } {
+  const tag = tags[i];
+  if (!tag) return { tag, rest: tags.slice() };
+  const rest = tags.slice();
+  rest.splice(i, 1);
+  if (!joined(tags, i) && joined(tags, i + 1)) rest[i] = { t: rest[i].t, w: rest[i].w };
+  return { tag: { t: tag.t, w: tag.w }, rest };
+}
+
+/** `at` 자리에 칩을 끼운다 — ★묶음 **안**(묶인 두 칩 사이)에 놓으면, 가중치가 같을 때 그 묶음에 들어가고
+ *  다르면 묶음이 거기서 갈린다. 묶음 밖에 놓은 칩은 혼자다. */
+export function putTag(tags: Tag[], at: number, tag: Tag): Tag[] {
+  const out = tags.slice();
+  const inside = joined(tags, at);
+  const e = effW(tag);
+  out.splice(at, 0, inside && e != null && e === effW(tags[at]) ? { ...tag, g: true } : { t: tag.t, w: tag.w });
+  return tidyGroups(out);
+}
 
 /** ★★가중치 숫자 앞의 **하이픈 닮은 글자**를 `-` 로 (사용자 지적 2026-10-13: 갤러리에서 복제하니
  *  `‑1::artist collaboration::` 의 `‑1` 이 따로 칩이 됐다). 붙여 온 프롬프트에 U+2011(안 깨지는 붙임표)·
@@ -115,19 +206,35 @@ const endWeight = (str: string): number | null => {
   return w;
 };
 
-/** 칩 하나를 글로: `0.95::tag::` · 가중치가 없으면 `tag`.
- *  ★★칩마다 **따로** 쓴다. 가중치가 같은 칩이 이어져도 묶지 않는다 (사용자 지시 2026-10-29: *"보이는거랑
- *    보내지는게 일치하도록 해줘. 묶는걸 바꾸기만해도 결과 이미지가 달라짐"*). 예전에는 칩을 고친 블록만
- *    `0.95::a, b::` 로 묶어 보내서, 칩도 글 상자도 따로 보이는데 보내는 글은 달랐다.
- *    글 상자(`serializeBlock`)와 보내는 글(`compileBlock`)이 이 함수 하나를 쓴다. */
-const chipText = (x: Tag): string => {
-  const e = effW(x);
-  return e != null ? `${fmtW(e)}::${closeEmph(x.t)}` : x.t;
-};
+/** 칩 줄을 글로 — 묶음(`tagRuns`)마다 `0.95::a, b::` · 혼자인 칩은 `0.95::a::` · 가중치가 없으면 `a`.
+ *  `starts[i]` 는 `i` 번째 칩이 글에서 시작하는 자리다 (묶음의 머리는 가중치 숫자 앞).
+ *  ★★칩은 **보이는 대로** 쓴다. 따로 보이는 칩은 가중치가 같아도 따로 쓰고, 묶음은 묶어서 쓴다 (사용자 지시
+ *    2026-10-29: *"보이는거랑 보내지는게 일치하도록 해줘. 묶는걸 바꾸기만해도 결과 이미지가 달라짐"*).
+ *    예전에는 칩을 고친 블록만 같은 가중치를 저절로 묶어 보내서, 화면과 보내는 글이 달랐다.
+ *    글 상자(`serializeBlock`)·보내는 글(`compileBlock`)·커서 자리(`caretAfterTag`)가 이것 하나를 쓴다. */
+function layoutTags(tags: Tag[]): { text: string; starts: number[] } {
+  let text = "";
+  const starts: number[] = [];
+  for (const r of tagRuns(tags)) {
+    if (text) text += ", ";
+    starts[r.from] = text.length;
+    const e = effW(tags[r.from]);
+    // 묶음 안의 칩은 `숫자::` 뒤에서 `, ` 로 이어진다
+    const head = text.length + (e != null ? fmtW(e).length + 2 : 0);
+    let off = 0;
+    for (let i = r.from; i < r.to; i++) {
+      if (i > r.from) starts[i] = head + off;
+      off += tags[i].t.length + 2;
+    }
+    const inner = tags.slice(r.from, r.to).map((x) => x.t).join(", ");
+    text += e != null ? `${fmtW(e)}::${closeEmph(inner)}` : inner;
+  }
+  return { text, starts };
+}
 
 /** 블록 하나를 NAI 프롬프트 문자열로.
  *  ★손대지 않은 블록은 **들어온 글 그대로** 낸다 (`Block.src` 주석).
- *  ★고친 블록은 칩마다 따로 쓴다 (`chipText`). 글 상자에 보이는 글과 같다. */
+ *  ★고친 블록은 보이는 대로 쓴다 (`layoutTags`). 글 상자에 보이는 글과 같다. */
 export function compileBlock(bl: Block): string {
   const tags = bl.tags.filter((x) => x.t.trim());
   if (!tags.length) return "";
@@ -138,7 +245,7 @@ export function compileBlock(bl: Block): string {
     return endWeight(raw) != null ? `${raw}${/[-.\d]$/.test(raw) ? " ::" : "::"}` : raw;
   }
 
-  return tags.map(chipText).join(", ");
+  return layoutTags(tags).text;
 }
 
 /** 켜진 블록만 이어 붙인다.
@@ -173,7 +280,8 @@ export function slotBlock(blocks: Block[] | undefined, id: string): Block {
     color: null,
     on: true,
     open: true,
-    tags: on.flatMap((b) => b.tags),
+    // ★블록마다의 묶음은 그대로 둔다 — 각 블록의 첫 칩은 앞 블록의 칩과 묶이지 않는다
+    tags: on.flatMap((b) => liveTags(b).map((x, i) => (i ? x : { t: x.t, w: x.w }))),
   };
 }
 
@@ -214,7 +322,7 @@ export const slotBlocksOf = (b: Block): Block[] => [{ ...b, label: "", on: true,
  *      (공홈도 숫자를 `::` 바로 앞에서만 찾는다). `\s*` 를 넣지 말 것 — 넣으면 우리가 만든
  *      `…1910 ::` 를 다시 읽을 때 1910 으로 열어 버린다. */
 export function parseSegs(str: string): Tag[] {
-  return parseSpans(str).map(({ t, w }) => ({ t, w }));
+  return parseSpans(str).map(({ t, w, g }) => (g ? { t, w, g } : { t, w }));
 }
 
 /** 태그마다 **원문에서의 자리**까지 낸다 — 칩을 눌러 글 상자를 열 때 커서를 놓는 데 쓴다
@@ -234,14 +342,18 @@ export function parseSpans(str: string): (Tag & { start: number; end: number })[
        **그려질 글자**다. 규칙은 `lib/naiText` 에 있고, 정본은 백엔드(`naitext.py`)다. */
   const guard = guardedRanges(str);
 
-  /** ★쉼표와 **줄바꿈** 둘 다에서 자른다 — 단, 지켜야 할 구간 안에서는 안 자른다 */
+  /** ★쉼표와 **줄바꿈** 둘 다에서 자른다 — 단, 지켜야 할 구간 안에서는 안 자른다
+   *  ★★한 구간(`숫자::` 에서 다음 `::` 까지)에서 나온 칩들은 **한 묶음**이다 (`Tag.g`) — `0.95::a, b::` 는
+   *    가중치 하나를 둘이 함께 쓴다. 화면이 그 묶음을 그대로 보여야 보내는 글과 같다. */
   const plain = (from: number, to: number) => {
+    let first = true;
     const push = (s: number, e: number) => {
       const seg = str.slice(s, e);
       const t = seg.trim();
       if (!t) return;
       const at = s + seg.indexOf(t);
-      out.push({ t, w, start: at, end: at + t.length });
+      out.push({ t, w, start: at, end: at + t.length, ...(!first && w != null ? { g: true } : null) });
+      first = false;
     };
     let start = from;
     for (let i = from; i < to; i++) {
@@ -273,7 +385,7 @@ export function parseSpans(str: string): (Tag & { start: number; end: number })[
  *    쉼표로 바뀌어 있으면, 사용자는 자기가 맞춰 둔 모양을 잃은 줄 안다. */
 export function serializeBlock(bl: Block): string {
   if (untouched(bl)) return bl.src!;
-  return bl.tags.map(chipText).join(", ");
+  return layoutTags(bl.tags).text;
 }
 
 /** 칩을 눌러 글 상자를 열 때 **그 태그의 쉼표 뒤**에 놓을 커서 자리와, 그때 펼칠 글.
@@ -298,9 +410,10 @@ export function caretAfterTag(bl: Block, i: number): { at: number; text: string 
     const tail = /,\s*$/.test(raw) ? (/\s$/.test(raw) ? "" : " ") : ", ";
     return { at: raw.length + tail.length, text: raw + tail };
   }
-  const head = serializeBlock({ ...bl, tags: bl.tags.slice(0, i + 1) });
-  const last = i >= bl.tags.length - 1;
-  return { at: head.length + 2, text: last ? `${head}, ` : serializeBlock(bl) };
+  // ★묶음 안에서는 다음 칩의 이름 앞, 묶음 끝이면 다음 묶음의 가중치 숫자 앞이다 (`layoutTags` 의 `starts`)
+  const { text, starts } = layoutTags(bl.tags);
+  if (i < bl.tags.length - 1) return { at: starts[i + 1], text };
+  return { at: text.length + 2, text: `${text}, ` };
 }
 
 /** 켜진 블록들에서 중복 태그를 찾는다 (계기판 — 고치지 않고 표시만 한다).

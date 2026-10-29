@@ -124,6 +124,14 @@ export const Icon = {
   star18: s(<path d={STAR_D} />, 18),
   star18On: f(<path d={STAR_D} />, 18),
   close12: s(<path d="M6 6l12 12M18 6L6 18" />, 12),
+  /** 같은 가중치 묶기 — 두 칩을 감싼 대괄호 (블록 머리의 단추) */
+  bracket12: s(
+    <>
+      <path d="M8 4H4v16h4M16 4h4v16h-4" />
+      <path d="M9.5 12h5" />
+    </>,
+    12,
+  ),
   /** 아니메 / 퍼리 모드 — **지금 어느 쪽인지**를 그림으로 말한다 (v2 `#modeToggle` 과 같다) */
   blossom12: f(BLOSSOM, 12),
   paw12: fv(PAW_D, "0 0 512 512", 12),

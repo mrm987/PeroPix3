@@ -1,8 +1,8 @@
 import { composing } from "../lib/ime";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
-import { caretAfterTag, parseSegs, serializeBlock, type Block } from "../lib/blocks";
-import { Chip } from "./Chip";
+import { caretAfterTag, effW, liveTags, parseSegs, serializeBlock, setWeight, tagRuns, takeTag, type Block } from "../lib/blocks";
+import { Chip, ChipGroup } from "./Chip";
 import { pushUndo } from "../lib/undo";
 import { toEdit, toStore } from "../lib/softWrap";
 import { t as tr } from "../i18n";
@@ -336,6 +336,15 @@ export function BlockBody({
     openText(at, txt);
   };
 
+  /** ★★화면이 보는 칩 — 원문을 그대로 보내는 블록은 원문의 묶음까지 (`liveTags`). 고치는 것도 여기서 시작한다 */
+  const tags = liveTags(block);
+  /** 묶음 전체에 거는 가중치 — 칩 하나든 묶음이든 같은 함수를 거친다 (`setWeight`) */
+  const weightAt = (i: number, w: number | null) => onChange({ ...block, tags: setWeight(tags, i, w) });
+  const weightStart = () => {
+    const before = block;
+    pushUndo(tr("common.undoWeight"), () => onChange(before), zone);
+  };
+
   // 열어 달라고 하고 뜬 자리 (갓 만들어진 블록 · `Tab` 으로 건너온 씬 칸 · 접힌 줄의 칩)
   useEffect(() => {
     if (autoEdit) openText(autoCaret);
@@ -540,7 +549,9 @@ export function BlockBody({
             //   칩과 글 상자는 배치가 달라 클릭 좌표를 글자 자리로 옮기는 것은 어긋나므로,
             //   "몇 번째 태그를 눌렀나"로 잡는다 — 그 편이 어긋날 일이 없다.
             const box = e.currentTarget;
-            const hit = (e.target as HTMLElement).closest("[data-chip]");
+            const el = e.target as HTMLElement;
+            // ★묶음 상자의 빈 자리(가중치 숫자)를 누르면 그 묶음의 **마지막 칩 뒤**다
+            const hit = el.closest("[data-chip]") ?? [...(el.closest("[data-chip-group]")?.querySelectorAll("[data-chip]") ?? [])].pop() ?? null;
             // ★빈 자리를 눌러도 **이어 적는 자리**로 연다 (사용자 지시 2026-08-19)
             openAt(hit ? [...box.querySelectorAll("[data-chip]")].indexOf(hit) : -1);
           }}
@@ -565,36 +576,44 @@ export function BlockBody({
               {t(readOnly ? "block.emptySummary" : "block.clickToInput")}
             </span>
           )}
-          {block.tags.map((tag, i) => (
-            <Chip
-              key={i}
-              tag={tag}
-              readOnly={readOnly}
-              dup={!!dup?.has(tag.t.trim().toLowerCase())}
-              dragProps={tagDrag?.handle(i, tag.t)}
-              dragging={tagDrag?.draggingIndex === i}
-              onWeight={(w) => {
-                const tags = block.tags.slice();
-                tags[i] = { ...tag, w };
-                onChange({ ...block, tags });
-              }}
-              /* ★★가중치도 되돌릴 수 있어야 한다 (사용자 지시 2026-08-22).
-                 ★칩이 **한 차례 조절에 한 번만** 불러 준다 — 휠 눈금마다 담으면 원래대로
-                   돌아가려고 Ctrl+Z 를 수십 번 눌러야 한다.
-                 ★되돌리는 방법은 칩 지우기와 같다: 「이 블록을 지금 모습으로」 하나면 된다. */
-              onWeightStart={() => {
-                const before = block;
-                pushUndo(tr("common.undoWeight"), () => onChange(before), zone);
-              }}
-              onRemove={() => {
-                // ★★확인 없이 사라지는 자리라 **되돌릴 방법**을 함께 담는다 (`Ctrl+Z`).
-                //   되돌리는 방법은 「이 블록을 지금 모습으로 되돌린다」 하나면 된다.
-                const before = block;
-                pushUndo(tr("common.undoTag"), () => onChange(before), zone);
-                onChange({ ...block, tags: block.tags.filter((_, j) => j !== i) });
-              }}
-            />
-          ))}
+          {/* ★★묶음(`tagRuns`)은 상자 하나에 든다 — 보내는 글이 `0.95::a, b::` 이면 화면도 그렇게 보인다.
+              ★칩은 묶음 안에서도 `[data-chip]` 그대로다 — 끌기·누른 칩 찾기가 DOM 순서로 칩을 센다 */}
+          {tagRuns(tags).map((r) => {
+            const chip = (i: number) => {
+              const tag = tags[i];
+              return (
+                <Chip
+                  key={i}
+                  tag={tag}
+                  grouped={r.to - r.from > 1}
+                  readOnly={readOnly}
+                  dup={!!dup?.has(tag.t.trim().toLowerCase())}
+                  dragProps={tagDrag?.handle(i, tag.t)}
+                  dragging={tagDrag?.draggingIndex === i}
+                  onWeight={(w) => weightAt(i, w)}
+                  /* ★★가중치도 되돌릴 수 있어야 한다 (사용자 지시 2026-08-22).
+                     ★칩이 **한 차례 조절에 한 번만** 불러 준다 — 휠 눈금마다 담으면 원래대로
+                       돌아가려고 Ctrl+Z 를 수십 번 눌러야 한다.
+                     ★되돌리는 방법은 칩 지우기와 같다: 「이 블록을 지금 모습으로」 하나면 된다. */
+                  onWeightStart={weightStart}
+                  onRemove={() => {
+                    // ★★확인 없이 사라지는 자리라 **되돌릴 방법**을 함께 담는다 (`Ctrl+Z`).
+                    //   되돌리는 방법은 「이 블록을 지금 모습으로 되돌린다」 하나면 된다.
+                    const before = block;
+                    pushUndo(tr("common.undoTag"), () => onChange(before), zone);
+                    onChange({ ...block, tags: takeTag(tags, i).rest });
+                  }}
+                />
+              );
+            };
+            if (r.to - r.from === 1) return chip(r.from);
+            const ids = Array.from({ length: r.to - r.from }, (_, k) => r.from + k);
+            return (
+              <ChipGroup key={`g${r.from}`} w={effW(tags[r.from])} readOnly={readOnly} onWeight={(w) => weightAt(r.from, w)} onWeightStart={weightStart}>
+                {ids.map(chip)}
+              </ChipGroup>
+            );
+          })}
         </div>
       )}
     </>

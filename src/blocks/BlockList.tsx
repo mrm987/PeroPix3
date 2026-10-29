@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n";
-import { dupSet, makeBlock, parseSegs, type Block } from "../lib/blocks";
+import { dupSet, liveTags, makeBlock, parseSegs, putTag, takeTag, type Block } from "../lib/blocks";
 import { useReorder } from "../lib/useReorder";
 import { moveTo } from "../lib/moveTo";
 import { useTagDrag, type Spot } from "./useTagDrag";
@@ -111,7 +111,7 @@ export function BlockList({
         return onChange([...blocks, got]);
       }
       const b = blocks[0];
-      if (b) onChange([{ ...b, tags: [...b.tags, ...got.tags] }]);
+      if (b) onChange([{ ...b, tags: [...liveTags(b), ...got.tags] }]);
     },
   });
   /* ★★블록을 **다른 카드로 옮긴다** (사용자 지시 2026-08-28: *"프롬프트 블록도 카드에서
@@ -132,7 +132,7 @@ export function BlockList({
       from.onChange(from.blocks.filter((x) => x.id !== b.id));
       if (single) {
         const me = blocks[0];
-        if (me) onChange([{ ...me, tags: [...me.tags, ...b.tags] }]);
+        if (me) onChange([{ ...me, tags: [...liveTags(me), ...liveTags(b)] }]);
         return;
       }
       /* ★★**놓은 자리에 끼운다** (사용자 지시 2026-08-30: 다른 카드로 옮길 때도 정확한 자리를
@@ -192,18 +192,21 @@ export function BlockList({
     const dst = cross ? getZone(to.list!) : null;
     if (cross && !dst) return; // 받을 수 없는 자리 — 그대로 둔다
 
-    const n = blocks.map((b) => ({ ...b, tags: b.tags.slice() }));
-    const [tag] = n[from.block].tags.splice(from.index, 1);
+    /* ★★빼고 끼우는 것은 묶음을 지키는 두 함수를 거친다 (`takeTag`·`putTag`) — 묶음의 첫 칩을 빼거나
+         묶음 안에 놓을 때 남은 칩의 묶음이 엉뚱한 칩으로 옮겨 붙지 않게. 칩은 화면이 보는 것(`liveTags`)에서 시작한다. */
+    const n = blocks.map((b) => ({ ...b, tags: liveTags(b) }));
+    const { tag, rest } = takeTag(n[from.block].tags, from.index);
     if (!tag) return;
 
     if (dst) {
+      n[from.block].tags = rest;
       onChange(n); // 먼저 뺀다 (위 ★주)
-      const m = dst.blocks.map((b) => ({ ...b, tags: b.tags.slice() }));
+      const m = dst.blocks.map((b) => ({ ...b, tags: liveTags(b) }));
       // ★블록이 하나뿐인 자리(씬 칸)는 그 하나가 목적지다
       const bi = dst.single ? 0 : Math.min(Math.max(to.block, 0), m.length - 1);
       if (!m[bi]) return; // 빈 목록에는 넣을 블록이 없다
       const at = to.index < 0 ? m[bi].tags.length : Math.min(to.index, m[bi].tags.length);
-      m[bi].tags.splice(at, 0, tag);
+      m[bi].tags = putTag(m[bi].tags, at, tag);
       dst.onChange(m);
       return;
     }
@@ -212,7 +215,8 @@ export function BlockList({
     let at = to.index < 0 ? n[to.block].tags.length : to.index;
     if (to.block === from.block && at > from.index) at--;
     if (to.block === from.block && at === from.index) return; // 제자리
-    n[to.block].tags.splice(at, 0, tag);
+    n[from.block].tags = rest;
+    n[to.block].tags = putTag(n[to.block].tags, at, tag);
     onChange(n);
   };
 
@@ -289,7 +293,7 @@ export function BlockList({
    *  (`overflow: hidden`). 자리를 실제로 차지해 봐야 셀 수 있으므로 지우지 않고 재기만
    *  한다. 그래서 잘린 칩도 **끌 수 있고 서랍 드롭도 받는다** — 진짜 블록 그대로다. */
   const [over, setOver] = useState(0);
-  const tagKey = blocks.map((b) => b.tags.map((x) => `${x.t}${x.w ?? ""}`).join("|")).join("//");
+  const tagKey = blocks.map((b) => liveTags(b).map((x) => `${x.t}${x.w ?? ""}${x.g ? "+" : ""}`).join("|")).join("//");
   useLayoutEffect(() => {
     const el = box.current;
     if (!el || !clamp) return setOver(0);

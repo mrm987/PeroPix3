@@ -1,6 +1,7 @@
 import { useI18n } from "../i18n";
 import { useRename } from "../components/useRename";
-import { COLORS, type Block } from "../lib/blocks";
+import { canGroup, COLORS, groupAll, hasGroup, liveTags, type Block } from "../lib/blocks";
+import { pushUndo } from "../lib/undo";
 import { colorHex } from "./Chip";
 import { BlockBody, type TagDrag } from "./BlockBody";
 import { Icon } from "../components/Icon";
@@ -91,6 +92,10 @@ export function BlockRow({
   const rename = useRename(block.label, (v) => onChange({ ...block, label: v }));
 
   const summary = block.tags.map((x) => x.t).join(", ") || t("block.emptySummary");
+  /** 묶기 단추의 상태 — 묶을 자리가 있으면 「묶기」, 다 묶였으면 「풀기」, 둘 다 없으면 꺼진다 (`groupAll`) */
+  const live = liveTags(block);
+  const mayGroup = canGroup(live);
+  const grouped = hasGroup(live);
 
   const body = (
     <BlockBody
@@ -236,6 +241,30 @@ export function BlockRow({
 
         {/* ★태그 개수를 적지 않는다 (사용자 지시 2026-08-13) — 접혀 있으면 요약이 이미
             보이고 펼치면 칩이 다 보인다. 한 줄에 정보가 너무 많았다 */}
+        {/* ★★**같은 가중치 묶기** (사용자 지시 2026-10-29) — 저절로 묶지 않고 이 단추로만 묶는다. 묶으면 화면에도
+            묶여 보이고 그대로 나간다. ★보기 전용에는 없다 (고치는 창구는 프롬프트 쪽 하나다) */}
+        {!readOnly && (
+        <button
+          data-block-group={block.id}
+          data-on={grouped && !mayGroup ? "" : undefined}
+          disabled={!mayGroup && !grouped}
+          onClick={(e) => {
+            e.stopPropagation();
+            const before = block;
+            pushUndo(t("common.undoGroup"), () => onChange(before), zone);
+            onChange(groupAll(block));
+          }}
+          data-tip={mayGroup ? t("block.group") : t("block.ungroup")}
+          style={{
+            color: grouped && !mayGroup ? "var(--accent-ink)" : "var(--ink-faint)",
+            opacity: !mayGroup && !grouped ? 0.35 : 1,
+            padding: "0 2px",
+            display: "grid",
+          }}
+        >
+          {Icon.bracket12}
+        </button>
+        )}
         {/* ★★차례는 앱 전체에서 하나다: **이름변경 · 온오프 · 삭제** (사용자 지시 2026-08-19) */}
         <button
           data-block-rename={block.id}

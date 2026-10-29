@@ -44,52 +44,29 @@ function pinWidth(el: HTMLElement, w: number | null): number | null {
   return pw ? fits(now + pw + 4) : null;
 }
 
-/** 태그 칩.
- *  - **끌기 = 자리 옮기기** (같은 블록 안에서도, 다른 블록으로도 — `useTagDrag`)
- *  - **Alt + 휠 = 가중치** (0.05 단위, Alt+Shift 로 0.1)
- *  - **휠 클릭(가운데 버튼) = 가중치 초기화(1)**
- *  - 우클릭 = 삭제
- *  - ★가중치 강조 수준에 따라 칩 색이 변한다 */
-export function Chip({
-  tag,
-  dup,
-  dragProps,
-  dragging,
-  onWeight,
-  onWeightStart,
-  onRemove,
-  readOnly,
-}: {
-  tag: Tag;
-  dup?: boolean;
-  /** 보여 주기만 하는 자리 (블록 저장소의 펼친 내용) — 휠·우클릭이 안 먹는다.
-   *  ★고치는 창구는 **프롬프트 쪽 하나**다. 저장소에서도 고치게 하면 어디서 고쳤나가 된다 */
-  readOnly?: boolean;
-  /** 끌기 손잡이 — 칩 전체가 손잡이다 */
-  dragProps?: React.HTMLAttributes<HTMLSpanElement> & { style?: React.CSSProperties };
-  dragging?: boolean;
-  onWeight: (w: number | null) => void;
-  /** ★가중치를 **만지기 시작했다** — 부르는 쪽이 되돌리기 한 칸을 그때 담는다.
-   *  ★한 차례 조절(휠을 몇 번 돌리든)에 **한 번만** 온다. 눈금마다 오면 Ctrl+Z 를
-   *    수십 번 눌러야 원래대로 돌아간다. 가운데 버튼의 초기화도 한 차례로 친다. */
-  onWeightStart?: () => void;
-  onRemove: () => void;
-}) {
-  /** 가중치 강조를 켜 두나 (설정) — 끄면 **평범한 칩**으로 보인다 (겹침 표시는 남는다) */
-  const hl = useUi((u) => u.weightHl);
-  const tone0 = hl ? weightTone(tag.w) : { sign: 0 as const, s: 0 };
-
+/** ★★가중치 휠 — **칩 하나와 묶음 하나가 같은 것을 쓴다** (`Chip` · `ChipGroup`).
+ *  묶음 안의 칩은 휠을 안 받고(`off`), 묶음 상자가 받아 묶음 전체의 가중치를 바꾼다 (가중치가 하나뿐이다).
+ *  @returns 돌리는 동안 얼려 둔 폭 (`null` 이면 안 얼렸다) */
+function useWeightWheel(
+  ref: React.RefObject<HTMLSpanElement | null>,
+  w: number | null,
+  onWeight: (w: number | null) => void,
+  onWeightStart: (() => void) | undefined,
+  off: boolean,
+  /** ★묶음은 **1 을 건너뛴다** — 1 이 되면 묶음이 풀리는데(`joined`), 돌리던 중에 풀리면 그다음 눈금이
+   *  칩 하나에만 걸린다. 묶음의 가중치를 없애는 것은 가운데 버튼이다. */
+  skipOne = false,
+): number | null {
   /** ★★가중치는 **Alt + 휠**이다 (사용자 지시 2026-08-21).
    *
    *  ★맨 휠로 두면 프롬프트를 훑어 내리다 **지나가는 칩의 가중치가 바뀐다** — 바뀐 줄도
    *    모르고 그대로 생성하게 된다 (실제로 그렇게 2.6 이 박혀 초록 노이즈가 나왔다).
    *  ★**네이티브 리스너로 붙인다.** React 의 `onWheel` 은 뿌리에 passive 로 달려서
    *    `preventDefault()` 가 안 먹는다 — 그대로 두면 가중치와 스크롤이 **함께** 일어난다. */
-  const ref = useRef<HTMLSpanElement | null>(null);
   const onWeightRef = useRef(onWeight);
   onWeightRef.current = onWeight;
-  const wRef = useRef(tag.w);
-  wRef.current = tag.w;
+  const wRef = useRef(w);
+  wRef.current = w;
 
   /** ★★**돌리는 동안에는 칩의 폭을 얼린다** (사용자 지적 2026-08-21).
    *
@@ -133,7 +110,7 @@ export function Chip({
 
   useEffect(() => {
     const el = ref.current;
-    if (!el || readOnly) return;
+    if (!el || off) return;
     const onWheel = (e: WheelEvent) => {
       if (!e.altKey) return;      // 맨 휠은 평소대로 스크롤이다
       /* ★★**커서가 아직 이 칩 위인가**를 묻는다 (`lib/wheelAt` 의 ★★주).
@@ -149,7 +126,9 @@ export function Chip({
       }
       const step = e.shiftKey ? 0.1 : 0.05;
       const cur = wRef.current ?? 1;
-      const next = Math.round((cur + (e.deltaY < 0 ? step : -step)) * 100) / 100;
+      const d = e.deltaY < 0 ? step : -step;
+      let next = Math.round((cur + d) * 100) / 100;
+      if (skipOne && next === 1) next = Math.round((next + d) * 100) / 100;
       onWeightRef.current(next === 1 ? null : next);
     };
     /* ★★**푸는 손은 여기 네이티브로, 언제나 매달아 둔다** (사용자 지시 2026-08-22:
@@ -164,21 +143,51 @@ export function Chip({
       el.removeEventListener("wheel", onWheel);
       el.removeEventListener("pointerleave", release);
     };
-  }, [readOnly]);
+  }, [off]);
+  return pin;
+}
 
-  // ★부호가 색을 가르고, 세기는 값이 오를수록 한결같이 진해진다 (`weightTone`):
-  //   배경 6~28% · 테두리 25~80% 를 세기(0~1)로 잇는다
-  const tone = (() => {
-    if (tone0.sign === 0) return { bg: "var(--chip-bg)", bd: "var(--line)", fg: "var(--ink)" };
-    const hue = tone0.sign > 0 ? "var(--accent)" : "var(--minus)";
-    const bg = Math.round(6 + 22 * tone0.s);
-    const bd = Math.round(25 + 55 * tone0.s);
-    return {
-      bg: `color-mix(in srgb, ${hue} ${bg}%, var(--chip-bg))`,
-      bd: `color-mix(in srgb, ${hue} ${bd}%, var(--line))`,
-      fg: "var(--ink)",
-    };
-  })();
+/** 태그 칩.
+ *  - **끌기 = 자리 옮기기** (같은 블록 안에서도, 다른 블록으로도 — `useTagDrag`)
+ *  - **Alt + 휠 = 가중치** (0.05 단위, Alt+Shift 로 0.1)
+ *  - **휠 클릭(가운데 버튼) = 가중치 초기화(1)**
+ *  - 우클릭 = 삭제
+ *  - ★가중치 강조 수준에 따라 칩 색이 변한다 */
+export function Chip({
+  tag,
+  dup,
+  dragProps,
+  dragging,
+  onWeight,
+  onWeightStart,
+  onRemove,
+  readOnly,
+  grouped,
+}: {
+  tag: Tag;
+  dup?: boolean;
+  /** ★**묶음 안의 칩** (`ChipGroup`) — 가중치 숫자와 색은 묶음 상자가 들고, 칩은 테두리만 그 색을 따른다.
+   *  휠은 묶음 상자가 받는다. 가운데 버튼·우클릭은 칩이 받는다 (부르는 쪽이 묶음 전체에 건다). */
+  grouped?: boolean;
+  /** 보여 주기만 하는 자리 (블록 저장소의 펼친 내용) — 휠·우클릭이 안 먹는다.
+   *  ★고치는 창구는 **프롬프트 쪽 하나**다. 저장소에서도 고치게 하면 어디서 고쳤나가 된다 */
+  readOnly?: boolean;
+  /** 끌기 손잡이 — 칩 전체가 손잡이다 */
+  dragProps?: React.HTMLAttributes<HTMLSpanElement> & { style?: React.CSSProperties };
+  dragging?: boolean;
+  onWeight: (w: number | null) => void;
+  /** ★가중치를 **만지기 시작했다** — 부르는 쪽이 되돌리기 한 칸을 그때 담는다.
+   *  ★한 차례 조절(휠을 몇 번 돌리든)에 **한 번만** 온다. 눈금마다 오면 Ctrl+Z 를
+   *    수십 번 눌러야 원래대로 돌아간다. 가운데 버튼의 초기화도 한 차례로 친다. */
+  onWeightStart?: () => void;
+  onRemove: () => void;
+}) {
+  /** 가중치 강조를 켜 두나 (설정) — 끄면 **평범한 칩**으로 보인다 (겹침 표시는 남는다) */
+  const hl = useUi((u) => u.weightHl);
+  const tone = chipTone(tag.w, hl);
+
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const pin = useWeightWheel(ref, tag.w, onWeight, onWeightStart, !!readOnly || !!grouped);
 
   return (
     <span
@@ -206,9 +215,10 @@ export function Chip({
         alignItems: "center",
         gap: 4,
         maxWidth: "100%",
-        padding: "1px 7px",
+        // ★묶음 안의 칩은 위아래 안여백을 묶음 상자가 대신 진다 — 줄 높이가 칩 하나와 같아야 글 상자와 줄이 맞는다
+        padding: grouped ? "0 6px" : "1px 7px",
         borderRadius: "var(--r-1)",
-        background: tone.bg,
+        background: grouped ? "var(--chip-bg)" : tone.bg,
         border: `1px solid ${dup ? "var(--warn)" : tone.bd}`,
         color: tone.fg,
         // ★프롬프트를 **읽고 치는 글자**다 — v2 와 같은 14px (`--text-prompt`)
@@ -222,29 +232,7 @@ export function Chip({
         ...(pin != null ? { width: pin, flexShrink: 0 } : null),
       }}
     >
-      {(tag.w != null || pin != null) && (
-        <b
-          style={{
-            fontFamily: "var(--font-mono)",
-            /* ★**상대값이라 그대로 둔다** — 칩 글자의 92%다. 토큰으로 바꾸면 칩 크기를
-                 바꿔도 이 표시만 안 따라온다 (계층의 뜻과 반대다). */
-              fontSize: "0.92em",
-            color: (tag.w ?? 1) < 0 ? "var(--minus-ink)" : "var(--accent-ink)",
-            /* ★★자리를 **미리 비워 두지 말 것** (사용자 지적 2026-08-22).
-               `minWidth: 5ch` + 우측 정렬로 넉넉히 잡았더니 숫자 왼쪽에 빈칸이 크게 남고,
-               그 빈칸이 고정이 풀릴 때(1초 뒤)에야 사라져 **반응이 느린 것처럼** 보였다.
-               칩의 겉폭은 이미 얼려 두었으므로(`pin`) 줄바꿈은 배지 폭과 무관하다 —
-               배지는 제 글자만큼만 차지하면 된다. */
-            ...(pin != null ? { flexShrink: 0 } : null),
-          }}
-        >
-          {/* ★★돌리는 동안은 **자릿수를 고정**한다 (`1.10`·`1.00`) — `fmtW` 는 끝의 0 을
-              떼어 내서 `1.05`→`1.1`→`1` 로 글자 수가 오락가락하고, 겉폭이 고정이라
-              그만큼 칩 안에 빈칸이 남는다 (실측 2026-08-22: 최대 22px). 두 자리로 붙들면
-              부호가 바뀔 때 말고는 폭이 안 변한다. 놓으면 곧바로 원래 표기로 돌아온다. */}
-          {pin != null ? (tag.w ?? 1).toFixed(2) : fmtW(tag.w!)}
-        </b>
-      )}
+      {!grouped && (tag.w != null || pin != null) && <WeightBadge w={tag.w} pin={pin} />}
       <span
         style={{
           /* ★★**태그를 줄이지 않는다** (사용자 지적 2026-08-22). 예전에는 22em 을 넘으면
@@ -257,6 +245,95 @@ export function Chip({
       >
         {tag.t}
       </span>
+    </span>
+  );
+}
+
+/** 가중치 숫자 — 칩 하나와 묶음 상자가 같은 것을 쓴다 */
+function WeightBadge({ w, pin }: { w: number | null; pin: number | null }) {
+  return (
+    <b
+      style={{
+        fontFamily: "var(--font-mono)",
+        /* ★**상대값이라 그대로 둔다** — 칩 글자의 92%다. 토큰으로 바꾸면 칩 크기를
+             바꿔도 이 표시만 안 따라온다 (계층의 뜻과 반대다). */
+          fontSize: "0.92em",
+        color: (w ?? 1) < 0 ? "var(--minus-ink)" : "var(--accent-ink)",
+        /* ★★자리를 **미리 비워 두지 말 것** (사용자 지적 2026-08-22).
+           `minWidth: 5ch` + 우측 정렬로 넉넉히 잡았더니 숫자 왼쪽에 빈칸이 크게 남고,
+           그 빈칸이 고정이 풀릴 때(1초 뒤)에야 사라져 **반응이 느린 것처럼** 보였다.
+           칩의 겉폭은 이미 얼려 두었으므로(`pin`) 줄바꿈은 배지 폭과 무관하다 —
+           배지는 제 글자만큼만 차지하면 된다. */
+        ...(pin != null ? { flexShrink: 0 } : null),
+      }}
+    >
+      {/* ★★돌리는 동안은 **자릿수를 고정**한다 (`1.10`·`1.00`) — `fmtW` 는 끝의 0 을
+          떼어 내서 `1.05`→`1.1`→`1` 로 글자 수가 오락가락하고, 겉폭이 고정이라
+          그만큼 칩 안에 빈칸이 남는다 (실측 2026-08-22: 최대 22px). 두 자리로 붙들면
+          부호가 바뀔 때 말고는 폭이 안 변한다. 놓으면 곧바로 원래 표기로 돌아온다. */}
+      {pin != null ? (w ?? 1).toFixed(2) : fmtW(w ?? 1)}
+    </b>
+  );
+}
+
+/** 칩 색 — 칩 하나와 묶음 상자가 같은 것을 쓴다.
+ *  ★부호가 색을 가르고, 세기는 값이 오를수록 한결같이 진해진다 (`weightTone`):
+ *    배경 6~28% · 테두리 25~80% 를 세기(0~1)로 잇는다 */
+function chipTone(w: number | null, hl: boolean): { bg: string; bd: string; fg: string } {
+  const tone0 = hl ? weightTone(w) : { sign: 0 as const, s: 0 };
+  if (tone0.sign === 0) return { bg: "var(--chip-bg)", bd: "var(--line)", fg: "var(--ink)" };
+  const hue = tone0.sign > 0 ? "var(--accent)" : "var(--minus)";
+  const bg = Math.round(6 + 22 * tone0.s);
+  const bd = Math.round(25 + 55 * tone0.s);
+  return {
+    bg: `color-mix(in srgb, ${hue} ${bg}%, var(--chip-bg))`,
+    bd: `color-mix(in srgb, ${hue} ${bd}%, var(--line))`,
+    fg: "var(--ink)",
+  };
+}
+
+/** ★★**가중치 묶음** (`0.95::a, b::`) — 가중치 숫자 하나와 그 색의 상자 하나에 칩들이 든다 (사용자 지시 2026-10-29).
+ *  보내는 글이 묶여 있으면 화면도 묶여 보여야 한다. 묶음은 `tagRuns` 가 정한다.
+ *  - **Alt + 휠 = 묶음 전체의 가중치** (칩 위든 숫자 위든 상자 안이면 된다)
+ *  - 칩은 낱낱이 끌어서 묶음 밖으로 뺄 수 있다 (`takeTag`)
+ *  ★상자의 위아래 안여백은 0 이다 — 칩이 안여백을 덜어 낸 만큼(`Chip` 의 `grouped`) 줄 높이가 칩 하나와 같다. */
+export function ChipGroup({
+  w,
+  readOnly,
+  onWeight,
+  onWeightStart,
+  children,
+}: {
+  w: number | null;
+  readOnly?: boolean;
+  onWeight: (w: number | null) => void;
+  onWeightStart?: () => void;
+  children: React.ReactNode;
+}) {
+  const hl = useUi((u) => u.weightHl);
+  const tone = chipTone(w, hl);
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const pin = useWeightWheel(ref, w, onWeight, onWeightStart, !!readOnly, true);
+  return (
+    <span
+      data-chip-group
+      ref={ref}
+      style={{
+        display: "inline-flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 3,
+        maxWidth: "100%",
+        padding: "0 2px 0 6px",
+        borderRadius: "var(--r-1)",
+        background: tone.bg,
+        border: `1px solid ${tone.bd}`,
+        fontSize: "var(--text-prompt)",
+        ...(pin != null ? { width: pin, flexShrink: 0 } : null),
+      }}
+    >
+      <WeightBadge w={w} pin={pin} />
+      {children}
     </span>
   );
 }

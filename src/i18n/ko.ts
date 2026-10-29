@@ -243,6 +243,8 @@ export const ko: Dict = {
     toggleOn: "켜기",
     toggleOff: "끄기",
     remove: "블록 삭제",
+    group: "같은 가중치 묶기",
+    ungroup: "묶음 풀기",
     clickToInput: "클릭해서 입력…",
     emptySummary: "(비어 있음)",
     defaults: {
@@ -1376,6 +1378,7 @@ export const ko: Dict = {
     undone: "되돌렸습니다: {what}",
     undoTag: "칩 지우기",
     undoWeight: "가중치",
+    undoGroup: "가중치 묶기",
     undoSettings: "설정 불러오기",
     undoBlockAdd: "블록 추가",
     undoBlockRemove: "블록 삭제",
