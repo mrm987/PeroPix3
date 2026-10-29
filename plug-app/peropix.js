@@ -4,7 +4,7 @@
  *
  *     await peropix.action("add_style_card", { ... });   // 앱 액션 (조수가 쓰는 것과 같은 목록)
  *     const st = await peropix.state();                  // 지금 화면 주소 (워크스페이스·탭·씬…)
- *     const sc = await peropix.scene();                   // 지금 씬의 살아 있는 블록 { base, chars }
+ *     const sc = await peropix.scene();                   // 지금 씬의 살아 있는 블록 { base, baseUc, chars }
  *     peropix.toast("넣었습니다");                        // 앱 알림
  *     const c = await peropix.theme("--accent");          // 앱 토큰 값 (이름 없이 부르면 "dark" | "light")
  *     peropix.onTheme((name) => …);                      // 테마가 바뀔 때
@@ -87,7 +87,7 @@
     call: call,
     action: function (name, args) { return unwrap(call({ call: "action", name: name, args: args || {} })); },
     state: function () { return unwrap(call({ call: "state" })); },
-    /** 지금 씬의 **살아 있는** 블록 — `{ base, chars }` (블록마다 id). 저장을 기다리지 않는다 */
+    /** 지금 씬의 **살아 있는** 블록 — `{ base, baseUc, chars }` (블록마다 id. 캐릭터는 `prompt`·`uc`). 저장을 기다리지 않는다 */
     scene: function () { return unwrap(call({ call: "scene" })); },
     plugin: function () { return unwrap(call({ call: "plugin" })); },
     openCanvas: function (id) { return call({ call: "openCanvas", name: id }); },

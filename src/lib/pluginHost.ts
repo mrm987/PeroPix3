@@ -225,7 +225,7 @@ export function hostApi(p: PluginInfo) {
     },
     /** 지금 보고 있는 화면 주소 (workspace · tab · sceneGroup) */
     state: () => screenAddr(),
-    /** 지금 씬의 **살아 있는** 블록 — `{ base, chars }`. 블록마다 id 가 있어 이름이 겹쳐도 하나를 짚을 수 있다.
+    /** 지금 씬의 **살아 있는** 블록 — `{ base, baseUc, chars }` (캐릭터는 `prompt`·`uc`). 블록마다 id 가 있어 이름이 겹쳐도 하나를 짚을 수 있다.
      *  ★`action("get_workspace")` 와 달리 저장된 파일이 아니라 화면의 스토어를 읽는다 (`promptEdit.sceneBlocks`). */
     scene: () => sceneBlocks(),
     /** 디자인 토큰 값 — `theme("--accent")`. 이름 없이 부르면 지금 테마 이름(`"dark"` | `"light"`) */

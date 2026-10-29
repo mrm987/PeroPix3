@@ -30,7 +30,7 @@ export function screenAddr(): Addr {
   };
 }
 
-/** 지금 화면에 **살아 있는** 씬의 블록 — 스타일 카드(`base`)와 캐릭터 카드들.
+/** 지금 화면에 **살아 있는** 씬의 블록. 스타일 카드(`base`·`baseUc`)와 캐릭터 카드들(`prompt`·`uc`).
  *
  *  ★★조수의 `get_workspace` 는 **저장된 파일**을 읽으므로 방금 손댄 것을 모른다. 그래서 블록을 지우고 넣는
  *    플러그인이 자기가 조금 전에 넣은 것(또는 사용자가 방금 만든 것)을 못 보고 지나쳤다 (게스트 실측 2026-09-11:
@@ -40,7 +40,8 @@ export function sceneBlocks() {
   const strip = (b: Block) => ({ id: b.id, label: b.label, on: b.on, tags: b.tags });
   return {
     base: p.base.map(strip),
-    chars: p.chars.map((c) => ({ id: c.id, name: c.name, prompt: (c.prompt ?? []).map(strip) })),
+    baseUc: p.baseUc.map(strip),
+    chars: p.chars.map((c) => ({ id: c.id, name: c.name, prompt: (c.prompt ?? []).map(strip), uc: (c.uc ?? []).map(strip) })),
   };
 }
 
