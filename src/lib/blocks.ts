@@ -115,9 +115,19 @@ const endWeight = (str: string): number | null => {
   return w;
 };
 
+/** 칩 하나를 글로: `0.95::tag::` · 가중치가 없으면 `tag`.
+ *  ★★칩마다 **따로** 쓴다. 가중치가 같은 칩이 이어져도 묶지 않는다 (사용자 지시 2026-10-29: *"보이는거랑
+ *    보내지는게 일치하도록 해줘. 묶는걸 바꾸기만해도 결과 이미지가 달라짐"*). 예전에는 칩을 고친 블록만
+ *    `0.95::a, b::` 로 묶어 보내서, 칩도 글 상자도 따로 보이는데 보내는 글은 달랐다.
+ *    글 상자(`serializeBlock`)와 보내는 글(`compileBlock`)이 이 함수 하나를 쓴다. */
+const chipText = (x: Tag): string => {
+  const e = effW(x);
+  return e != null ? `${fmtW(e)}::${closeEmph(x.t)}` : x.t;
+};
+
 /** 블록 하나를 NAI 프롬프트 문자열로.
  *  ★손대지 않은 블록은 **들어온 글 그대로** 낸다 (`Block.src` 주석).
- *  ★같은 실효 가중치가 연속되면 하나로 묶는다: `1.8::a, b::` */
+ *  ★고친 블록은 칩마다 따로 쓴다 (`chipText`). 글 상자에 보이는 글과 같다. */
 export function compileBlock(bl: Block): string {
   const tags = bl.tags.filter((x) => x.t.trim());
   if (!tags.length) return "";
@@ -128,32 +138,7 @@ export function compileBlock(bl: Block): string {
     return endWeight(raw) != null ? `${raw}${/[-.\d]$/.test(raw) ? " ::" : "::"}` : raw;
   }
 
-  const parts: string[] = [];
-  let run: string[] = [];
-  let runW: number | null | undefined = undefined;
-
-  const flush = () => {
-    if (!run.length) return;
-    parts.push(runW != null ? `${fmtW(runW)}::${closeEmph(run.join(", "))}` : run.join(", "));
-    run = [];
-    runW = undefined;
-  };
-
-  for (const x of tags) {
-    const w = effW(x);
-    if (runW === undefined) {
-      run = [x.t];
-      runW = w;
-    } else if (w === runW) {
-      run.push(x.t);
-    } else {
-      flush();
-      run = [x.t];
-      runW = w;
-    }
-  }
-  flush();
-  return parts.join(", ");
+  return tags.map(chipText).join(", ");
 }
 
 /** 켜진 블록만 이어 붙인다.
@@ -288,12 +273,7 @@ export function parseSpans(str: string): (Tag & { start: number; end: number })[
  *    쉼표로 바뀌어 있으면, 사용자는 자기가 맞춰 둔 모양을 잃은 줄 안다. */
 export function serializeBlock(bl: Block): string {
   if (untouched(bl)) return bl.src!;
-  return bl.tags
-    .map((x) => {
-      const e = effW(x);
-      return e != null ? `${fmtW(e)}::${closeEmph(x.t)}` : x.t;
-    })
-    .join(", ");
+  return bl.tags.map(chipText).join(", ");
 }
 
 /** 칩을 눌러 글 상자를 열 때 **그 태그의 쉼표 뒤**에 놓을 커서 자리와, 그때 펼칠 글.
