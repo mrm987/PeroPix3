@@ -26,7 +26,7 @@ import { useThumbView } from "./PromptSections";
 import { DragGhost } from "../cards/DragGhost";
 import { useLaneReorder, type LaneDrop } from "../lib/useReorder";
 import { useSceneFocus } from "../store/sceneFocus";
-import { removeTakes, stepScene, stepTake, visibleTakes } from "../lib/sceneTakes";
+import { removeTakes, saveTake, stepScene, stepTake, visibleTakes } from "../lib/sceneTakes";
 import { clearUndo, undoLast } from "../lib/undo";
 // ★`t` 는 **모듈 것**을 쓴다 — 이 파일 안에서 `t` 는 이벤트 대상 이름으로 자주 가려진다
 import { t as tr } from "../i18n";
@@ -466,12 +466,26 @@ export function SceneLane() {
     clearUndo();   // ★없어진 블록·그림을 되살리려 들면 안 된다
   }, [focusKey]);
 
-  // Del = 숨김(휴지통) · Ctrl+Z = 되돌리기 · Esc = 선택 해제 (멀티 무대의 규칙 그대로)
+  // Del = 숨김(휴지통) · Enter = 미저장 저장 · Ctrl+Z = 되돌리기 · Esc = 선택 해제 (멀티 무대의 규칙 그대로)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable) return;
       if (e.key === "Escape" && picked.length) return useSceneFocus.getState().setPicked([]);
+      /* ★★**Enter = 보고 있는 미저장 그림을 파일로 저장** (사용자 지시 2026-11-03: *"방향키로 보면서 엔터로
+           바로 저장하는 식"*). 큰 그림 아래 「저장」 버튼과 같은 것을 부른다 (`saveTake`).
+         ★고른 한 장만이다 — 여러 장을 골랐어도 보고 있는 장 하나다 (버튼과 같다).
+         ★단추에 초점이 있으면 그 단추의 Enter 다 (방금 누른 단추가 한 번 더 눌리는 것과 겹치지 않게). */
+      if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !e.isComposing) {
+        if (el.tagName === "BUTTON" && !el.hasAttribute("data-take")) return;
+        const file = useSceneFocus.getState().file;
+        if (!file || !isPreviewFile(file)) return;
+        e.preventDefault();
+        void saveTake(file)
+          .then((f) => toast(tr("scenes.savedToast", { name: f.split("/").pop() ?? f })))
+          .catch((err) => toast(String(err), "warn"));
+        return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
         /* ★★고른 **한 장**도 Del 로 지운다 (사용자 지시 2026-08-19), 여러 장을 골랐으면
            **전부**. 지운 뒤에는 **오른쪽 장**으로 옮겨 간다 (없으면 왼쪽) — 줄은 최신이
@@ -2069,7 +2083,12 @@ function SceneRow(
                 //   안 왔다 (CLAUDE.md 「잊기 쉬운 것」의 그 자리다). 블록 머리의 단추들이
                 //   같은 이유로 한 번 죽었던 것과 같은 함정이다.
                 if ((e.target as HTMLElement).closest("[data-take-star]")) return;
+                const self = e.currentTarget;
                 const tap = () => {
+                  /* ★★누른 칸으로 **키보드 포커스를 옮긴다** — pointerdown 의 기본 동작을 막아 포커스가 그 전에
+                       누른 단추(생성 등)에 남아 있었고, 그러면 Enter 가 그 단추를 다시 눌렀다 (미저장 Enter 저장이
+                       안 먹던 이유, 게스트 실측 2026-11-03). */
+                  self.focus({ preventScroll: true });
                   // ★★미저장도 **여러 장 고르기에 든다** (사용자 지시 2026-09-30: *"자동저장을 하든
                   //   안 하든 최대한 UI 동일하게"*). 고른 것에 걸리는 일은 미저장을 먼저 저장하거나
                   //   (강화·업스케일 — 바이트로 돈다) 파일이 있어야 하면 꺼 두거나(보관·보내기 — `Canvas` 의 `unsaved`)

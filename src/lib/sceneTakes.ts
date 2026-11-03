@@ -180,8 +180,21 @@ export function removeTakes(): string[] {
  *  아니면 어디서도 저장하지 않는다. 파일이 있어야 하는 일은 미저장에서 꺼 둔다). 이미 파일이면 그대로 돌려준다.
  *  ★저장하면 그 장을 가리키던 자리(보고 있는 장 · 고른 것 · 별표)가 **새 경로**를 따라간다. 안 그러면
  *    방금 저장한 장이 화면에서 빠진 자리를 가리킨다. */
-export async function saveTake(file: string): Promise<string> {
-  if (!isPreviewFile(file)) return file;
+export function saveTake(file: string): Promise<string> {
+  if (!isPreviewFile(file)) return Promise.resolve(file);
+  /* ★★저장 중인 장을 또 부르면 **같은 약속**을 돌려준다 — 저장이 끝나기 전에는 미리보기가 목록에 남아 있어서,
+       `Enter` 를 두 번 누르면(버튼과 키를 함께 써도) 같은 그림이 파일 둘로 남는다. */
+  const running = saving.get(file);
+  if (running) return running;
+  const p = saveTakeOnce(file).finally(() => saving.delete(file));
+  saving.set(file, p);
+  return p;
+}
+
+/** 지금 저장 중인 미리보기 → 그 약속 (`saveTake`) */
+const saving = new Map<string, Promise<string>>();
+
+async function saveTakeOnce(file: string): Promise<string> {
   const starred = !!previewOf(file)?.starred;
   const rec = await usePreviews.getState().save(file);
   const ws = useWs.getState();

@@ -118,6 +118,8 @@ type S = {
   /** 인물 차례 바꾸기 — ★차례가 곧 `characterPrompts[]` 의 차례다 (`use_order: true`).
    *  NAI 는 앞에 온 인물을 먼저 잡으므로 **누가 몇 번째인가가 그림에 남는다.** */
   stepChar: (id: string, dir: -1 | 1) => void;
+  /** 인물을 **틈 `gap`**(0..n)으로 옮긴다 — 배너를 끌어 다른 캐릭터 카드에 놓을 때 (`CharSection`) */
+  moveChar: (id: string, gap: number) => void;
   renameChar: (id: string, name: string) => void;
   toggleChar: (id: string) => void;
   /** 배치 판에서 인물을 옮긴다 */
@@ -277,12 +279,21 @@ export const usePrompt = create<S>((set, get) => ({
    *  차례가 곧 `characterPrompts[]`·`char_captions[]` 의 차례이고 NAI 가 `use_order: true`
    *  로 그 차례를 쓰므로(`backend/nai.py`), 그림에 실제로 남는 값이다.
    *  ★자리 좌표(`center`)는 **인물이 들고 다니는 값**이라 같이 따라간다 — 따로 옮기는 코드를 두지 말 것.
-   *  ★끌기로 만들지 않는다: 배너를 끄는 몸짓은 이미 **덱에 저장**이다 (사용자 지적).
+   *  ★배너를 끌어 다른 캐릭터 카드에 놓아도 옮겨진다 (`moveChar`, 사용자 지시 2026-11-03). 덱에 놓으면 저장이다.
    *  ★셈은 `moveTo` 하나뿐이다 — `to` 는 칸이 아니라 **틈** 번호라 아래로 갈 때 `i + 2` 다. */
   stepChar(id, dir) {
     const i = get().chars.findIndex((c) => c.id === id);
     if (i < 0) return;
     const chars = moveTo(get().chars, i, dir < 0 ? i - 1 : i + 2);
+    if (chars === get().chars) return;
+    set({ chars });
+    onEdit();
+  },
+
+  moveChar(id, gap) {
+    const i = get().chars.findIndex((c) => c.id === id);
+    if (i < 0) return;
+    const chars = moveTo(get().chars, i, gap);
     if (chars === get().chars) return;
     set({ chars });
     onEdit();

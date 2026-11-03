@@ -51,6 +51,9 @@ export type Dragging = {
    *  이 열쇠로 명부(`blockZones`)를 찾아 원본을 뺀다 — 카드에서 카드로 **옮기기**
    *  (사용자 지시 2026-08-28). 서랍에 놓이면 사본만 들어가고 이 값은 안 쓴다. */
   srcZone?: string;
+  /** kind 가 characters · dir 가 save 일 때 — 끌고 있는 **프롬프트의 캐릭터 카드** (`Char.id`).
+   *  덱에 놓으면 저장이고, 다른 캐릭터 카드에 놓으면 그 자리로 차례가 옮겨진다 (사용자 지시 2026-11-03). */
+  charId?: string;
   /** dir 가 save 일 때 — 섹션에 꽂혀 있던 그림. 카드는 **같은 tid 를 가리킬 뿐**이라
    *  바이트가 복사되지 않는다 */
   thumb?: SectionThumb | null;

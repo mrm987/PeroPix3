@@ -32,6 +32,8 @@ export function PromptPanel({ onThumb }: SectionProps) {
    *    미저장 그림(`imageInput`)은 카드 그림이 못 되므로 안 올린다 (이미지 입력 묶음만 받는다) */
   const dragKind = useDrag((s) => (s.drag?.dir === "apply" ? s.drag.kind : null));
   const dragImg = useDrag((s) => s.drag?.kind === "image");
+  /** 캐릭터 카드를 끌어 **차례를 옮기는 중** — 캐릭터 묶음이 받는 자리다 (`CharSection` 의 `move`) */
+  const charMove = useDrag((s) => s.drag?.dir === "save" && s.drag.kind === "characters" && !!s.drag.charId);
   const t = useI18n((s) => s.t);
   const [preview, setPreview] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -93,7 +95,7 @@ export function PromptPanel({ onThumb }: SectionProps) {
           id="p-char"
           label={t("prompt.charBox")}
           flashKey="prompt"
-          spot={dragKind === "characters" || dragImg}
+          spot={dragKind === "characters" || dragImg || charMove}
           /* ★좌표 2택은 **여기** 선다 (사용자 지시 2026-08-21) — 공홈도 캐릭터 프롬프트
              패널에 둔다 (`dg()`). 판 자체는 큰 그림 위에 겹친다 (`Canvas` 의 `ScenePreview`).
              ★★여기에 **더 얹지 않는다** (사용자 지적 2026-09-15: *"캐릭터 프롬프트 텍스트
@@ -106,7 +108,7 @@ export function PromptPanel({ onThumb }: SectionProps) {
             <CharStackedWarning />
             {/* ★★인물의 **차례**가 곧 `characterPrompts[]`·`char_captions[]` 의 차례이고
                 NAI 가 `use_order: true` 로 그 차례를 쓴다 (`backend/nai.py`) — 그림에 남는 값이다.
-                바꾸는 것은 배너의 **위아래 단추**다 (`CharSection`). */}
+                바꾸는 것은 배너의 **위아래 단추**와 **배너 끌기**다 (`CharSection`). */}
             {chars.map((ch, i) => (
               <CharSection key={ch.id} ch={ch} index={i} last={i === chars.length - 1} onThumb={onThumb} />
             ))}

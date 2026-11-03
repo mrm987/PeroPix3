@@ -199,7 +199,7 @@ export function CharSection({
   onThumb,
 }: { ch: Char; index: number; /** 맨 아래 카드인가 — 아래 단추를 흐리게 한다 */ last: boolean } & SectionProps) {
   const t = useI18n((s) => s.t);
-  const { updateChar, swapChar, removeChar, renameChar, stepChar } = usePrompt();
+  const { updateChar, swapChar, removeChar, renameChar, stepChar, moveChar } = usePrompt();
   const folded = useUi((u) => u.view.fold);
   const toggleFold = (id: string) => useUi.getState().setView("fold", id, !useUi.getState().view.fold[id]);
   const startDrag = useDragSource();
@@ -229,6 +229,29 @@ export function CharSection({
     },
   });
 
+  /* ★★**배너를 끌어 다른 캐릭터 카드에 놓으면 차례가 옮겨진다** (사용자 지시 2026-11-03: *"캐릭터 카드간에
+       위치 변경하는 것도 해당 동작으로도 가능하게"*). 끄는 몸짓은 덱에 저장할 때와 같고(`dir: "save"`),
+       **어디에 놓느냐**만 다르다. 블록을 다른 카드로 옮길 때와 같은 규칙이다 (`BlockList` 의 `moveIn`).
+     ★카드의 위쪽 절반이면 그 앞, 아래쪽 절반이면 그 뒤다. 끼움선이 그 자리에 선다. */
+  const moveId = `sec-char-${ch.id}-move`;
+  const move = useDropZone({
+    id: moveId,
+    kind: "characters",
+    dir: "save",
+    onDrop: (d) => {
+      if (!d.charId || d.charId === ch.id) return;
+      const r = move.ref.current?.getBoundingClientRect();
+      const y = useDrag.getState().pos.y;
+      moveChar(d.charId, r && y >= r.top + r.height / 2 ? index + 1 : index);
+    },
+  });
+  /** 끼움선 자리 — 다른 캐릭터 카드를 이 카드 위에 끌고 있을 때만 (`before` · `after`) */
+  const moveAt = useDrag((s) => {
+    if (s.over !== moveId || !s.drag?.charId || s.drag.charId === ch.id) return null;
+    const r = move.ref.current?.getBoundingClientRect();
+    return r && s.pos.y >= r.top + r.height / 2 ? "after" : "before";
+  });
+
   const img = useThumbDrop(ch.id, (di) => onThumb(ch.id, di));
   /** ★훅은 JSX 안에서 부르지 않는다 (`StyleSection` 의 같은 주석 — 갈래가 생기면 그 자리에서 죽는다) */
   const thumbView = useThumbView(ch.thumb);
@@ -253,7 +276,31 @@ export function CharSection({
   return (
     <>
       {/* ★조수가 이 인물을 고쳤으면 여기를 강조한다 (`lib/agentAt` 의 `prompt:<id>`) */}
-      <div ref={char_.ref} style={flashStyle(char_.on)}>
+      <div
+        ref={(el) => {
+          char_.ref.current = el;
+          move.ref.current = el;
+        }}
+        data-char-card={ch.id}
+        style={{ ...flashStyle(char_.on), position: "relative" }}
+      >
+      {moveAt && (
+        <div
+          data-drop-line
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            // ★카드 사이 틈의 가운데에 긋는다 (카드 아래 여백 `--sp-5` 의 절반)
+            ...(moveAt === "before" ? { top: "calc(var(--sp-5) / -2 - 1px)" } : { bottom: "calc(var(--sp-5) / -2 - 1px)" }),
+            height: 2,
+            borderRadius: 1,
+            background: "var(--accent)",
+            zIndex: 33,
+            pointerEvents: "none",
+          }}
+        />
+      )}
       <SectionCard
         innerRef={(el) => (img.ref.current = el)}
         name={name}
@@ -272,6 +319,7 @@ export function CharSection({
             kind: "characters",
             card: { id: ch.ref ?? "", name, color: ch.color, prompt: ch.prompt, uc: ch.uc },
             thumb: ch.thumb,
+            charId: ch.id,
           }, undefined, () => toggleFold(ch.id))
         }
         /* ★이름은 **카드 안에서** 고친다 (사용자 지시 2026-08-19) — 시스템 `prompt()` 창을
@@ -280,9 +328,7 @@ export function CharSection({
         renameTip={t("cards.rename")}
         nameTag={positioning && liveNo > 0 ? <CharNo n={liveNo} size={20} ring={1.5} /> : null}
         /* ★★차례 바꾸기는 **위아래 단추**이고, 자리는 **이름변경 앞**이다
-           (사용자 지시 2026-08-21).
-           끌기로 만들었다가 걷었다: 배너를 끄는 것은 이미 **덱에 저장**이라
-           (`onBannerPointerDown`) 같은 몸짓이 두 가지 뜻을 갖게 된다.
+           (사용자 지시 2026-08-21). 배너를 끌어 다른 캐릭터 카드에 놓아도 된다 (위 `move`, 2026-11-03).
            ★자리 좌표는 인물이 들고 다니므로 따로 옮기는 코드를 두지 말 것. */
         bannerLead={
           <>
