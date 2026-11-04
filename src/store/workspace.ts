@@ -443,7 +443,7 @@ function noteRecovered(name: string, at: string | null | undefined) {
   toast(t("gate.recovered", { name, at: at.replace("T", " ") }), "warn");
 }
 
-/** 파일이 깨졌고 사본도 없을 때의 안내 — ★할 수 있는 것을 말한다: 그림 기록으로 다시 만들기 · 그 파일이 있는 폴더 열기.
+/** 파일이 깨졌고 사본도 없을 때의 안내 — ★할 수 있는 것을 말한다: 그림 기록으로 복구하기 · 그 파일이 있는 폴더 열기.
  *  ★★**누르면 무슨 일이 생기는지를 이 창이 전부 말한다** (사용자 지시 2026-11-04). 되찾는 것은 실제 수로, 되찾지
  *    못하는 것은 전부 적는다 (`backend/rebuild.py` 의 머리 주석과 같아야 한다). */
 async function explainCorrupt(name: string, why: string) {
