@@ -45,6 +45,7 @@ let INDEX: Record<string, TagEntry[]> = {};
 let loaded = false;
 let loading: Promise<void> | null = null;
 let KO_RAW: Record<string, string[]> = {};
+let LONGEST_NAME = 0;
 /** 한글 검색판. ★처음 한글을 칠 때 한 번 만든다 (영어만 쓰면 안 만든다) */
 let KO: { t: TagEntry; keys: { word: string; flat: string; parts: string[] }[] }[] | null = null;
 
@@ -99,6 +100,12 @@ export function loadTags(): Promise<void> {
     }
     ALL = [...extra, ...tags];
     INDEX = index;
+    // 친 말과 맞을 수 있는 가장 긴 글자 수 (앞뒤로 붙는 `character:` 와 띄어쓰기 차이까지 넉넉히 더한다)
+    LONGEST_NAME = 20 + Math.max(
+      0,
+      ...[...new Set(ALL.map((t) => t.label.length))],
+      ...[...new Set(Object.values(ko).flat().flatMap((s) => s.split(", ")).map((w) => w.length))],
+    );
     loaded = true;
   })().catch(() => {});
   return loading;
@@ -117,7 +124,8 @@ export const queryReady = (q: string) => (q.length >= 2 && !/^-?\d*\.\d*$/.test(
 function koScan(q: string, max: number, out: TagEntry[], pred?: (t: TagEntry) => boolean) {
   KO ??= ALL.flatMap((t) => {
     const raw = KO_RAW[t.value];
-    if (!raw?.length) return [];
+    // ★파일을 못 읽으면 표가 빈 배열이라 `map` 태그가 배열의 함수를 집는다
+    if (!Array.isArray(raw) || !raw.length) return [];
     const keys = [...raw[0].split(", "), ...raw.slice(1)].map((word) => {
       const n = norm(word);
       return { word, flat: squeeze(n), parts: n.split(" ") };
@@ -281,10 +289,12 @@ export function currentWord(value: string, cursor: number) {
     return s;
   };
   const starts = [nameStart(from)];
-  for (let i = from; i < cursor; i++)
+  // ★쉼표 없는 긴 글에서 글자마다 사전을 수백 번 뒤져 입력이 멈췄다 (실측 2026-11-05: 2.4초). 그래서 가장 긴 이름보다 먼 기호는 안 보고,
+  //   뒤지는 것도 가까운 기호 여덟 개까지다 (기호가 그보다 많은 태그는 사전에 거의 없다)
+  for (let i = Math.max(from, cursor - LONGEST_NAME); i < cursor; i++)
     if (!isTagChar(value[i]) && value[i] !== "(" && value[i] !== ")") starts.push(nameStart(i + 1));
   const start =
-    starts.slice(0, -1).find((s) => searchTags(value.substring(s, cursor).trim(), 1).length) ??
+    starts.slice(-9, -1).find((s) => cursor - s <= LONGEST_NAME && searchTags(value.substring(s, cursor).trim(), 1).length) ??
     starts[starts.length - 1];
   let end = cursor;
   while (end < value.length && (value[end] === " " || value[end] === "\t")) end++;
