@@ -62,6 +62,7 @@ import { pinImage, setCardThumb } from "./cards/thumbUpload";
 import { usePrompt, defaultView, normThumb, thumbUrl } from "./store/prompt";
 import { useCards } from "./store/cards";
 import { setThumbAsker, type ThumbTarget } from "./cards/thumbAsk";
+import { releaseFocusOnPress } from "./lib/releaseFocus";
 
 /** 위치 잡는 창이 겨눌 수 있는 목적지 — 섹션 배너 또는 **덱 카드 한 장**.
  *
@@ -129,6 +130,8 @@ export function App() {
     applyFont(useUi.getState().font);
     applyTextScale(useUi.getState().textScale);   // 글자 크기 배율도 같은 이유로
   }, []);
+
+  useEffect(() => releaseFocusOnPress(), []);
 
   /** ★★**Alt 단독 누름이 창의 메뉴 모드를 깨우지 못하게 막는다** (사용자 지적 2026-08-24).
    *
