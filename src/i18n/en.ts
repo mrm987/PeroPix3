@@ -42,6 +42,10 @@ export const en = {
 
   gate: {
     readFailed: "Could not read the workspace file for \"{name}\". Please open it again.",
+    recovered: "The workspace file for \"{name}\" was damaged, so it was restored from the copy of {at}. Edits made after that may be missing.",
+    corruptTitle: "Cannot open workspace \"{name}\"",
+    corruptBody: "The workspace file is damaged and there is no copy to restore from. This can happen when the computer shuts down suddenly.\n\nYour generated images are still in the folder. If you have your own backup of workspace.json, copy it over the file below and open the workspace again.\n\n{path}",
+    corruptOpen: "Open folder",
     readBack: "The screen held another workspace's content, so \"{name}\" was reloaded from the server.",
     closeTab: "Close workspace",
     openAnother: "Open another workspace",

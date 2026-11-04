@@ -42,6 +42,10 @@ export const ko: Dict = {
 
   gate: {
     readFailed: "「{name}」 워크스페이스 파일을 읽지 못했습니다. 다시 열어 주세요.",
+    recovered: "「{name}」 워크스페이스 파일이 깨져 있어 {at} 사본으로 되살렸습니다. 그 뒤의 편집은 빠졌을 수 있습니다.",
+    corruptTitle: "「{name}」 워크스페이스를 열 수 없습니다",
+    corruptBody: "워크스페이스 파일이 깨졌고 되살릴 사본이 없습니다. 컴퓨터가 갑자기 꺼지면 이렇게 될 수 있습니다.\n\n생성한 그림은 폴더에 그대로 있습니다. 따로 백업해 둔 workspace.json 이 있으면 아래 파일에 덮어쓴 뒤 다시 여세요.\n\n{path}",
+    corruptOpen: "폴더 열기",
     readBack: "화면 내용이 이 워크스페이스 것이 아니라서 「{name}」을 서버에서 다시 읽었습니다.",
     closeTab: "워크스페이스 닫기",
     openAnother: "워크스페이스 하나 더 열기",

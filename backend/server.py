@@ -45,7 +45,7 @@ if __name__ == "__main__":
 
 from fastapi import File, Request, UploadFile, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from PIL import Image
 from pydantic import BaseModel
 
@@ -83,7 +83,7 @@ from blocklib import BlockLib
 from wildcards import Wildcards
 import thumbs
 from thumbs import Pins
-from workspace import SpecMismatch, Store, safe_name
+from workspace import SpecCorrupt, SpecMismatch, Store, safe_name
 
 # MCP 설정에 적어 줄 **지금 이 서버의 포트** (--port 로 바뀐다)
 # ★리로드 모드에서는 워커가 `main()` 을 안 거치고 모듈만 다시 읽는다 — 포트를 환경에서 받는다
@@ -1490,6 +1490,14 @@ def _light(rec: dict) -> dict:
     return {k: v for k, v in rec.items() if k not in HEAVY_REC}
 
 
+@app.exception_handler(SpecCorrupt)
+async def spec_corrupt(_req, e: SpecCorrupt):
+    """★★잡지 않으면 500 이 CORS 바깥으로 빠져 화면에는 `Failed to fetch` 만 닿는다 (제보 2026-11-04 의 로그).
+    ★화면은 `GET /api/workspaces/{ws}` 의 **422** 를 이것으로 읽는다 (본문을 안 받는 창구라 다른 422 가 안 난다,
+      `store/workspace.ts` 의 `open`)."""
+    return JSONResponse({"detail": str(e)}, status_code=422)
+
+
 #: ★★**이벤트 루프에서 하면 안 되는 일** (사용자 지적 2026-08-28: *"앱이 멈춘 것처럼"*).
 #  이 서버는 한 프로세스라, `async def` 안에서 **기다리거나 큰 파일을 읽으면 그동안 아무 요청도
 #  못 받는다** — 썸네일도 웹소켓도 **다른 워크스페이스에서 돌고 있는 생성**도 함께 선다.
@@ -1506,7 +1514,11 @@ async def get_workspace(ws: str):
     #   base64 가 들어 있다)와 `env`(화면 구조 스냅샷)다. **둘 다 화면이 목록에서 안 읽는다.**
     #   필요할 때 한 장씩 `/api/workspaces/{ws}/env` 로 가져간다.
     # ★파일이 없는 줄은 뺀다 (`Store.live_records` 의 ★★주) — 지운 그림의 목록을 따로 두지 않는다
-    return {"spec": spec, "records": await asyncio.to_thread(lambda: [_light(r) for r in store.live_records(ws)])}
+    return {
+        "spec": spec,
+        "records": await asyncio.to_thread(lambda: [_light(r) for r in store.live_records(ws)]),
+        "recovered": store.take_recovered(ws),   # ★사본으로 되살렸으면 그 사본의 시각 — 화면이 알린다
+    }
 
 
 @app.put("/api/workspaces/{ws}")

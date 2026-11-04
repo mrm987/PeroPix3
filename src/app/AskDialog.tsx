@@ -46,7 +46,7 @@ export function AskDialog() {
       >
         <b style={{ fontSize: "var(--text-md)" }}>{cur.title}</b>
         {cur.body && (
-          <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", lineHeight: 1.6 }}>
+          <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", lineHeight: 1.6, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
             {cur.body}
           </span>
         )}
