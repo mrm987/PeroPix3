@@ -37,6 +37,8 @@ export type TagEntry = {
  *    예전에는 화면이 질의의 띄어쓰기를 밑줄로 바꿔 던졌는데(`word.replace(/ /g,"_")`),
  *    그러면 **띄어쓰기 표기의 태그는 영영 안 걸린다.** 한쪽으로 맞추는 자리를 여기 하나로 둔다. */
 const norm = (s: string) => s.toLowerCase().replace(/_/g, " ");
+/** 친 말의 표기. 사전의 이름은 괄호 앞이 언제나 띄어져 있어 붙여 친 것(`rem(re`)도 띄어서 찾는다 */
+const queryNorm = (s: string) => norm(s).replace(/([\p{L}\p{N}])\(/gu, "$1 (");
 
 let ALL: TagEntry[] = [];
 let INDEX: Record<string, TagEntry[]> = {};
@@ -176,7 +178,7 @@ export function searchTags(
   if (!queryReady(query)) return [];
   const out: TagEntry[] = [];
   // ① 글자 그대로 — `meta:novel era` 처럼 콜론이 이름의 일부인 태그가 먼저다
-  scan(norm(query), max, out);
+  scan(queryNorm(query), max, out);
   /* ★★**작가는 언제나 `artist:` 를 달고 나간다** (사용자 지시 2026-08-28: *"아티스트 이름으로
        분류된 태그 입력하면 자동으로 앞에 artist: 붙여 주면 좋겠음"*). 접두어를 안 치고 `dai` 로
        찾아 골라도 `artist:dairi` 가 들어간다 — 목록에 보이는 글자가 곧 들어갈 글자다.
@@ -191,7 +193,7 @@ export function searchTags(
   if (m && queryReady(m[2]) && out.length < max) {
     const type = m[1].toLowerCase();
     const found: TagEntry[] = [];
-    scan(norm(m[2]), max - out.length, found, (t) => t.type === type);
+    scan(queryNorm(m[2]), max - out.length, found, (t) => t.type === type);
     for (const t of found) {
       const p = prefixed(t, type);
       if (out.some((x) => x.value === p.value)) continue;
@@ -234,14 +236,19 @@ export const underscoresToSpaces = (tag: string) =>
     return " ";
   });
 
-/** 커서가 놓인 '지금 낱말'. 쉼표·줄바꿈·괄호·콜론이 경계다.
- *  검색에는 커서 **앞부분만** 쓰고, 갈아 끼울 범위는 낱말 뒤 공백까지 먹는다. */
+/** 커서가 놓인 '지금 낱말'. 쉼표·줄바꿈·콜론 둘·이름 밖의 괄호가 경계다.
+ *  검색에는 커서 **앞부분만** 쓰고, 갈아 끼울 범위는 낱말 뒤 공백까지 먹는다.
+ *
+ *  ★★이름 안의 괄호는 태그 글자다 (사용자 지적 2026-11-04: *"괄호를 넣으면 바로 중단되던데"*).
+ *    사전의 2만여 개가 `캐릭터명_(작품명)` 꼴인데, 괄호가 늘 경계라서 `(` 를 치는 순간 낱말이 비어 목록이 닫혔다.
+ *    경계로 남는 것은 앞에 글자가 없는 여는 괄호(`(long_hair`)와 짝이 없는 닫는 괄호다.
+ *  ★이름 괄호 안에는 다른 기호도 온다 (`excalibur_(fate/stay_night)`). */
 export function currentWord(value: string, cursor: number) {
   // 어퍼스트로피도 태그 글자다 (`another's` 처럼 쓰는 태그가 있다)
-  const isTagChar = (c: string) => /[\p{L}\p{N}_\-\s']/u.test(c);
-  let start = cursor;
-  while (start > 0) {
-    const ch = value[start - 1];
+  const isTagChar = (c: string) => /[\p{L}\p{N}_\-\s':]/u.test(c);
+  let from = cursor;
+  while (from > 0) {
+    const ch = value[from - 1];
     if (ch === ":") {
       // ★★홑콜론은 **태그 글자**다 (`meta:novel era` · `honkai:_star_rail`).
       //   예전에는 경계라서, 콜론을 친 뒤에 고르면 앞의 `meta:` 가 남아
@@ -252,12 +259,22 @@ export function currentWord(value: string, cursor: number) {
       //   껐는데(`inEmphasis`), `-0.8::feet::` 처럼 강조 안에 태그를 쓰는 것이 흔해서
       //   되돌렸다 (사용자 지적 2026-08-21). 경계가 있으면 안쪽 낱말만 갈리므로
       //   `1.5::` 는 그대로 남는다.
-      if (value[start - 2] === ":" || value[start] === ":") break;
-      start--;
-      continue;
-    }
-    if (",\n\r{}[]()".includes(ch) || !isTagChar(ch)) break;
-    start--;
+      if (value[from - 2] === ":" || value[from] === ":") break;
+    } else if (",\n\r{}[]".includes(ch)) break;
+    from--;
+  }
+  // 괄호의 짝은 앞에서부터 봐야 알 수 있다
+  let start = from;
+  let depth = 0;
+  for (let i = from; i < cursor; i++) {
+    const ch = value[i];
+    if (ch === "(") {
+      if (value.substring(start, i).trim()) depth++;
+      else start = i + 1;
+    } else if (ch === ")") {
+      if (depth) depth--;
+      else start = i + 1;
+    } else if (!depth && !isTagChar(ch)) start = i + 1;
   }
   let end = cursor;
   while (end < value.length && (value[end] === " " || value[end] === "\t")) end++;
