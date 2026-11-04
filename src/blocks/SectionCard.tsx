@@ -263,7 +263,7 @@ export function SectionCard({
             {bannerLead}
             {onRename && (
               <BannerBtn
-                mark="data-card-rename-btn"
+                mark="data-rename-btn"
                 title={renameTip}
                 /* ★고치는 중에 다시 누르면 **저장하고 끝낸다** — 규칙은 `useRename` 한 곳에 있다.
                    ★`btnProps` 를 안 펴 넣는 이유: 이 단추는 이미 `mousedown` 기본 동작을 막고
