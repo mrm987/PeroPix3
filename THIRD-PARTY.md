@@ -26,10 +26,19 @@ AGPL 물건을 더 느슨한 조건으로 재배포하는 꼴이 된다.
 
 | 무엇 | 어디서 | 조건 |
 |---|---|---|
-| `public/tags.json` (68,427개 · 7.8MB) | [DraconicDragon/dbr-e621-lists-archive](https://github.com/DraconicDragon/dbr-e621-lists-archive) — v2 README 에 적혀 있던 출처 | **The Unlicense** (퍼블릭 도메인 헌정, GitHub API 로 확인) |
+| `public/tags.json` (79,437개 · 9.1MB, 2026-10-01 목록) | [DraconicDragon/dbr-e621-lists-archive](https://github.com/DraconicDragon/dbr-e621-lists-archive) — v2 README 에 적혀 있던 출처 | **The Unlicense** (퍼블릭 도메인 헌정, GitHub API 로 확인) |
+| `public/tags-ko.json` (4.6MB) | [mengod-hf/danbooru-tags-kr](https://huggingface.co/datasets/mengod-hf/danbooru-tags-kr) 2026-11-04 판을 고친 것 | **CC BY-SA 4.0** (아래) |
 | `public/tags-extra.json` | 우리가 더한 것 (NAI 전용 태그) | 이 프로젝트와 같다 |
 
-퍼블릭 도메인이라 어느 조건으로든 담을 수 있다. 출처만 적어 둔다.
+`tags.json` 은 퍼블릭 도메인이라 어느 조건으로든 담을 수 있다. 출처만 적어 둔다.
+
+**`tags-ko.json` 은 CC BY-SA 4.0 으로 내보낸다** (<https://creativecommons.org/licenses/by-sa/4.0/legalcode.en>).
+코드와 별개의 데이터 파일이고, 이 파일만 이 조건을 따른다.
+
+- 원본의 조건: 데이터셋 페이지와 README 표시는 MIT 인데, 저장소의 [`LICENSE`](https://huggingface.co/datasets/mengod-hf/danbooru-tags-kr/blob/main/LICENSE) 는 한글 번역을 CC BY-SA 4.0 으로 적고 있다 (2026-11-04 확인). 더 강한 쪽을 따른다.
+- 고친 것: 키워드의 한글만 뽑았다 · 설명문을 뺐다 · `tags.json` 에 있는 태그만 담았다 · 원본에 없는 옛 이름은 그 이름을 별칭으로 가진 태그의 키워드를 붙였다 (`scripts/update-tags-ko.py`).
+- 그 `LICENSE` 가 적은 출처: 먼저 있던 한글 번역 nyantong · PYU224/tagdb-updater (MIT) · boorutan/booru-japanese-tag (MIT) · 단부루 위키 기여자 (patvessel/danbooru-wiki-2606 으로 모음) · supercatdoing/booru_artists_merged (CC0 1.0 표기). 그 파일은 위키 내용의 재배포 조건이 **확인되지 않았다**고 적고 있고, 우리도 확인하지 못했다.
+- 앱에서는 설정 → 앱 정보에 출처 버튼이 있다 (`data-tags-ko-credit`).
 
 ## 파이썬 런타임과 패키지
 

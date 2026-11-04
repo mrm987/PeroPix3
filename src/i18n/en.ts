@@ -664,6 +664,7 @@ export const en = {
     log: "Open log",
     logHint: "If something breaks, send us this file (logs/peropix.log)",
     support: "Bug report / suggestion",
+    tagsKoCredit: "Korean tag data: danbooru-tags-kr (CC BY-SA 4.0)",
     notifySound: "Also play a sound",
     notifyVolume: "Volume",
     notifyTest: "Play a test",

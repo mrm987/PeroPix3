@@ -688,6 +688,7 @@ export const ko: Dict = {
     log: "로그 열기",
     logHint: "오류가 나면 이 파일을 보내 주세요 (logs/peropix.log)",
     support: "버그 신고 / 건의",
+    tagsKoCredit: "태그 한글 데이터: danbooru-tags-kr (CC BY-SA 4.0)",
     notifySound: "소리로도 알림",
     notifyVolume: "크기",
     notifyTest: "들어 보기",

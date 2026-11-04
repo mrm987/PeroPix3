@@ -333,6 +333,15 @@ export function Settings({
                         {t("settings.support")}
                       </button>
                     )}
+                    {/* ★CC BY-SA 4.0 의 저작자 표시다 (`THIRD-PARTY.md`). 지우면 그 데이터를 담을 수 없다 */}
+                    <button
+                      data-tags-ko-credit
+                      onClick={() => openExternal("https://huggingface.co/datasets/mengod-hf/danbooru-tags-kr")}
+                      style={{ ...btn, display: "inline-flex", alignItems: "center", gap: "var(--sp-2)" }}
+                    >
+                      {Icon.external}
+                      {t("settings.tagsKoCredit")}
+                    </button>
                   </div>
                 </Group>
               </>

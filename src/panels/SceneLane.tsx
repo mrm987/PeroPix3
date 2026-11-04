@@ -149,6 +149,8 @@ export function SceneLane() {
       /* ★★서랍에서 블록을 끌어오는 중이면 닫지 않는다. 닫으면 받는 자리가 그 자리에서
          **사라져** 아예 놓을 수 없다 — 끌기는 서랍 쪽 `pointerdown` 으로 시작한다. */
       if (t?.closest("[data-block-drawer]")) return;
+      // ★자동완성 목록은 body 에 뜨므로 칸 밖이다. 닫으면 고르는 클릭이 사라진다
+      if (t?.closest("[data-tag-suggest]")) return;
       expand(null);
     };
     document.addEventListener("pointerdown", onDown, true);

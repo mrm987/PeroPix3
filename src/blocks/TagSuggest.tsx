@@ -6,6 +6,8 @@ import {
   currentWord,
   formatCount,
   loadTags,
+  markParts,
+  queryReady,
   searchTags,
   tagsLoaded,
   underscoresToSpaces,
@@ -13,6 +15,7 @@ import {
 } from "../lib/tagData";
 import { useWildcards } from "../store/wildcards";
 import { useUi } from "../store/ui";
+import { useI18n } from "../i18n";
 import { toStore } from "../lib/softWrap";
 
 /** 자동완성이 붙을 수 있는 입력칸 — 여러 줄(블록·슬롯)과 한 줄(공통 접두) 둘 다 */
@@ -43,6 +46,8 @@ export function useTagSuggest(
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<TagEntry[]>([]);
   const [sel, setSel] = useState(0);
+  /** 지금 목록을 찾은 말. 목록에서 그 글자만 강조한다 */
+  const [query, setQuery] = useState("");
   const [pos, setPos] = useState<{
     left: number;
     width: number;
@@ -64,6 +69,8 @@ export function useTagSuggest(
   }, []);
 
   const close = () => setOpen(false);
+  /** 영어로 찾았을 때 한글 이름은 한국어 화면에서만 보인다 (한글로 찾았으면 언제나 `koHit` 이 있다) */
+  const isKo = useI18n((s) => s.locale) === "ko";
 
   const run = () => {
     // ★꺼 두면 목록을 아예 안 띄운다 (v2 `tagAutocompleteToggle`). 그래야 Enter·Esc 가
@@ -96,6 +103,7 @@ export function useTagSuggest(
         .sort()
         .slice(0, 20);
       if (!names.length) return close();
+      setQuery("");
       setItems(
         names.map((n) => ({
           label: "#" + n,
@@ -117,10 +125,11 @@ export function useTagSuggest(
     const { word } = currentWord(raw, at);
     // ★표기를 여기서 바꾸지 않는다 — 밑줄·띄어쓰기를 같게 보는 자리는 `searchTags` 하나다
     //   (예전에는 여기서 띄어쓰기를 밑줄로 바꿔, 띄어쓰기 표기의 태그가 안 걸렸다)
-    if (word.length < 2) return close();
+    if (!queryReady(word)) return close();
     // ★작가에 `artist:` 를 달지는 설정이 정한다 (`useUi.artistPrefix`)
     const found = searchTags(word, 15, { artistPrefix: useUi.getState().artistPrefix });
     if (!found.length) return close();
+    setQuery(word);
     setItems(found);
     setSel(0);
     setPos(dropdownPos(ta));
@@ -216,6 +225,14 @@ export function useTagSuggest(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
+  // ★목록 폭은 내용이 정하므로 그려 본 뒤에야 안다. 창 오른쪽을 넘으면 그만큼 왼쪽으로 민다
+  useLayoutEffect(() => {
+    const el = list.current;
+    if (!open || !el) return;
+    const over = el.getBoundingClientRect().right - (window.innerWidth - 10);
+    if (over > 0) setPos((p) => ({ ...p, left: Math.max(10, p.left - over) }));
+  }, [open, items, pos.left]);
+
   useEffect(() => {
     if (!open) return;
     (list.current?.children[sel] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" });
@@ -258,7 +275,10 @@ export function useTagSuggest(
             left: pos.left,
             top: pos.top ?? undefined,
             bottom: pos.bottom ?? undefined,
-            width: pos.width,
+            // ★태그 이름이 안 잘리게 내용만큼 넓어진다 (사용자 지적 2026-11-04). 창을 넘으면 아래 효과가 왼쪽으로 민다
+            width: "max-content",
+            minWidth: pos.width,
+            maxWidth: "calc(100vw - 20px)",
             maxHeight: pos.maxH,
             overflowY: "auto",
             zIndex: 950,
@@ -290,17 +310,32 @@ export function useTagSuggest(
             >
               <span
                 style={{
-                  flex: 1,
-                  minWidth: 0,
+                  // ★들어갈 글자라 줄어들지 않는다. 자리가 모자라면 한글 이름이 줄어든다
+                  flex: "1 0 auto",
                   fontSize: "var(--text-2xs)",
                   color: "var(--ink)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                 }}
               >
-                {tag.label}
+                <Marked text={tag.label} query={query} />
               </span>
+              {(tag.koHit ?? (isKo ? tag.ko : undefined)) && (
+                <span
+                  data-tag-ko
+                  style={{
+                    flex: "0 1 auto",
+                    minWidth: 0,
+                    maxWidth: 220,
+                    fontSize: "var(--text-2xs)",
+                    color: "var(--ink-dim)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <Marked text={(tag.koHit ?? tag.ko)!} query={query} />
+                </span>
+              )}
               <span
                 style={{
                   flexShrink: 0,
@@ -330,6 +365,22 @@ export function useTagSuggest(
     ) : null;
 
   return { onChange, onPaste, onKeyDown, close, node, open };
+}
+
+function Marked({ text, query }: { text: string; query: string }) {
+  return (
+    <>
+      {markParts(text, query).map((p, i) =>
+        p.on ? (
+          <mark key={i} data-tag-mark style={{ background: "none", color: "var(--accent-ink)", fontWeight: "var(--w-bold)" }}>
+            {p.s}
+          </mark>
+        ) : (
+          p.s
+        ),
+      )}
+    </>
+  );
 }
 
 const TYPE_COLOR: Record<string, string> = {
@@ -400,7 +451,8 @@ function dropdownPos(ta: Field) {
   // ★거울에는 테두리가 없으므로 글 상자의 테두리 두께만큼 더해 준다
   const bt = parseFloat(cs.borderTopWidth) || 0;
   const bl = parseFloat(cs.borderLeftWidth) || 0;
-  const width = Math.min(340, Math.max(230, r.width));
+  // ★한글 이름까지 한 줄에 서므로 좁은 칸에서도 그만큼은 넓힌다
+  const width = Math.min(440, Math.max(360, r.width));
 
   let left = r.left + bl + x - ta.scrollLeft;
   if (left + width > window.innerWidth - 10) left = window.innerWidth - width - 10;

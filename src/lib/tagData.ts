@@ -4,8 +4,7 @@
  *  `startsWith` → 모자라면 `includes` 두 단계로 찾는다.
  *
  *  ★사전은 **읽기만 한다.** 코드가 고치지 않는다.
- *  ★한국어 별칭은 없다 — 공개된 한국어 단부루 태그 데이터셋이 없다(2026-08-07 조사,
- *    일본어·중국어는 있다). 필요해지면 별도 파일로 얹되 이 파일은 그대로 둔다. */
+ *  ★한글 검색은 `public/tags-ko.json` 을 얹어서 한다 (사용자 결정 2026-11-04, `scripts/update-tags-ko.py`). */
 
 export type TagEntry = {
   label: string;
@@ -15,6 +14,10 @@ export type TagEntry = {
   type: string;
   category: number;
   aliases?: string[];
+  /** 목록에 보이는 한글 이름 (`tags-ko.json` 의 첫 칸) */
+  ko?: string;
+  /** 한글로 찾았을 때의 이름. 찾은 말이 앞에 온다 (`치파오, 차이나 드레스`) */
+  koHit?: string;
   _lower?: string;
 };
 
@@ -39,6 +42,9 @@ let ALL: TagEntry[] = [];
 let INDEX: Record<string, TagEntry[]> = {};
 let loaded = false;
 let loading: Promise<void> | null = null;
+let KO_RAW: Record<string, string[]> = {};
+/** 한글 검색판. ★처음 한글을 칠 때 한 번 만든다 (영어만 쓰면 안 만든다) */
+let KO: { t: TagEntry; keys: { word: string; flat: string; parts: string[] }[] }[] | null = null;
 
 export const tagsLoaded = () => loaded;
 
@@ -68,11 +74,18 @@ export function loadTags(): Promise<void> {
       }
     };
     // ★★두 파일이 **정본**이다. 백엔드의 `search_tags` 도 같은 둘을 읽는다 (위 ★★주)
-    const [tags, EXTRA] = await Promise.all([grab("/tags.json"), grab("/tags-extra.json")]);
+    const [tags, EXTRA, ko] = await Promise.all([
+      grab("/tags.json"),
+      grab("/tags-extra.json"),
+      // ★없어도 영어 검색은 돈다. 실패하면 `grab` 이 빈 배열을 주고, 배열에는 태그 이름의 키가 없다
+      grab("/tags-ko.json") as unknown as Promise<Record<string, string[]>>,
+    ]);
+    KO_RAW = ko;
     const index: Record<string, TagEntry[]> = {};
     const seen = new Set<string>();
     for (const t of tags) {
       t._lower = norm(t.label);
+      t.ko = ko[t.value]?.[0];
       seen.add(t._lower);
       (index[t._lower[0]] ||= []).push(t);
     }
@@ -89,9 +102,48 @@ export function loadTags(): Promise<void> {
   return loading;
 }
 
+const HANGUL = /[가-힣ㄱ-ㅎㅏ-ㅣ]/;
+const squeeze = (s: string) => s.replace(/ /g, "");
+
+/** 검색할 만큼 쳤나. 영어는 두 글자부터, 한글은 완성된 한 글자부터 (`눈` · `귀` 도 태그가 된다) */
+export const queryReady = (q: string) => q.length >= 2 || /^[가-힣]$/.test(q);
+
+/** 한글 키워드 검색. ★낱말 시작만 본다 (중간까지 보면 `장발` 에 `심장발작` 이 걸린다).
+ *  키워드 전체가 같은 것 → 앞부터 일치 → 낱말 시작 차례이고, 그 안에서는 사전 차례(게시물 수)다.
+ *  ★띄어쓰기는 안 가린다 (`긴머리` 로 `긴 머리` 를 찾는다). */
+function koScan(q: string, max: number, out: TagEntry[], pred?: (t: TagEntry) => boolean) {
+  KO ??= ALL.flatMap((t) => {
+    const raw = KO_RAW[t.value];
+    if (!raw?.length) return [];
+    const keys = [...raw[0].split(", "), ...raw.slice(1)].map((word) => {
+      const n = norm(word);
+      return { word, flat: squeeze(n), parts: n.split(" ") };
+    });
+    return [{ t, keys }];
+  });
+  const flat = squeeze(q);
+  const hits: { t: TagEntry; rank: number; word: string }[] = [];
+  for (const { t, keys } of KO) {
+    if (pred && !pred(t)) continue;
+    let rank = 3;
+    let word = "";
+    for (const k of keys) {
+      const r = k.flat === flat ? 0 : k.flat.startsWith(flat) ? 1 : k.parts.some((p) => p.startsWith(flat)) ? 2 : 3;
+      if (r < rank) [rank, word] = [r, k.word];
+    }
+    if (rank < 3) hits.push({ t, rank, word });
+  }
+  hits.sort((a, b) => a.rank - b.rank);     // ★안정 정렬이라 같은 칸에서는 사전 차례가 남는다
+  for (const { t, word } of hits.slice(0, max - out.length)) {
+    const rest = (t.ko ?? "").split(", ").filter((w) => w !== word);
+    out.push({ ...t, koHit: [word, ...rest].join(", ") });
+  }
+}
+
 /** 두 단계 검색: 첫 글자 인덱스(앞부터 일치) → 모자라면 전체(포함).
  *  `pred` 를 주면 그것을 통과한 항목만 센다 (종류로 거를 때). */
 function scan(q: string, max: number, out: TagEntry[], pred?: (t: TagEntry) => boolean) {
+  if (HANGUL.test(q)) koScan(q, max, out, pred);
   for (const t of INDEX[q[0]] ?? []) {
     if (out.length >= max) return;
     if (t._lower!.startsWith(q) && (!pred || pred(t)) && !out.includes(t)) out.push(t);
@@ -121,7 +173,7 @@ export function searchTags(
   max = 15,
   opt?: { /** 작가 결과에 `artist:` 를 달까 (`useUi.artistPrefix`) — 기본 켬 */ artistPrefix?: boolean },
 ): TagEntry[] {
-  if (!query || query.length < 2) return [];
+  if (!queryReady(query)) return [];
   const out: TagEntry[] = [];
   // ① 글자 그대로 — `meta:novel era` 처럼 콜론이 이름의 일부인 태그가 먼저다
   scan(norm(query), max, out);
@@ -136,7 +188,7 @@ export function searchTags(
   // ② 접두어 뒤의 이름으로 **그 종류만** 뒤진다. 넣을 값에는 접두어를 도로 붙인다 —
   //    고르는 순간 `artist:` 가 사라지면 사용자가 친 뜻이 바뀐다
   const m = TYPE_PREFIX.exec(query);
-  if (m && m[2].length >= 2 && out.length < max) {
+  if (m && queryReady(m[2]) && out.length < max) {
     const type = m[1].toLowerCase();
     const found: TagEntry[] = [];
     scan(norm(m[2]), max - out.length, found, (t) => t.type === type);
@@ -146,6 +198,22 @@ export function searchTags(
       out.push(p);
     }
   }
+  return out;
+}
+
+/** 목록에서 강조할 자리 — 친 말과 같은 글자만 켠다. 검색과 같이 대소문자·밑줄·띄어쓰기를 안 가린다 */
+export function markParts(text: string, query: string): { s: string; on: boolean }[] {
+  const chars = [...squeeze(norm(query.replace(TYPE_PREFIX, "$2")))];
+  if (!chars.length) return [{ s: text, on: false }];
+  const re = new RegExp(chars.map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[ _]*"), "gi");
+  const out: { s: string; on: boolean }[] = [];
+  let at = 0;
+  for (const m of text.matchAll(re)) {
+    if (m.index > at) out.push({ s: text.slice(at, m.index), on: false });
+    out.push({ s: m[0], on: true });
+    at = m.index + m[0].length;
+  }
+  if (at < text.length) out.push({ s: text.slice(at), on: false });
   return out;
 }
 

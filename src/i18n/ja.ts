@@ -662,6 +662,7 @@ export const ja: Dict = {
     log: "ログを開く",
     logHint: "不具合のときはこのファイルをお送りください (logs/peropix.log)",
     support: "バグ報告 / 要望",
+    tagsKoCredit: "タグの韓国語データ: danbooru-tags-kr (CC BY-SA 4.0)",
     notifySound: "音でも通知",
     notifyVolume: "音量",
     notifyTest: "試聴",
