@@ -107,8 +107,9 @@ export function loadTags(): Promise<void> {
 const HANGUL = /[가-힣ㄱ-ㅎㅏ-ㅣ]/;
 const squeeze = (s: string) => s.replace(/ /g, "");
 
-/** 검색할 만큼 쳤나. 영어는 두 글자부터, 한글은 완성된 한 글자부터 (`눈` · `귀` 도 태그가 된다) */
-export const queryReady = (q: string) => q.length >= 2 || /^[가-힣]$/.test(q);
+/** 검색할 만큼 쳤나. 영어는 두 글자부터, 한글은 완성된 한 글자부터 (`눈` · `귀` 도 태그가 된다).
+ *  ★가중치(`1.5`)를 치는 중에는 찾지 않는다 */
+export const queryReady = (q: string) => (q.length >= 2 && !/^-?\d*\.\d*$/.test(q)) || /^[가-힣]$/.test(q);
 
 /** 한글 키워드 검색. ★낱말 시작만 본다 (중간까지 보면 `장발` 에 `심장발작` 이 걸린다).
  *  키워드 전체가 같은 것 → 앞부터 일치 → 낱말 시작 차례이고, 그 안에서는 사전 차례(게시물 수)다.
@@ -242,7 +243,8 @@ export const underscoresToSpaces = (tag: string) =>
  *  ★★이름 안의 괄호는 태그 글자다 (사용자 지적 2026-11-04: *"괄호를 넣으면 바로 중단되던데"*).
  *    사전의 2만여 개가 `캐릭터명_(작품명)` 꼴인데, 괄호가 늘 경계라서 `(` 를 치는 순간 낱말이 비어 목록이 닫혔다.
  *    경계로 남는 것은 앞에 글자가 없는 여는 괄호(`(long_hair`)와 짝이 없는 닫는 괄호다.
- *  ★이름 괄호 안에는 다른 기호도 온다 (`excalibur_(fate/stay_night)`). */
+ *  ★★기호는 맞는 태그가 있을 때만 넘어간다 (사용자 결정 2026-11-04). `fate/gr` · `d.va` · `love_live!` 는 통째로 찾고,
+ *    맞는 것이 없으면 기호 뒤부터 찾는다 (`source#sm` · `a girl. sm`). 그래서 사전이 낱말 자르기에 관여한다. */
 export function currentWord(value: string, cursor: number) {
   // 어퍼스트로피도 태그 글자다 (`another's` 처럼 쓰는 태그가 있다)
   const isTagChar = (c: string) => /[\p{L}\p{N}_\-\s':]/u.test(c);
@@ -264,18 +266,26 @@ export function currentWord(value: string, cursor: number) {
     from--;
   }
   // 괄호의 짝은 앞에서부터 봐야 알 수 있다
-  let start = from;
-  let depth = 0;
-  for (let i = from; i < cursor; i++) {
-    const ch = value[i];
-    if (ch === "(") {
-      if (value.substring(start, i).trim()) depth++;
-      else start = i + 1;
-    } else if (ch === ")") {
-      if (depth) depth--;
-      else start = i + 1;
-    } else if (!depth && !isTagChar(ch)) start = i + 1;
-  }
+  const nameStart = (at: number) => {
+    let s = at;
+    let depth = 0;
+    for (let i = at; i < cursor; i++) {
+      if (value[i] === "(") {
+        if (value.substring(s, i).trim()) depth++;
+        else s = i + 1;
+      } else if (value[i] === ")") {
+        if (depth) depth--;
+        else s = i + 1;
+      }
+    }
+    return s;
+  };
+  const starts = [nameStart(from)];
+  for (let i = from; i < cursor; i++)
+    if (!isTagChar(value[i]) && value[i] !== "(" && value[i] !== ")") starts.push(nameStart(i + 1));
+  const start =
+    starts.slice(0, -1).find((s) => searchTags(value.substring(s, cursor).trim(), 1).length) ??
+    starts[starts.length - 1];
   let end = cursor;
   while (end < value.length && (value[end] === " " || value[end] === "\t")) end++;
   const head = value.substring(start, cursor);
