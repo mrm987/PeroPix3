@@ -29,6 +29,7 @@ from datetime import datetime
 from pathlib import Path
 
 from durable import write_synced
+import rebuild
 import recordsdb
 import thumbs
 import trash
@@ -311,6 +312,56 @@ class Store:
             self._recovered[ws] = str(spec.get("updatedAt") or "")
             print(f"[워크스페이스] {ws}: {SPEC_NAME} 이 깨져 사본({spec.get('updatedAt')})으로 되살렸습니다")
             return spec
+
+    def _rebuild_plan(self, ws: str) -> tuple[dict, dict]:
+        d = self.dir_of(ws)
+        def read_env(r: dict) -> dict | None:
+            return recordsdb.get(d, r["key"]).get("env") if r.get("key") else None
+        return rebuild.build(ws, self.live_records(ws), read_env, self._last_stars(d))
+
+    def rebuild_preview(self, ws: str) -> dict:
+        """다시 만들면 무엇이 돌아오나 — 파일은 안 건드린다. 화면의 안내 문구가 이 수를 쓴다."""
+        return self._rebuild_plan(ws)[1]
+
+    def rebuild(self, ws: str) -> dict:
+        """깨진 `workspace.json` 을 그림 기록으로 다시 쓴다 (`rebuild.py`).
+        ★★**읽히는 파일은 절대 덮어쓰지 않는다** — 이 창구의 재료는 원본보다 언제나 적다.
+        ★깨진 원본은 베껴 둔다 (`_recover` 와 같다). 그림·색인은 안 건드린다."""
+        d = self.dir_of(ws)
+        p = d / SPEC_NAME
+        with self.locked(ws):
+            if not p.is_file() or self._readable(p):
+                raise ValueError(f"{ws}: {SPEC_NAME} 이 깨진 상태가 아닙니다")
+            spec, counts = self._rebuild_plan(ws)
+            if not counts["images"]:
+                raise ValueError(f"{ws}: 다시 만들 그림 기록이 없습니다")
+            (d / f"{SPEC_NAME}.broken-{datetime.now():%Y%m%d-%H%M%S}").write_bytes(p.read_bytes())
+            spec["updatedAt"] = datetime.now().isoformat(timespec="seconds")
+            _write_durable(d / (SPEC_NAME + ".tmp"), p, json.dumps(spec, ensure_ascii=False, indent=2).encode("utf-8"))
+            print(f"[워크스페이스] {ws}: 그림 기록으로 다시 만들었습니다 {counts}")
+            return counts
+
+    @staticmethod
+    def _readable(p: Path) -> bool:
+        try:
+            _read_spec(p)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _last_stars(d: Path) -> list[str]:
+        """`stars.jsonl` 의 마지막 줄 — 별표의 이력이다 (`STARS_NAME`)."""
+        p = d / STARS_NAME
+        if not p.is_file():
+            return []
+        lines = p.read_bytes().splitlines()
+        if not lines:
+            return []
+        try:
+            return [str(f) for f in json.loads(lines[-1].decode("utf-8")).get("starred") or []]
+        except ValueError:
+            return []
 
     def take_recovered(self, ws: str) -> str | None:
         """이 워크스페이스를 사본으로 되살렸으면 그 사본의 시각을 **한 번** 돌려준다 — 화면이 알릴 재료다."""

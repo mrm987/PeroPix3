@@ -1532,6 +1532,21 @@ async def put_workspace(ws: str, body: SpecBody):
         raise HTTPException(409, str(e))
 
 
+@app.get("/api/workspaces/{ws}/rebuild")
+async def rebuild_preview(ws: str):
+    """깨진 `workspace.json` 을 그림 기록으로 다시 만들면 무엇이 돌아오나 — 안내 창이 쓴다 (파일은 안 건드린다)."""
+    return await asyncio.to_thread(store.rebuild_preview, ws)
+
+
+@app.post("/api/workspaces/{ws}/rebuild")
+async def rebuild_workspace(ws: str):
+    """★깨진 파일에만 먹는다. 읽히는 파일이면 400 이고 그대로 둔다 (`Store.rebuild`)."""
+    try:
+        return await asyncio.to_thread(store.rebuild, ws)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.post("/api/workspaces/{ws}/rename")
 async def rename_workspace(ws: str, body: dict):
     new = safe_name(str(body.get("name", "")).strip())

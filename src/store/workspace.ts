@@ -5,7 +5,7 @@ import { useSceneFocus } from "./sceneFocus";
 import { usePrompt, defaultBase, defaultUc, type Char, type Thumb } from "./prompt";
 import { t } from "../i18n";
 import { toast, undoToast } from "./toast";
-import { ask } from "./ask";
+import { askPick } from "./ask";
 import { withBusy } from "./busy";
 import { clearUndo, dropUndoZone, pushUndo } from "../lib/undo";
 import { uniqueName } from "../lib/uniqueName";
@@ -443,20 +443,49 @@ function noteRecovered(name: string, at: string | null | undefined) {
   toast(t("gate.recovered", { name, at: at.replace("T", " ") }), "warn");
 }
 
-/** 파일이 깨졌고 사본도 없을 때의 안내 — ★할 수 있는 것을 말하고, 그 파일이 있는 폴더를 열어 준다 */
+/** 파일이 깨졌고 사본도 없을 때의 안내 — ★할 수 있는 것을 말한다: 그림 기록으로 다시 만들기 · 그 파일이 있는 폴더 열기.
+ *  ★★**누르면 무슨 일이 생기는지를 이 창이 전부 말한다** (사용자 지시 2026-11-04). 되찾는 것은 실제 수로, 되찾지
+ *    못하는 것은 전부 적는다 (`backend/rebuild.py` 의 머리 주석과 같아야 한다). */
 async function explainCorrupt(name: string, why: string) {
-  const open = await ask({
+  const url = `/api/workspaces/${encodeURIComponent(name)}/rebuild`;
+  const plan = await api<{ images: number; tabs: number; groups: number; cells: number; noPrompt: number; stars: number }>(url).catch(() => null);
+  const can = !!plan && plan.images > 0;
+  const path = why.slice(why.indexOf(": ") + 2);
+  const pick = await askPick({
     title: t("gate.corruptTitle", { name }),
-    body: t("gate.corruptBody", { path: why.slice(why.indexOf(": ") + 2) }),
-    ok: t("gate.corruptOpen"),
+    body: [
+      t("gate.corruptBody"),
+      ...(can
+        ? [
+            t("gate.rebuildBody", { ...plan, button: t("gate.rebuild") }),
+            ...(plan.noPrompt ? [t("gate.rebuildNoPrompt", { n: plan.noPrompt })] : []),
+          ]
+        : []),
+      t("gate.corruptBackup", { path }),
+    ].join("\n\n"),
+    options: [
+      ...(can ? [{ key: "rebuild", label: t("gate.rebuild") }] : []),
+      { key: "reveal", label: t("gate.corruptOpen") },
+    ],
     cancel: t("common.close"),
   });
-  if (!open) return;
-  await api("/api/files/reveal", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path: `${name}/workspace.json` }),
-  }).catch((e) => toast(String(e), "warn"));
+  if (pick === "reveal") {
+    await api("/api/files/reveal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: `${name}/workspace.json` }),
+    }).catch((e) => toast(String(e), "warn"));
+  }
+  if (pick === "rebuild") {
+    try {
+      await api(url, { method: "POST" });
+    } catch (e) {
+      toast(String(e), "warn");
+      return;
+    }
+    await useWs.getState().open(name);
+    toast(t("gate.rebuilt", { name }));
+  }
 }
 
 /** 지금 워크스페이스를 서버에서 **다시** 읽는다 — 화면이 든 spec 을 버린다 (409 · 옮기기 뒤). */
