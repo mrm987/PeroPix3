@@ -21,6 +21,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from durable import write_synced
+
 import trash
 
 KINDS = ("styles", "characters", "posesets")
@@ -72,7 +74,7 @@ class Cards:
         card["updatedAt"] = datetime.now().isoformat(timespec="seconds")
         p = self._path(kind, cid)
         tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(card, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_synced(tmp, json.dumps(card, ensure_ascii=False, indent=2))
         tmp.replace(p)
         return card
 

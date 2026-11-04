@@ -17,6 +17,8 @@ import json
 import os
 from pathlib import Path
 
+from durable import write_synced
+
 # config.json 에 섞여 있던 옛 자리 → 여기 이름
 MOVED = {"nai_token": ("nai_token",), "llm_key": ("llm", "key")}
 
@@ -60,7 +62,7 @@ class Secrets:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # ★임시 파일에 쓰고 바꿔치기한다 — 쓰다 죽어도 옛 파일이 남는다
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self._d, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_synced(tmp, json.dumps(self._d, ensure_ascii=False, indent=2))
         os.replace(tmp, self.path)
 
     def adopt(self, cfg: dict) -> bool:

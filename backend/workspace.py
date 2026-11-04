@@ -28,6 +28,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
+from durable import write_synced
 import recordsdb
 import thumbs
 import trash
@@ -156,15 +157,8 @@ def _read_spec(p: Path) -> dict:
 
 
 def _write_durable(tmp: Path, target: Path, data: bytes) -> None:
-    """임시 파일에 쓰고 **디스크에 내린 뒤** 이름을 바꾼다.
-
-    ★★`fsync` 가 없으면 블루스크린·정전에 파일이 빈다 (제보 2026-11-04: 블루스크린 뒤 `workspace.json`
-      을 못 읽어 그 워크스페이스가 안 열렸다). 바꿔치기는 앱이 죽을 때만 안전하다 — 이름 바꾸기는 파일 시스템
-      저널에 먼저 남는데 내용은 아직 메모리에 있을 수 있어, OS 가 죽으면 **이름만 새 파일이고 속이 빈다.**"""
-    with open(tmp, "wb") as f:
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
+    """임시 파일에 쓰고 **디스크에 내린 뒤** 이름을 바꾼다 (`durable.py` 머리 주석)."""
+    write_synced(tmp, data)
     Store._replace(tmp, target)
 
 

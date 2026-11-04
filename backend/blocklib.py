@@ -17,6 +17,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from durable import write_synced
+
 
 class BlockLib:
     def __init__(self, path: Path):
@@ -37,9 +39,7 @@ class BlockLib:
 
     def _write(self, items: list[dict]) -> None:
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(
-            json.dumps({"items": items}, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        write_synced(tmp, json.dumps({"items": items}, ensure_ascii=False, indent=2))
         tmp.replace(self.path)
 
     @staticmethod

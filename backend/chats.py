@@ -23,6 +23,7 @@ from datetime import datetime
 from pathlib import Path
 
 import trash
+from durable import write_synced
 
 _ID_OK = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 KEEP = 50
@@ -95,7 +96,7 @@ class Chats:
         }
         p = self._path(cid)
         tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+        write_synced(tmp, json.dumps(d, ensure_ascii=False))
         tmp.replace(p)
         self._trim()
         return {k: d[k] for k in ("id", "title", "workspace", "updatedAt", "session")}

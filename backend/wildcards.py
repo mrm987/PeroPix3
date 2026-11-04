@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from durable import write_synced
+
 #: 파일이 아직 없을 때 편집기에 채워 주는 맛보기. ★문법 셋(주석·인라인·중첩 호출)을 한 번씩
 #: 보여 준다. 도움말을 읽지 않아도 모양을 보고 따라 쓸 수 있게. 자유롭게 지워도 된다.
 #: ★v2 의 샘플 원문 그대로다 (`backend.py:6160-6179`). 줄 끝 주석이 문법을 그 자리에서
@@ -54,5 +56,5 @@ class Wildcards:
 
     def write(self, content: str) -> None:
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(content, encoding="utf-8")
+        write_synced(tmp, content)
         tmp.replace(self.path)
