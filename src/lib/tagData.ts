@@ -1,6 +1,6 @@
 /** Danbooru 태그 사전 — 페로픽스파이(`ui/src/tags/tagData.ts`)에서 이식.
  *
- *  `public/tags.json` 68,427개(2026-01-18 시점)를 **한 번** 읽어 첫 글자 인덱스를 만들고,
+ *  `public/tags.json` 79,437개(2026-10-01 목록, `scripts/update-tags.py`)를 **한 번** 읽어 첫 글자 인덱스를 만들고,
  *  `startsWith` → 모자라면 `includes` 두 단계로 찾는다.
  *
  *  ★사전은 **읽기만 한다.** 코드가 고치지 않는다.
@@ -24,7 +24,7 @@ export type TagEntry = {
  *    (`backend/agent.py`)는 `tags.json` **파일만** 읽어서, 여기 얹은 V5 태그와 `nsfw`/`sfw` 를
  *    「없다」고 판단했다 — 같은 정보에 창구가 둘로 갈린 자리였다.
  *    이제 **프런트와 백엔드가 같은 두 파일**을 읽는다 (`tags.json` + `tags-extra.json`).
- *  ★`tags.json`(단부루 덤프)은 **손대지 않는다.** 우리가 더하는 것만 따로 둔다.
+ *  ★`tags.json`(단부루 덤프)은 **손으로 고치지 않는다** (`scripts/update-tags.py` 만 쓴다). 우리가 더하는 것만 따로 둔다.
  *  ★`count` 가 0 인 것은 사용량 자료가 없다는 뜻이다 — 지어내지 않는다.
  */
 
