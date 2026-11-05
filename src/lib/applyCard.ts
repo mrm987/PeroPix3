@@ -32,11 +32,13 @@ type AnyCardLike = {
 /** 꽂는다. 못 하면 까닭을 돌려준다 (조수가 사용자에게 말할 수 있게).
  *
  *  ★`pick` 은 **스타일 카드에만** 쓴다 — 무엇을 덮을지 시트가 고른 결과다
- *    (`app/StylePickDialog`). 안 주면 둘 다 건다 (조수가 부르는 경로). */
+ *    (`app/StylePickDialog`). 안 주면 둘 다 건다 (조수가 부르는 경로).
+ *  ★`group` 은 **캐릭터 카드에만** 쓴다 — 그룹 머리에 놓았을 때 그 그룹의 id 다. */
 export function applyCard(
   kind: CardKind,
   c: AnyCardLike,
   pick: StylePick = PICK_BOTH,
+  group?: string,
 ): { error?: string; did?: string } {
   if (kind === "styles") {
     if (pick.prompt)
@@ -73,6 +75,7 @@ export function applyCard(
       thumb: thumbFromCard(c.thumb),
       // ★자리가 없으면 **꺼진 채로** 들어온다 — 담는 것은 막지 않고, 나가는 수만 지킨다
       on: canEnableChar(),
+      group,
     } as never);
     return { did: `캐릭터 「${c.name}」 을 넣었습니다` };
   }

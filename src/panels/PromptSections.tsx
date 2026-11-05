@@ -12,17 +12,19 @@ import {
   type Thumb,
 } from "../store/prompt";
 import type { DragImage } from "../cards/dragStore";
-import { modelCaps, toggleCharCapped, useGen } from "../store/gen";
+import { canEnableChar, modelCaps, toggleCharCapped, toggleGroupCapped, useGen } from "../store/gen";
 import { useUi } from "../store/ui";
-import { useDropZone, useDragSource, useDrag } from "../cards/dragStore";
+import { dragSourceStyle, useDropZone, useDragSource, useDrag } from "../cards/dragStore";
 import { flashStyle, useFlashAt } from "../store/ui";
 import { TYPE } from "../styles/type";
 import { applyCard, dropStyleCard } from "../lib/applyCard";
 import { zoneIcon } from "../cards/CardArt";
 import { DropVeil } from "../cards/DropVeil";
-import type { Block } from "../lib/blocks";
+import { useRename } from "../components/useRename";
+import { makeBlock, type Block } from "../lib/blocks";
+import type { CharGroup } from "../lib/charGroups";
 import type { CharCard, StyleCard } from "../store/cards";
-import { pickStyleOpts } from "../lib/styleOpts";
+import { PICK_BOTH, pickStyleOpts } from "../lib/styleOpts";
 import { PromptOptsBar } from "./PromptOpts";
 import { CharNo } from "./CharPositioner";
 
@@ -232,7 +234,8 @@ export function CharSection({
   /* ★★**배너를 끌어 다른 캐릭터 카드에 놓으면 차례가 옮겨진다** (사용자 지시 2026-11-03: *"캐릭터 카드간에
        위치 변경하는 것도 해당 동작으로도 가능하게"*). 끄는 몸짓은 덱에 저장할 때와 같고(`dir: "save"`),
        **어디에 놓느냐**만 다르다. 블록을 다른 카드로 옮길 때와 같은 규칙이다 (`BlockList` 의 `moveIn`).
-     ★카드의 위쪽 절반이면 그 앞, 아래쪽 절반이면 그 뒤다. 끼움선이 그 자리에 선다. */
+     ★카드의 위쪽 절반이면 그 앞, 아래쪽 절반이면 그 뒤다. 끼움선이 그 자리에 선다.
+     ★받는 카드가 다른 그룹에 있으면 그 그룹으로 들어간다 (`lib/charGroups` 의 `placeChar`). */
   const moveId = `sec-char-${ch.id}-move`;
   const move = useDropZone({
     id: moveId,
@@ -242,7 +245,7 @@ export function CharSection({
       if (!d.charId || d.charId === ch.id) return;
       const r = move.ref.current?.getBoundingClientRect();
       const y = useDrag.getState().pos.y;
-      moveChar(d.charId, r && y >= r.top + r.height / 2 ? index + 1 : index);
+      moveChar(d.charId, { near: ch.id, after: !!r && y >= r.top + r.height / 2 });
     },
   });
   /** 끼움선 자리 — 다른 캐릭터 카드를 이 카드 위에 끌고 있을 때만 (`before` · `after`) */
@@ -426,6 +429,269 @@ export function JoinZone() {
       {zoneIcon.add(20)}
       {/* ★그 위에 오면 **무슨 일이 일어나는지** 적는다 — 다른 자리와 같은 말투다 */}
       {over && <span style={{ fontSize: "var(--text-xs)" }}>{t("cards.dropJoin")}</span>}
+    </div>
+  );
+}
+
+/** 빈 캐릭터 칸을 만든다 — 「+ 캐릭터」와 그룹 머리의 「+」가 같이 쓴다.
+ *  ★자리가 없으면 **꺼진 채로** 만든다 — 칸을 만드는 것은 막지 않고,
+ *    나가는 수만 모델 상한에 맞춘다 (`store/gen.ts` 의 `canEnableChar`)
+ *  ★★**빈 블록 하나를 깔아 준다** (사용자 지시 2026-09-04). 예전에는 칸만 서고
+ *    블록이 0개라, 인물을 더한 사람이 「블록 추가」를 한 번 더 눌러야 적을 수 있었다.
+ *    ★블록 추가 단추가 만드는 것과 **같은 모양**이다 (`BlockList` 의 `data-block-add`) —
+ *      이름도 「새 블록」이고 펼친 채로 선다. 둘이 다르면 어느 쪽이 진짜인지 헷갈린다. */
+export function addBlankChar(tr: (k: string) => string, group?: string) {
+  usePrompt.getState().addChar({ on: canEnableChar(), prompt: [makeBlock(tr("block.newBlock"), [], { open: true })], group });
+}
+
+/** 캐릭터 카드를 **그룹 밖으로** 빼는 자리. 그룹 안의 카드를 끄는 동안에만 나타난다 */
+export function CharOutZone() {
+  const t = useI18n((s) => s.t);
+  const moveChar = usePrompt((s) => s.moveChar);
+  const { ref, over } = useDropZone({
+    id: "char-out",
+    kind: "characters",
+    dir: "save",
+    onDrop: (d) => d.charId && moveChar(d.charId, { group: null }),
+  });
+  const grouped = useDrag((s) => !!s.drag?.charId && !!usePrompt.getState().chars.find((c) => c.id === s.drag?.charId)?.group);
+  if (!grouped) return null;
+  return (
+    <div
+      ref={ref}
+      data-zone="char-out"
+      style={{
+        margin: "0 0 var(--sp-5)",
+        height: 46,
+        borderRadius: 12,
+        display: "grid",
+        placeItems: "center",
+        fontSize: "var(--text-xs)",
+        fontWeight: "var(--w-bold)",
+        // ★아직 아무것도 없는 자리라 판 자체가 밝다 (`JoinZone` 과 같다)
+        color: over ? "var(--accent-on)" : "var(--ink)",
+        background: over ? "var(--accent)" : "var(--surface)",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.35)",
+      }}
+    >
+      {t("cards.dropOutOfGroup")}
+    </div>
+  );
+}
+
+/** 캐릭터 프롬프트 그룹 — 카드 수십 개를 접어 두고 쓰기 위한 묶음 (사용자 지시 2026-11-05, `lib/charGroups`).
+ *
+ *  머리를 누르면 접히고, 끌면 그룹 위치가 옮겨진다. 접힌 그룹도 머리로 카드를 받는다.
+ *  ★접힘은 카드와 같은 곳에 든다 (`useUi.view.fold`, 열쇠가 그룹 id 다). */
+export function CharGroupSection({
+  g,
+  index,
+  last,
+  onThumb,
+}: { g: CharGroup; index: number; last: boolean } & SectionProps) {
+  const t = useI18n((s) => s.t);
+  const chars = usePrompt((s) => s.chars);
+  const { moveChar, moveGroup, removeGroup, renameGroup } = usePrompt.getState();
+  const members = chars.filter((c) => c.group === g.id);
+  const onCount = members.filter((c) => c.on).length;
+  const folded = useUi((u) => !!u.view.fold[g.id]);
+  const setFolded = (v: boolean) => useUi.getState().setView("fold", g.id, v);
+  const startDrag = useDragSource();
+  const rename = useRename(g.name, (v) => renameGroup(g.id, v));
+
+  /* 새로 만든 그룹으로 데려간다 (`PromptPanel` 의 「+ 그룹」). 조수가 이 안의 카드를 고쳤으면 펴서 보인다 —
+     접힌 동안 카드가 언마운트되어 있어 카드 쪽 강조가 돌지 않는다. */
+  const flash = useFlashAt<HTMLDivElement>(`prompt:${g.id}`);
+  const memberFlash = useUi((s) => members.some((c) => s.flashes.includes(`prompt:${c.id}`) || s.flashes.includes(`prompt:${c.name}`)));
+  useEffect(() => {
+    if (memberFlash && folded) setFolded(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberFlash]);
+
+  /** 덱에서 끌어온 캐릭터 카드를 머리에 놓으면 이 그룹에 추가된다. ★카드 위의 교체(`swap`)보다 앞선다 */
+  const add = useDropZone({
+    id: `char-group-${g.id}-add`,
+    kind: "characters",
+    prio: 3,
+    onDrop: (d) => applyCard("characters", d.card as CharCard, PICK_BOTH, g.id),
+  });
+  /** 다른 곳의 캐릭터 카드를 놓으면 이 그룹의 맨 뒤로 온다. ★안의 카드(prio 0)가 앞선다 — 그쪽은 그 카드의 앞뒤다 */
+  const take = useDropZone({
+    id: `char-group-${g.id}-take`,
+    kind: "characters",
+    dir: "save",
+    prio: -1,
+    onDrop: (d) => {
+      if (!d.charId || chars.find((c) => c.id === d.charId)?.group === g.id) return;
+      moveChar(d.charId, { group: g.id });
+    },
+  });
+  const takeOther = useDrag((s) => !!s.drag?.charId && usePrompt.getState().chars.find((c) => c.id === s.drag?.charId)?.group !== g.id);
+  /** 다른 그룹을 놓으면 이 그룹의 앞뒤로 옮겨진다 */
+  const reorderId = `char-group-${g.id}-order`;
+  const reorder = useDropZone({
+    id: reorderId,
+    kind: "charGroup",
+    onDrop: (d) => {
+      if (!d.charGroup || d.charGroup.id === g.id) return;
+      const r = reorder.ref.current?.getBoundingClientRect();
+      moveGroup(d.charGroup.id, !!r && useDrag.getState().pos.y >= r.top + r.height / 2 ? index + 1 : index);
+    },
+  });
+  const lineAt = useDrag((s) => {
+    if (s.over !== reorderId || !s.drag?.charGroup || s.drag.charGroup.id === g.id) return null;
+    const r = reorder.ref.current?.getBoundingClientRect();
+    return r && s.pos.y >= r.top + r.height / 2 ? "after" : "before";
+  });
+  const dragged = useDrag((s) => s.drag?.charGroup?.id === g.id);
+
+  return (
+    <div ref={flash.ref} data-char-group={g.id} data-folded={folded ? "" : undefined} style={{ ...flashStyle(flash.on), position: "relative" }}>
+      {lineAt && (
+        <div
+          data-drop-line
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            ...(lineAt === "before" ? { top: "calc(var(--sp-5) / -2 - 1px)" } : { bottom: "calc(var(--sp-5) / -2 - 1px)" }),
+            height: 2,
+            borderRadius: 1,
+            background: "var(--accent)",
+            zIndex: 33,
+            pointerEvents: "none",
+          }}
+        />
+      )}
+      <div
+        ref={(el) => {
+          take.ref.current = el;
+          reorder.ref.current = el;
+        }}
+        style={{
+          position: "relative",
+          marginBottom: "var(--sp-5)",
+          border: "1px solid var(--line)",
+          borderRadius: "var(--r-4)",
+          background: "var(--bg)",
+          overflow: "hidden",
+          opacity: dragged ? 0.4 : 1,
+        }}
+      >
+        <div
+          ref={add.ref}
+          data-char-group-head
+          onPointerDown={(e) =>
+            startDrag(e, { dir: "apply", kind: "charGroup", charGroup: { id: g.id, name: g.name } }, undefined, () => setFolded(!folded))
+          }
+          style={{
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--sp-2)",
+            minHeight: 36,
+            padding: "var(--sp-2) 8px var(--sp-2) var(--sp-3)",
+            background: "var(--panel)",
+            borderBottom: folded ? undefined : "1px solid var(--line)",
+            cursor: "grab",
+            ...dragSourceStyle,
+          }}
+        >
+          <span
+            style={{
+              display: "grid",
+              flexShrink: 0,
+              color: "var(--ink-faint)",
+              transform: folded ? "rotate(-90deg)" : undefined,
+              transition: "transform 120ms ease",
+            }}
+          >
+            {Icon.chevronDown14}
+          </span>
+          {rename.editing ? (
+            <input
+              data-char-group-rename
+              {...rename.inputProps}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                background: "var(--bg)",
+                border: "1px solid var(--line)",
+                borderRadius: "var(--r-1)",
+                padding: "0 4px",
+                color: "var(--ink)",
+                ...TYPE.label,
+              }}
+            />
+          ) : (
+            <span
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                rename.toggle();
+              }}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                ...TYPE.label,
+                color: onCount ? "var(--ink)" : "var(--ink-faint)",
+              }}
+            >
+              {g.name}
+            </span>
+          )}
+          <span data-char-group-count style={{ flexShrink: 0, ...TYPE.meta, color: "var(--ink-faint)", fontVariantNumeric: "tabular-nums" }}>
+            {onCount}/{members.length}
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <BannerBtn title={t("cards.moveCharUp")} off={index === 0} mark="data-group-up" onClick={() => moveGroup(g.id, index - 1)}>
+              {Icon.chevronUp12}
+            </BannerBtn>
+            <BannerBtn title={t("cards.moveCharDown")} off={last} mark="data-group-down" onClick={() => moveGroup(g.id, index + 2)}>
+              {Icon.chevronDown12}
+            </BannerBtn>
+            <BannerBtn
+              title={t("cards.addCharToGroup")}
+              mark="data-group-add-char"
+              onClick={() => {
+                setFolded(false);
+                addBlankChar(t, g.id);
+              }}
+            >
+              {Icon.plus12}
+            </BannerBtn>
+            <BannerBtn mark="data-rename-btn" title={t("cards.rename")} onClick={rename.toggle}>
+              {Icon.pencil}
+            </BannerBtn>
+            <BannerBtn
+              title={onCount ? t("cards.groupAllOff") : t("cards.groupAllOn")}
+              mark="data-group-toggle"
+              onClick={() => toggleGroupCapped(g.id)}
+            >
+              {onCount ? Icon.dotOn : Icon.dotOff}
+            </BannerBtn>
+            <BannerBtn title={t("cards.removeGroup")} mark="data-group-remove" onClick={() => removeGroup(g.id)}>
+              {Icon.close12}
+            </BannerBtn>
+          </span>
+          {add.active && <DropVeil over={add.over} label={t("cards.dropIntoGroup")} name="group-add" />}
+        </div>
+        {!folded && (
+          <div style={{ padding: "var(--sp-3) var(--sp-3) 0" }}>
+            {members.map((ch, i) => (
+              <CharSection key={ch.id} ch={ch} index={i} last={i === members.length - 1} onThumb={onThumb} />
+            ))}
+            {!members.length && (
+              <div style={{ padding: "0 0 var(--sp-3)", textAlign: "center", ...TYPE.meta, color: "var(--ink-faint)" }}>
+                {t("cards.groupEmpty")}
+              </div>
+            )}
+          </div>
+        )}
+        {takeOther && <DropVeil over={take.over} label={t("cards.dropIntoGroup")} name="group-take" />}
+      </div>
     </div>
   );
 }

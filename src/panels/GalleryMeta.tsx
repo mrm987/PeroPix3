@@ -317,6 +317,8 @@ function applyMetaInner(m: ImageMeta, pick: MetaPick) {
     base: pick.prompt ? block("Prompt", m.prompt) : p.base,
     baseUc: pick.uc ? block("UC", m.negative) : p.baseUc,
     chars: pick.characters ? (pick.append ? [...p.chars, ...chars] : chars) : p.chars,
+    // ★카드를 통째로 갈 때만 그룹도 비운다. 안 그러면 빈 그룹만 남는다
+    charGroups: pick.characters && !pick.append ? [] : p.charGroups,
   });
 
   // ★프롬프트가 통째로 바뀐다 — 좌측 패널을 펴고 알린다 (사용자 지시 2026-08-13)

@@ -19,7 +19,7 @@ export type DragDir = "apply" | "save" | "image";
  *  같아야 하나만 고치면 둘 다 고쳐진다 (드래그 구현을 두 벌 두지 않는다)
  *  ★`imageInput` = 미저장 그림. 파일이 없어 카드 그림(경로로 굳힌다)은 못 되고, 이미지 입력의
  *    베이스·Inference 칸만 받는다. 그 칸들은 `image` 도 함께 받는다 (`useDropZone` 의 `kind` 목록) */
-export type ZoneKind = CardKind | "image" | "blocklib" | "keep" | "imageInput";
+export type ZoneKind = CardKind | "image" | "blocklib" | "keep" | "imageInput" | "charGroup";
 
 /** 생성된 이미지 한 장 — 썸네일로 넣을 때 끌고 다니는 것.
  *  ★`url` 은 **썸네일** 주소다 (고스트 92×126, 위치 잡는 창 ≤396px — 원본이 필요 없다).
@@ -54,6 +54,8 @@ export type Dragging = {
   /** kind 가 characters · dir 가 save 일 때 — 끌고 있는 **프롬프트의 캐릭터 카드** (`Char.id`).
    *  덱에 놓으면 저장이고, 다른 캐릭터 카드에 놓으면 그 자리로 차례가 옮겨진다 (사용자 지시 2026-11-03). */
   charId?: string;
+  /** kind 가 charGroup 일 때 — 끌고 있는 **캐릭터 프롬프트 그룹**. 다른 그룹에 놓으면 그 앞뒤로 옮겨진다 */
+  charGroup?: { id: string; name: string };
   /** dir 가 save 일 때 — 섹션에 꽂혀 있던 그림. 카드는 **같은 tid 를 가리킬 뿐**이라
    *  바이트가 복사되지 않는다 */
   thumb?: SectionThumb | null;

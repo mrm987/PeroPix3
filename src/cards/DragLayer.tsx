@@ -6,6 +6,23 @@ import { useGen } from "../store/gen";
 import { normThumb, thumbUrl } from "../store/prompt";
 import { t } from "../i18n";
 
+/* ★★**받는 자리와 나머지의 차이가 한눈에 보여야 한다** (사용자 지적 2026-08-20:
+   "밝기 차이가 너무 약해서 밝아진건지 모르겠음"). 0.3 은 너무 옅었다.
+   ★한 번 0.78 까지 갔다가 0.3 으로 내린 적이 있는데(2026-08-19), 그때는 **받는 자리도
+     함께 덮여서** 어디에 놓는지가 안 보였던 것이다. 지금은 받는 영역이 이 겹 **위로**
+     올라오므로(z 31) 진하게 깔아도 가려지지 않는다 — 오히려 진해야 구분이 선다. */
+const dark = (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      zIndex: 30,
+      pointerEvents: "none",
+      background: "rgba(0,0,0,0.62)",
+    }}
+  />
+);
+
 /** 드래그 중의 화면 두 겹.
  *
  *  ★스포트라이트: 드래그가 시작되면 화면 전체를 어둡게 깔고, **드롭 가능한 곳만** 원래
@@ -21,45 +38,36 @@ export function DragLayer() {
   // ★블록 저장소는 **어둠을 깔지 않는다** — 놓을 자리가 프롬프트 패널 안의 목록들이라,
   //   화면을 덮으면 정작 어디에 놓는지가 안 보인다. 칩 끌기와 같은 작은 고스트만 띄운다.
   // ★보관함 **폴더**를 끌 때도 칩 하나면 된다 — 그림도 카드도 아니다
-  if (drag.kind === "blocklib" || drag.folder !== undefined) {
+  // ★캐릭터 프롬프트 **그룹**도 칩이다. 다만 받는 자리가 묶음 안의 다른 그룹이라 어둠은 깐다
+  if (drag.kind === "blocklib" || drag.folder !== undefined || drag.charGroup) {
     return (
-      <DragGhost
-        x={pos.x}
-        y={pos.y}
-        tilt={0}
-        opacity={1}
-        z={902}
-        style={{
-          padding: "2px 9px",
-          borderRadius: "var(--r-1)",
-          background: "var(--chip-bg)",
-          border: "1px solid var(--accent)",
-          color: "var(--ink)",
-          fontSize: "var(--text-2xs)",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {drag.folder !== undefined ? drag.folder.split("/").pop() : (drag.item?.label ?? drag.block?.label)}
-      </DragGhost>
+      <>
+        {drag.charGroup && dark}
+        <DragGhost
+          x={pos.x}
+          y={pos.y}
+          tilt={0}
+          opacity={1}
+          z={902}
+          style={{
+            padding: "2px 9px",
+            borderRadius: "var(--r-1)",
+            background: "var(--chip-bg)",
+            border: "1px solid var(--accent)",
+            color: "var(--ink)",
+            fontSize: "var(--text-2xs)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {drag.charGroup?.name ?? (drag.folder !== undefined ? drag.folder.split("/").pop() : (drag.item?.label ?? drag.block?.label))}
+        </DragGhost>
+      </>
     );
   }
 
   return (
     <>
-      {/* ★★**받는 자리와 나머지의 차이가 한눈에 보여야 한다** (사용자 지적 2026-08-20:
-          "밝기 차이가 너무 약해서 밝아진건지 모르겠음"). 0.3 은 너무 옅었다.
-          ★한 번 0.78 까지 갔다가 0.3 으로 내린 적이 있는데(2026-08-19), 그때는 **받는 자리도
-            함께 덮여서** 어디에 놓는지가 안 보였던 것이다. 지금은 받는 영역이 이 겹 **위로**
-            올라오므로(z 31) 진하게 깔아도 가려지지 않는다 — 오히려 진해야 구분이 선다. */}
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 30,
-          pointerEvents: "none",
-          background: "rgba(0,0,0,0.62)",
-        }}
-      />
+      {dark}
       {/* ★잔상은 **커서 오른쪽 아래**에 작게 매단다 (사용자 지시 2026-08-19) —
           커서 한가운데에 쥐고 있으면 정작 가리키는 자리를 자기가 덮는다 */}
       <DragGhost

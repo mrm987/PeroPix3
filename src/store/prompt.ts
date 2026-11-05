@@ -4,6 +4,7 @@ import { t } from "../i18n";
 import { kindColor } from "../cards/kindColor";
 import { nextCenter, type Center } from "../lib/charPos";
 import { moveTo } from "../lib/moveTo";
+import { arrangeChars, placeChar, type CharGroup, type CharPlace } from "../lib/charGroups";
 // ★모델이 자유 배치를 하는지에 따라 「이 자리가 찼나」의 판정이 다르다 (`charPos`).
 //   `gen` 과 서로 참조하게 되는데, 함수 안에서만 읽으므로 문제가 없다
 //   (`imageInput` ↔ `gen` 이 이미 같은 모양이다).
@@ -73,6 +74,8 @@ export type Char = {
    *  `center` 를 비우는 것이 아니라 `params.use_coords` 를 끄는 것이다 (공홈과 같다).
    *  ★들어올 때 `charPos.nextCenter` 가 빈 자리를 골라 준다. */
   center: Center;
+  /** 속한 그룹의 id. 없으면 그룹 밖이다 (`lib/charGroups`) */
+  group?: string;
 };
 
 /** 편집 대상 지정 — "base" 는 공통, 그 외는 캐릭터 id */
@@ -89,6 +92,8 @@ type S = {
    *  ★값이 없으면(옛 워크스페이스) **켜진 것**이다. */
   styleOn: boolean;
   chars: Char[];
+  /** 캐릭터 카드를 묶는 그룹 — 화면에 보이는 차례다 (`lib/charGroups`). 접힘은 `useUi.view.fold` 가 든다 */
+  charGroups: CharGroup[];
   /** ★★**순차 생성 모드** (사용자 결정 2026-09-15). 켜면 캐릭터 칸을 한 장에 모아 넣지 않고
    *  **켜 둔 인물을 한 명씩** 차례로 뽑는다 — 「슬롯을 하나씩만 켠 것처럼」이 규칙이다.
    *  ★★탭의 것이다 (사용자 지시: *"탭 안에서는 프롬프트를 공유하기 때문에 그게 자연스러움"*) —
@@ -118,10 +123,16 @@ type S = {
   /** 인물 차례 바꾸기 — ★차례가 곧 `characterPrompts[]` 의 차례다 (`use_order: true`).
    *  NAI 는 앞에 온 인물을 먼저 잡으므로 **누가 몇 번째인가가 그림에 남는다.** */
   stepChar: (id: string, dir: -1 | 1) => void;
-  /** 인물을 **틈 `gap`**(0..n)으로 옮긴다 — 배너를 끌어 다른 캐릭터 카드에 놓을 때 (`CharSection`) */
-  moveChar: (id: string, gap: number) => void;
+  /** 인물을 다른 카드의 앞뒤나 그룹으로 옮긴다 — 배너를 끌어 놓을 때 (`CharSection`) */
+  moveChar: (id: string, to: CharPlace) => void;
   renameChar: (id: string, name: string) => void;
   toggleChar: (id: string) => void;
+  addGroup: () => string;
+  /** 그룹만 없앤다. 카드는 그룹 밖으로 나온다 */
+  removeGroup: (id: string) => void;
+  renameGroup: (id: string, name: string) => void;
+  /** 그룹을 **틈 `gap`**(0..n)으로 옮긴다. 안의 카드도 나가는 차례가 함께 옮겨진다 */
+  moveGroup: (id: string, gap: number) => void;
   /** 배치 판에서 인물을 옮긴다 */
   setCenter: (id: string, center: Center) => void;
 
@@ -132,10 +143,11 @@ type S = {
     style?: { ref: string | null; name: string; color: [string, string]; thumb?: Thumb | null };
     styleOn?: boolean;
     chars?: Char[];
+    charGroups?: CharGroup[];
     seqChars?: boolean;
   }) => void;
   setStyleOn: (v: boolean) => void;
-  snapshot: () => Pick<S, "base" | "baseUc" | "style" | "styleOn" | "chars" | "seqChars">;
+  snapshot: () => Pick<S, "base" | "baseUc" | "style" | "styleOn" | "chars" | "charGroups" | "seqChars">;
   compiled: () => {
     prompt: string;
     uc: string;
@@ -181,6 +193,7 @@ export const usePrompt = create<S>((set, get) => ({
   style: { ref: null, name: t("prompt.defaultStyleName"), color: DEFAULT_STYLE_COLOR, thumb: null },
   styleOn: true,
   chars: [],
+  charGroups: [],
   seqChars: false,
 
   setSeqChars: (v) => {
@@ -223,8 +236,7 @@ export const usePrompt = create<S>((set, get) => ({
   addChar(c) {
     const chars = get().chars;
     const id = c.id ?? newId();
-    set({
-      chars: [
+    const added: Char[] = [
         ...chars,
         {
           id,
@@ -241,9 +253,10 @@ export const usePrompt = create<S>((set, get) => ({
           /* ★새로 들어오는 인물은 **빈 자리**에 세운다 (공홈 `sw` 사다리 — `lib/charPos`).
              전원을 한가운데 겹쳐 놓으면 좌표를 켜는 순간 셋이 한 칸에 서 있다. */
           center: c.center ?? nextCenter(chars.map((x) => x.center), freeformNow()),
+          group: c.group,
         },
-      ],
-    });
+    ];
+    set({ chars: arrangeChars(added, get().charGroups) });
     onEdit();
     return id;
   },
@@ -280,22 +293,47 @@ export const usePrompt = create<S>((set, get) => ({
    *  로 그 차례를 쓰므로(`backend/nai.py`), 그림에 실제로 남는 값이다.
    *  ★자리 좌표(`center`)는 **인물이 들고 다니는 값**이라 같이 따라간다 — 따로 옮기는 코드를 두지 말 것.
    *  ★배너를 끌어 다른 캐릭터 카드에 놓아도 옮겨진다 (`moveChar`, 사용자 지시 2026-11-03). 덱에 놓으면 저장이다.
-   *  ★셈은 `moveTo` 하나뿐이다 — `to` 는 칸이 아니라 **틈** 번호라 아래로 갈 때 `i + 2` 다. */
+   *  ★셈은 `moveTo` 하나뿐이다 — `to` 는 칸이 아니라 **틈** 번호라 아래로 갈 때 `i + 2` 다.
+   *  ★위아래 단추는 **같은 그룹 안에서만** 옮긴다. 그룹을 넘는 것은 배너 끌기다. */
   stepChar(id, dir) {
     const i = get().chars.findIndex((c) => c.id === id);
-    if (i < 0) return;
+    const next = get().chars[i + dir];
+    if (i < 0 || !next || next.group !== get().chars[i].group) return;
     const chars = moveTo(get().chars, i, dir < 0 ? i - 1 : i + 2);
     if (chars === get().chars) return;
     set({ chars });
     onEdit();
   },
 
-  moveChar(id, gap) {
-    const i = get().chars.findIndex((c) => c.id === id);
-    if (i < 0) return;
-    const chars = moveTo(get().chars, i, gap);
-    if (chars === get().chars) return;
-    set({ chars });
+  moveChar(id, to) {
+    set({ chars: arrangeChars(placeChar(get().chars, id, to), get().charGroups) });
+    onEdit();
+  },
+
+  addGroup() {
+    const groups = get().charGroups;
+    const id = "cg_" + Math.random().toString(36).slice(2, 8);
+    set({ charGroups: [...groups, { id, name: t("cards.groupN", { n: groups.length + 1 }) }] });
+    onEdit();
+    return id;
+  },
+
+  removeGroup(id) {
+    const charGroups = get().charGroups.filter((g) => g.id !== id);
+    set({ charGroups, chars: arrangeChars(get().chars, charGroups) });
+    onEdit();
+  },
+
+  renameGroup(id, name) {
+    set({ charGroups: get().charGroups.map((g) => (g.id === id ? { ...g, name } : g)) });
+    onEdit();
+  },
+
+  moveGroup(id, gap) {
+    const groups = get().charGroups;
+    const charGroups = moveTo(groups, groups.findIndex((g) => g.id === id), gap);
+    if (charGroups === groups) return;
+    set({ charGroups, chars: arrangeChars(get().chars, charGroups) });
     onEdit();
   },
 
@@ -331,6 +369,8 @@ export const usePrompt = create<S>((set, get) => ({
         center,
       };
     });
+    // ★없으면 그룹이 없는 것이다 (옛 워크스페이스). 카드는 그룹 밖에 지금 차례대로 놓인다
+    const charGroups = p.charGroups ?? [];
     set({
       // ★★**빈 목록과 「없음」은 다르다** (2026-08-19). 예전에는 빈 목록에도 기본 블록을
       //   채워서, 스타일 카드를 비워 두면 다시 열 때 기본값이 되살아났다. 없을 때만 채운다.
@@ -343,7 +383,8 @@ export const usePrompt = create<S>((set, get) => ({
       styleOn: p.styleOn !== false,
       /* ★옛 인물에는 **이름 해시로 뽑힌 색**이 박혀 있다 — 위에서 종류 색으로 맞춰 뒀다.
          안 맞추면 같은 종류인데 카드마다 색이 다른 화면이 남는다 */
-      chars,
+      chars: arrangeChars(chars, charGroups),
+      charGroups,
       // ★없으면 꺼진 것이다 — 옛 워크스페이스는 지금까지와 같이 한 장에 모아 뽑는다
       seqChars: p.seqChars === true,
     });
@@ -355,6 +396,7 @@ export const usePrompt = create<S>((set, get) => ({
     style: get().style,
     styleOn: get().styleOn,
     chars: get().chars,
+    charGroups: get().charGroups,
     seqChars: get().seqChars,
   }),
 

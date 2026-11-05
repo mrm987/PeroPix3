@@ -3,6 +3,7 @@ import { api, backendUrl, type TrashEntry } from "../lib/backend";
 import { imgUrl } from "../lib/imgUrl";
 import { useSceneFocus } from "./sceneFocus";
 import { usePrompt, defaultBase, defaultUc, type Char, type Thumb } from "./prompt";
+import type { CharGroup } from "../lib/charGroups";
 import { t } from "../i18n";
 import { toast, undoToast } from "./toast";
 import { askPick } from "./ask";
@@ -56,6 +57,8 @@ export type TabPrompt = {
    *    백엔드(`agent._set_prompt`)는 줄곧 `chars` 였으므로 **타입만 거짓말을 하고 있었고**,
    *    그 탓에 이 값을 읽으려는 코드가 타입 오류를 만났다 (적대 검토 2026-08-24). */
   chars?: Char[];
+  /** 캐릭터 카드를 묶는 그룹 (`lib/charGroups`). 없으면 그룹이 없는 것이다 (옛 워크스페이스) */
+  charGroups?: CharGroup[];
   /** ★순차 생성 모드 — **탭의 것**이다 (`store/prompt` 의 `seqChars` ★★주).
    *  없으면 꺼진 것이다 (옛 워크스페이스). */
   seqChars?: boolean;

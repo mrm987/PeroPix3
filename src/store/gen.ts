@@ -433,6 +433,24 @@ export function toggleCharCapped(id: string) {
   p.toggleChar(id);
 }
 
+/** 그룹의 온오프 — 안의 카드 스위치를 한꺼번에 바꾼다. 하나라도 켜져 있으면 전부 끄고, 전부 꺼져 있으면 전부 켠다
+ *  (씬 카드 잠금과 같은 규칙). ★켜기는 상한까지만 켜고 나머지는 꺼 둔 채 알린다. */
+export function toggleGroupCapped(id: string) {
+  const p = usePrompt.getState();
+  const members = p.chars.filter((c) => c.group === id);
+  const on = members.filter((c) => c.on);
+  if (on.length) {
+    for (const c of on) p.toggleChar(c.id);
+    return;
+  }
+  let cut = false;
+  for (const c of members) {
+    if (canEnableChar()) p.toggleChar(c.id);
+    else cut = true;
+  }
+  if (cut) toast(t("gen.charLimitHit", { max: charLimit() }), "warn");
+}
+
 /** ★상한이 **줄어드는 순간**(모델 전환)에 넘은 것을 뒤에서부터 끈다.
  *  넘은 상태 자체를 두지 않으므로 「초과분은 무시됩니다」 같은 경고가 필요 없다. */
 export function clampCharsToModel() {

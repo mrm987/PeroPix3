@@ -1,9 +1,9 @@
 import { useI18n } from "../i18n";
 import { useLayoutEffect, useRef, useState } from "react";
-import { compileBlocks, makeBlock } from "../lib/blocks";
+import { compileBlocks } from "../lib/blocks";
 import { usePrompt } from "../store/prompt";
-import { canEnableChar } from "../store/gen";
-import { StyleSection, CharSection, JoinZone, type SectionProps } from "./PromptSections";
+import { useUi } from "../store/ui";
+import { StyleSection, CharSection, CharGroupSection, CharOutZone, JoinZone, addBlankChar, type SectionProps } from "./PromptSections";
 import { BlockLibButton } from "../blocks/BlockDrawer";
 import { WildcardButton } from "./WildcardModal";
 import { TranslateButton } from "./TranslateButton";
@@ -25,7 +25,8 @@ let keptTop = 0;
 /** 좌측 패널 — 카드형 섹션 안에 블록 시퀀스.
  *  스타일 섹션(= NAI 의 공통 prompt/uc) 하나 + 캐릭터 섹션 여럿(= characterPrompts[]). */
 export function PromptPanel({ onThumb }: SectionProps) {
-  const { base, baseUc, chars, addChar } = usePrompt();
+  const { base, baseUc, chars, charGroups, addGroup } = usePrompt();
+  const loose = chars.filter((c) => !c.group);
   /** ★★끌고 있는 동안 **그 묶음 전체**가 어둠 위로 올라온다 (사용자 지적 2026-08-20).
    *  카드마다 올리면 카드 사이 여백이 어두운 채라 「영역」으로 안 읽힌다.
    *  ★그림 끌기(`image`)는 두 묶음 다 받는다 — 카드 배너에 꽂는 그림이라 어느 쪽이든 될 수 있다.
@@ -33,7 +34,7 @@ export function PromptPanel({ onThumb }: SectionProps) {
   const dragKind = useDrag((s) => (s.drag?.dir === "apply" ? s.drag.kind : null));
   const dragImg = useDrag((s) => s.drag?.kind === "image");
   /** 캐릭터 카드를 끌어 **차례를 옮기는 중** — 캐릭터 묶음이 받는 자리다 (`CharSection` 의 `move`) */
-  const charMove = useDrag((s) => s.drag?.dir === "save" && s.drag.kind === "characters" && !!s.drag.charId);
+  const charMove = useDrag((s) => (s.drag?.dir === "save" && s.drag.kind === "characters" && !!s.drag.charId) || !!s.drag?.charGroup);
   const t = useI18n((s) => s.t);
   const [preview, setPreview] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -108,33 +109,34 @@ export function PromptPanel({ onThumb }: SectionProps) {
             <CharStackedWarning />
             {/* ★★인물의 **차례**가 곧 `characterPrompts[]`·`char_captions[]` 의 차례이고
                 NAI 가 `use_order: true` 로 그 차례를 쓴다 (`backend/nai.py`) — 그림에 남는 값이다.
-                바꾸는 것은 배너의 **위아래 단추**와 **배너 끌기**다 (`CharSection`). */}
-            {chars.map((ch, i) => (
-              <CharSection key={ch.id} ch={ch} index={i} last={i === chars.length - 1} onThumb={onThumb} />
+                바꾸는 것은 배너의 **위아래 단추**와 **배너 끌기**다 (`CharSection`).
+                ★그룹이 위, 그룹 밖 카드가 아래다. `chars` 도 언제나 이 차례로 놓인다 (`lib/charGroups`). */}
+            {charGroups.map((g, i) => (
+              <CharGroupSection key={g.id} g={g} index={i} last={i === charGroups.length - 1} onThumb={onThumb} />
+            ))}
+            {loose.map((ch, i) => (
+              <CharSection key={ch.id} ch={ch} index={i} last={i === loose.length - 1} onThumb={onThumb} />
             ))}
 
             <JoinZone />
+            <CharOutZone />
 
-            <button
-              /* ★자리가 없으면 **꺼진 채로** 만든다 — 칸을 만드는 것은 막지 않고,
-                 나가는 수만 모델 상한에 맞춘다 (`store/gen.ts` 의 `canEnableChar`) */
-              /* ★★**빈 블록 하나를 깔아 준다** (사용자 지시 2026-09-04). 예전에는 칸만 서고
-                 블록이 0개라, 인물을 더한 사람이 「블록 추가」를 한 번 더 눌러야 적을 수 있었다.
-                 ★블록 추가 단추가 만드는 것과 **같은 모양**이다 (`BlockList` 의 `data-block-add`) —
-                   이름도 「새 블록」이고 펼친 채로 선다. 둘이 다르면 어느 쪽이 진짜인지 헷갈린다. */
-              onClick={() => addChar({ on: canEnableChar(), prompt: [makeBlock(t("block.newBlock"), [], { open: true })] })}
-              style={{
-                width: "100%",
-                padding: "var(--sp-3)",
-                border: "1px dashed var(--line)",
-                borderRadius: "var(--r-3)",
-                fontSize: "var(--text-2xs)",
-                color: "var(--ink-faint)",
-                background: "transparent",
-              }}
-            >
-              {t("cards.addChar")}
-            </button>
+            <div style={{ display: "flex", gap: "var(--sp-2)" }}>
+              <button data-add-char onClick={() => addBlankChar(t)} style={addBtn}>
+                {t("cards.addChar")}
+              </button>
+              <button
+                data-add-group
+                onClick={() => {
+                  const id = addGroup();
+                  // ★새 그룹은 그룹 밖 카드들 위에 생긴다. 카드가 많으면 안 보이므로 그리로 데려간다
+                  useUi.getState().reveal("left", `prompt:${id}`, true);
+                }}
+                style={addBtn}
+              >
+                {t("cards.addGroup")}
+              </button>
+            </div>
           </SeqCharsFrame>
         </Category>
 
@@ -188,6 +190,16 @@ export function PromptPanel({ onThumb }: SectionProps) {
     </div>
   );
 }
+
+const addBtn: React.CSSProperties = {
+  flex: 1,
+  padding: "var(--sp-3)",
+  border: "1px dashed var(--line)",
+  borderRadius: "var(--r-3)",
+  fontSize: "var(--text-2xs)",
+  color: "var(--ink-faint)",
+  background: "transparent",
+};
 
 /** 그릇 — 이름표 한 줄 + 그 안의 카드들. ★상자를 그리지 않는다 (평면) */
 function Pre({ label, text, accent }: { label: string; text: string; accent?: string }) {
