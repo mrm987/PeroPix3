@@ -241,7 +241,6 @@ export const en = {
     addGroup: "+ Group",
     groupN: "Group {n}",
     groupEmpty: "Empty",
-    addCharToGroup: "Add a character to this group",
     groupAllOn: "Turn all on",
     groupAllOff: "Turn all off",
     removeGroup: "Ungroup (the cards move out of the group)",

@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { compileBlocks } from "../lib/blocks";
 import { usePrompt } from "../store/prompt";
 import { useUi } from "../store/ui";
-import { StyleSection, CharSection, CharGroupSection, CharOutZone, JoinZone, addBlankChar, type SectionProps } from "./PromptSections";
+import { StyleSection, CharSection, CharGroupSection, CharOutZone, JoinZone, addBlankChar, charAddBtn, type SectionProps } from "./PromptSections";
 import { BlockLibButton } from "../blocks/BlockDrawer";
 import { WildcardButton } from "./WildcardModal";
 import { TranslateButton } from "./TranslateButton";
@@ -122,7 +122,7 @@ export function PromptPanel({ onThumb }: SectionProps) {
             <CharOutZone />
 
             <div style={{ display: "flex", gap: "var(--sp-2)" }}>
-              <button data-add-char onClick={() => addBlankChar(t)} style={addBtn}>
+              <button data-add-char onClick={() => addBlankChar(t)} style={charAddBtn}>
                 {t("cards.addChar")}
               </button>
               <button
@@ -132,7 +132,7 @@ export function PromptPanel({ onThumb }: SectionProps) {
                   // ★새 그룹은 그룹 밖 카드들 위에 생긴다. 카드가 많으면 안 보이므로 그리로 데려간다
                   useUi.getState().reveal("left", `prompt:${id}`, true);
                 }}
-                style={addBtn}
+                style={charAddBtn}
               >
                 {t("cards.addGroup")}
               </button>
@@ -190,16 +190,6 @@ export function PromptPanel({ onThumb }: SectionProps) {
     </div>
   );
 }
-
-const addBtn: React.CSSProperties = {
-  flex: 1,
-  padding: "var(--sp-3)",
-  border: "1px dashed var(--line)",
-  borderRadius: "var(--r-3)",
-  fontSize: "var(--text-2xs)",
-  color: "var(--ink-faint)",
-  background: "transparent",
-};
 
 /** 그릇 — 이름표 한 줄 + 그 안의 카드들. ★상자를 그리지 않는다 (평면) */
 function Pre({ label, text, accent }: { label: string; text: string; accent?: string }) {

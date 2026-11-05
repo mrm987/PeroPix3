@@ -440,6 +440,17 @@ export function JoinZone() {
  *    블록이 0개라, 인물을 더한 사람이 「블록 추가」를 한 번 더 눌러야 적을 수 있었다.
  *    ★블록 추가 단추가 만드는 것과 **같은 모양**이다 (`BlockList` 의 `data-block-add`) —
  *      이름도 「새 블록」이고 펼친 채로 선다. 둘이 다르면 어느 쪽이 진짜인지 헷갈린다. */
+/** 「+ 캐릭터」·「+ 그룹」 버튼 모양 (패널 맨 아래와 그룹 안 맨 아래가 같다) */
+export const charAddBtn: React.CSSProperties = {
+  flex: 1,
+  padding: "var(--sp-3)",
+  border: "1px dashed var(--line)",
+  borderRadius: "var(--r-3)",
+  fontSize: "var(--text-2xs)",
+  color: "var(--ink-faint)",
+  background: "transparent",
+};
+
 export function addBlankChar(tr: (k: string) => string, group?: string) {
   usePrompt.getState().addChar({ on: canEnableChar(), prompt: [makeBlock(tr("block.newBlock"), [], { open: true })], group });
 }
@@ -652,16 +663,6 @@ export function CharGroupSection({
             <BannerBtn title={t("cards.moveCharDown")} off={last} mark="data-group-down" onClick={() => moveGroup(g.id, index + 2)}>
               {Icon.chevronDown12}
             </BannerBtn>
-            <BannerBtn
-              title={t("cards.addCharToGroup")}
-              mark="data-group-add-char"
-              onClick={() => {
-                setFolded(false);
-                addBlankChar(t, g.id);
-              }}
-            >
-              {Icon.plus12}
-            </BannerBtn>
             <BannerBtn mark="data-rename-btn" title={t("cards.rename")} onClick={rename.toggle}>
               {Icon.pencil}
             </BannerBtn>
@@ -688,6 +689,11 @@ export function CharGroupSection({
                 {t("cards.groupEmpty")}
               </div>
             )}
+            <div style={{ display: "flex", marginBottom: "var(--sp-3)" }}>
+              <button data-group-add-char onClick={() => addBlankChar(t, g.id)} style={charAddBtn}>
+                {t("cards.addChar")}
+              </button>
+            </div>
           </div>
         )}
         {takeOther && <DropVeil over={take.over} label={t("cards.dropIntoGroup")} name="group-take" />}

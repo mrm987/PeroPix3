@@ -241,7 +241,6 @@ export const ja: Dict = {
     addGroup: "+ グループ",
     groupN: "グループ {n}",
     groupEmpty: "空です",
-    addCharToGroup: "このグループにキャラクターを追加",
     groupAllOn: "すべてオン",
     groupAllOff: "すべてオフ",
     removeGroup: "グループ解除 (カードはグループの外に出ます)",

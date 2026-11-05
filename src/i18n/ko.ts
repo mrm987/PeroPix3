@@ -244,7 +244,6 @@ export const ko: Dict = {
     addGroup: "+ 그룹",
     groupN: "그룹 {n}",
     groupEmpty: "비어 있음",
-    addCharToGroup: "이 그룹에 캐릭터 추가",
     groupAllOn: "전부 켜기",
     groupAllOff: "전부 끄기",
     removeGroup: "그룹 해제 (카드는 그룹 밖으로 나옵니다)",
