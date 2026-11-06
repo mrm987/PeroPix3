@@ -160,21 +160,25 @@ function Crumb() {
   );
 }
 
-function WinBtn({
+export function WinBtn({
   children,
   onClick,
   title,
   danger,
+  mark,
 }: {
   children: ReactNode;
   onClick: () => void;
   title: string;
   danger?: boolean;
+  /** 표식 (`data-win-btn`) */
+  mark?: string;
 }) {
   const [hover, setHover] = useState(false);
   return (
     <button
       data-tip={title}
+      data-win-btn={mark}
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}

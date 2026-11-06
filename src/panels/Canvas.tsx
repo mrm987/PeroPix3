@@ -38,6 +38,8 @@ import { applyMetaParams, applyMetaVibes } from "./GalleryMeta";
 import { hasMeta } from "../lib/metaApply";
 import { CharPositioner } from "./CharPositioner";
 import { sendToEditor } from "../editor/sendTo";
+import { observeSize, raiseArea, useFloat, useWin } from "../lib/floatWin";
+import { SplitButton } from "../app/FloatWindow";
 
 /** 캔버스 — 씬 세트 줄 + 씬 무대 (마스크를 칠하는 동안에는 그 자리가 편집기다).
  *
@@ -93,6 +95,8 @@ function SceneStage() {
   const grip = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const side = laneSide === "right";
+  /** 이미지 프리뷰를 앱 밖 창으로 분리했나 — 그동안 여기는 그 창으로 보내는 줄과 씬뿐이다 (`lib/floatWin`) */
+  const previewOut = useFloat((s) => !!s.live.preview);
 
   /** 손잡이를 끄는 동안 크기를 따라 바꾼다 — 놓을 때 한 번만 저장한다(`commitLayout`) */
   const drag = (e: React.PointerEvent) => {
@@ -166,6 +170,16 @@ function SceneStage() {
     </div>
   );
 
+  if (previewOut)
+    return (
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <PreviewStrip />
+        <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex" }}>
+          <SceneLane />
+        </div>
+      </div>
+    );
+
   if (side)
     return (
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "row" }}>
@@ -189,11 +203,52 @@ function SceneStage() {
   );
 }
 
+/** 앱 밖 창에 그리는 이미지 프리뷰 */
+export function PreviewArea() {
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <ScenePreview />
+      <SceneActions floated />
+    </div>
+  );
+}
+
+/** 이미지 프리뷰를 분리한 동안 메인에 남는 줄 — 보고 있는 그림의 이름. 누르면 그 창이 앞으로 온다 */
+function PreviewStrip() {
+  const tr = useI18n((s) => s.t);
+  const file = useSceneFocus((s) => s.file);
+  return (
+    <button
+      data-float-strip="preview"
+      data-tip={tr("float.toFront", { name: tr("float.preview") })}
+      onClick={() => raiseArea("preview")}
+      style={{
+        height: 32,
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--sp-2)",
+        padding: "0 var(--sp-4)",
+        borderBottom: "1px solid var(--line)",
+        fontSize: "var(--text-2xs)",
+        color: "var(--ink-dim)",
+        textAlign: "left",
+      }}
+    >
+      {Icon.popOut}
+      <b style={{ fontWeight: "var(--w-semi)", flexShrink: 0 }}>{tr("float.preview")}</b>
+      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--ink-faint)" }}>
+        {file?.split("/").pop()}
+      </span>
+    </button>
+  );
+}
+
 /** 그림 **바로 아래** 한 줄 — 저장·강화·삭제·갤러리 보관.
  *
  *  ★싱글 화면이 없어지면서 갈 곳이 사라진 것들이라 여기로 옮겼다 (CLAUDE.md 의
  *    「시안에 없다고 지우면 안 되는 것이 있었다」 — 화면을 갈아 끼울 때마다 밟는 자리다). */
-function SceneActions() {
+function SceneActions({ floated }: { floated?: boolean }) {
   const tr = useI18n((s) => s.t);
   /** 씬을 오른쪽에 두는 모드인가 — 아래 여백이 그때만 필요하다 (반환 자리의 ★★주) */
   const vert = useUi((u) => u.laneSide === "right");
@@ -345,14 +400,15 @@ function SceneActions() {
        그것이 간격 노릇을 하는데, 세로 모드에서는 씬이 오른쪽으로 가 버려 이 줄이 곧
        하단바와 맞닿는다. 아래를 0 으로 둔 것은 그 전제 위의 값이었다. */
     <div
-      data-scene-actions={idle ? "idle" : "on"}
-      inert={idle}
       style={{
         flexShrink: 0,
-        padding: vert ? "var(--sp-3) var(--sp-4)" : "var(--sp-3) var(--sp-4) 0",
-        opacity: idle ? 0.4 : 1,
+        display: "flex",
+        gap: "var(--sp-2)",
+        // ★앱 밖 창도 이 줄 아래가 창 끝이다. 세로 모드와 같다
+        padding: vert || floated ? "var(--sp-3) var(--sp-4)" : "var(--sp-3) var(--sp-4) 0",
       }}
     >
+    <div data-scene-actions={idle ? "idle" : "on"} inert={idle} style={{ flex: 1, minWidth: 0, opacity: idle ? 0.4 : 1 }}>
       <ImageActions
         url={un ? `data:image/${un.preview.fmt};base64,${un.preview.b64}` : imgUrl(base, ws, file, rec?.ts)}
         name={pend ? (pend.unsaved ? tr("scenes.unsaved") : "") : un ? tr("scenes.unsaved") : file.split("/").pop() ?? file}
@@ -487,6 +543,9 @@ function SceneActions() {
           </>
         }
       />
+    </div>
+      {/* ★막힌 줄(`inert`) 밖이다. 고른 그림이 없어도 분리할 수 있어야 한다 */}
+      {!floated && <SplitButton area="preview" style={{ ...rowBtn, minWidth: 28, height: 26, justifyContent: "center", alignSelf: "flex-end" }} />}
       {enhance && <EnhanceDialog files={enhance} onClose={() => setEnhance(null)} />}
     </div>
   );
@@ -613,6 +672,7 @@ function ViewZoom() {
 
 function ScenePreview() {
   const tr = useI18n((s) => s.t);
+  const win = useWin();
   /** 큰 그림을 카드 커버로 끄는 출발점 (`dir: "image"`) */
   const startDrag = useDragSource();
   const { base } = useGen();
@@ -699,12 +759,11 @@ function ScenePreview() {
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
+    const ro = observeSize(el, () => {
       // ★`clientWidth/Height` — 테두리를 뺀 **안쪽**이다. 절대 배치의 기준과 같은 상자라야
       //   끌기 한계(`clampPan`)가 눈에 보이는 가장자리와 맞는다
       setBox({ w: el.clientWidth, h: el.clientHeight });
     });
-    ro.observe(el);
     return () => ro.disconnect();
   }, []);
   /** 장이 바뀌면 보던 자리를 놓는다 (그림마다 크기가 다르다).
@@ -783,9 +842,9 @@ function ScenePreview() {
     const fn = (e: WheelEvent) => {
       if (wheelIsOver(wheelRef.current, e)) onWheel.current(e);
     };
-    window.addEventListener("wheel", fn, { passive: false });
-    return () => window.removeEventListener("wheel", fn);
-  }, []);
+    win.addEventListener("wheel", fn, { passive: false });
+    return () => win.removeEventListener("wheel", fn);
+  }, [win]);
 
   return (
     <div

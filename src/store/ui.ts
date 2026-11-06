@@ -6,6 +6,7 @@ import { PICK_DROP, type MetaPick } from "../lib/metaApply";
 import { COLORS, type BlockColor } from "../lib/blocks";
 import { normTag } from "../lib/tagSearch";
 import { useEffect, useRef } from "react";
+import { areaOf, raiseArea, raiseMain, useFloat } from "../lib/floatWin";
 
 /** 모드 = 하단 네비의 자리. v2.x 의 모드 전환이 여기로 온다.
  *  싱글·세트는 모드가 아니라 캔버스 탭이므로 여기 없다. */
@@ -444,7 +445,13 @@ export const HEAD_MAX = 560;
 export const useUi = create<S>((set, get) => ({
   ...load(),
   mode: "generate",
-  setMode: (m) => set({ mode: m }),
+  /* ★★갤러리를 앱 밖 창으로 분리했으면 모드를 안 옮기고 그 창을 앞으로 낸다 (`lib/floatWin`).
+     ★다른 창에서 부른 모드 전환(「일괄 변환으로 보내기」 등)은 메인에서 일어나므로 메인을 앞으로 낸다. */
+  setMode: (m) => {
+    if (m === "gallery" && useFloat.getState().live.gallery) return raiseArea("gallery");
+    raiseMain();
+    set({ mode: m });
+  },
   positioning: false,
   setPositioning: (v) => set({ positioning: v }),
   setLaneSize: (n) => set({ laneSize: Math.min(LANE_MAX, Math.max(LANE_MIN, Math.round(n))) }),
@@ -500,6 +507,8 @@ export const useUi = create<S>((set, get) => ({
     get().commitLayout();
   },
   openAi: () => {
+    // ★앱 밖 창으로 분리했으면 그 창이 곧 열린 패널이다
+    if (useFloat.getState().live.ai) return raiseArea("ai");
     if (!get().aiCollapsed) return;
     set({ aiCollapsed: false });
     void import("./llm").then((m) => m.useLlm.getState().setUnread(false));
@@ -618,7 +627,11 @@ export const useUi = create<S>((set, get) => ({
     get().commitLayout();
   },
   settingsTab: null,
-  openSettings: (tab) => set({ settingsTab: tab }),
+  // ★설정은 메인에 뜬다 — 앱 밖 창은 작을 수 있다
+  openSettings: (tab) => {
+    raiseMain();
+    set({ settingsTab: tab });
+  },
   closeSettings: () => set({ settingsTab: null }),
   toggleLeft: () => {
     get().setFold("left", !get().leftCollapsed[get().mode]);
@@ -718,6 +731,13 @@ export const useUi = create<S>((set, get) => ({
     } catch {}
   },
 }));
+
+/** 이 키가 생성 화면의 단축키인가. 메인이면 생성 모드일 때, 앱 밖 창이면 생성 화면을 분리한 창일 때다.
+ *  ★씬·프롬프트를 분리하면 그 컴포넌트가 모드와 무관하게 떠 있다. 이 검사가 없으면 이미지 편집에서 누른 Del 이 씬의 그림을 지운다. */
+export function isGenerateKey(e: KeyboardEvent): boolean {
+  const from = areaOf(e.view as Window | null);
+  return from === "main" ? useUi.getState().mode === "generate" : from === "preview" || from === "scene" || from === "prompt";
+}
 
 /** 방금 바뀐 자리인가 — 강조 스타일을 붙일 때 쓴다.
  *  ★모양은 한 곳에서만 정한다 (`flashStyle`) — 자리마다 다르게 강조하면 학습 대상이 된다. */

@@ -7,6 +7,8 @@ import { ResizeHandle } from "../components/ResizeHandle";
 import { PanelCollapseButton } from "../components/PanelCollapseButton";
 import { useUi } from "../store/ui";
 import { useLlm } from "../store/llm";
+import { raiseArea, useFloat } from "../lib/floatWin";
+import { SplitButton } from "./FloatWindow";
 
 /* ★기둥·틀은 **가장 어두운 바탕**(`--bg`)이다 — 페로픽스파이는 `.params-panel` 에
    바탕색이 아예 없어 body 의 `--bg` 가 그대로 비친다 (실측 2026-08-04). 밝은 톤(`--panel`)은
@@ -91,6 +93,8 @@ export function Shell({
   /** 접힌 레일의 점 — 도는 중인가 · 접어 둔 사이에 끝났는가 (`Rail` 의 `dot`) */
   const aiBusy = useLlm((s) => s.sending);
   const aiUnread = useLlm((s) => s.unread);
+  /** AI 어시스턴트를 앱 밖 창으로 분리했나 — 그동안은 레일만 남고, 누르면 그 창이 앞으로 온다 */
+  const aiOut = useFloat((s) => !!s.live.ai);
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <TitleBar left={titleLeft} right={titleRight} />
@@ -100,7 +104,15 @@ export function Shell({
           갤러리 모드의 좌측 기둥처럼 타이틀바 밑부터 하단바 위까지 세로로 다 쓴다. */}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {ai &&
-          (aiCollapsed ? (
+          (aiOut ? (
+            <Rail
+              side="left"
+              label={t("ai.title")}
+              onExpand={() => raiseArea("ai")}
+              tip={t("float.toFront", { name: t("ai.title") })}
+              dot={aiBusy ? "busy" : null}
+            />
+          ) : aiCollapsed ? (
             /* ★★접어 두면 화면에 흔적이 없다 — 점 하나로 「도는 중」과 「끝났다」를 알린다
                  (사용자 지시 2026-08-26). 펴면 사라진다 (`useUi.toggleAi`). */
             <Rail
@@ -122,7 +134,12 @@ export function Shell({
                   borderRight: "1px solid var(--line)",
                 }}
               >
-                <PanelHeader side="left" title={t("ai.title")} onCollapse={toggleAi} />
+                <PanelHeader
+                  side="left"
+                  title={t("ai.title")}
+                  onCollapse={toggleAi}
+                  extra={<SplitButton area="ai" style={headBtn} />}
+                />
                 {ai}
               </section>
               <ResizeHandle
@@ -237,6 +254,17 @@ export function Shell({
     </div>
   );
 }
+
+/** 패널 머리에 얹는 작은 버튼 — 접기 버튼과 같은 크기다 */
+const headBtn: React.CSSProperties = {
+  width: 32,
+  height: 32,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "var(--ink-dim)",
+  flexShrink: 0,
+};
 
 /** 패널 머리 — ★접기 버튼은 **안쪽(가운데 쪽) 가장자리**에 둔다 (사용자 지시 2026-08-04).
  *  바깥 끝(앱의 좌우 끝)에 두면 창 조작 버튼처럼 보여 무엇을 접는 것인지 헷갈린다.

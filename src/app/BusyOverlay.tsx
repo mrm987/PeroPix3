@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useBusy } from "../store/busy";
+import { useWin } from "../lib/floatWin";
 
 /** 파일을 옮기는 동안 화면을 덮어 **조작을 막는다** (`store/busy` 의 ★★주).
  *
@@ -12,6 +13,7 @@ import { useBusy } from "../store/busy";
  *  ★움직임을 줄이라는 설정이면 도는 대신 흐리게만 (`globals.css` 의 `.busy-spin`). */
 export function BusyOverlay() {
   const label = useBusy((s) => s.label);
+  const win = useWin();
 
   useEffect(() => {
     if (!label) return;
@@ -19,9 +21,9 @@ export function BusyOverlay() {
       e.preventDefault();
       e.stopPropagation();
     };
-    window.addEventListener("keydown", eat, true);
-    return () => window.removeEventListener("keydown", eat, true);
-  }, [label]);
+    win.addEventListener("keydown", eat, true);
+    return () => win.removeEventListener("keydown", eat, true);
+  }, [label, win]);
 
   if (!label) return null;
   return (

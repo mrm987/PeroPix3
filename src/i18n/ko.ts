@@ -22,6 +22,14 @@ export const ko: Dict = {
     themeToDark: "어둡게",
   },
 
+  float: {
+    split: "새 창으로 분리",
+    close: "닫으면 메인 창으로 돌아갑니다",
+    toFront: "{name} 창을 앞으로",
+    preview: "이미지 프리뷰",
+    scene: "씬",
+  },
+
   status: {
     connecting: "연결 중",
     connected: "연결됨",

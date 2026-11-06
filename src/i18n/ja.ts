@@ -22,6 +22,14 @@ export const ja: Dict = {
     themeToDark: "ダーク",
   },
 
+  float: {
+    split: "新しいウィンドウに分離",
+    close: "閉じるとメインウィンドウに戻ります",
+    toFront: "{name}のウィンドウを前面へ",
+    preview: "画像プレビュー",
+    scene: "シーン",
+  },
+
   status: {
     connecting: "接続中",
     connected: "接続済み",

@@ -1,3 +1,4 @@
+import { useFloat } from "../lib/floatWin";
 import { create } from "zustand";
 import { api, type TrashEntry } from "../lib/backend";
 import { useWs } from "./workspace";
@@ -1087,7 +1088,8 @@ function saveSoon() {
 function endTurn() {
   useLlm.setState({
     sending: false,
-    unread: useLlm.getState().unread || useUi.getState().aiCollapsed,
+    // ★앱 밖 창으로 분리했으면 접혀 있어도 보고 있는 것이다
+    unread: useLlm.getState().unread || (useUi.getState().aiCollapsed && !useFloat.getState().live.ai),
   });
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { Icon } from "../components/Icon";
 import { useStylePick } from "../store/stylePick";
+import { useWin } from "../lib/floatWin";
 import { useGen } from "../store/gen";
 import { GEN_OPT_KEYS, PROMPT_OPT_KEYS, styleOptRows, type StyleOpts, type StylePick } from "../lib/styleOpts";
 
@@ -15,6 +16,7 @@ import { GEN_OPT_KEYS, PROMPT_OPT_KEYS, styleOptRows, type StyleOpts, type Style
 export function StylePickDialog() {
   const cur = useStylePick((s) => s.cur);
   const answer = useStylePick((s) => s.answer);
+  const win = useWin();
   const t = useI18n((s) => s.t);
   const params = useGen((g) => g.params);
   const [pick, setPick] = useState<StylePick>({ prompt: true, gen: true });
@@ -30,9 +32,9 @@ export function StylePickDialog() {
       if (e.key === "Escape") answer(null);
       if (e.key === "Enter") answer(pick);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [cur, answer, pick]);
+    win.addEventListener("keydown", onKey);
+    return () => win.removeEventListener("keydown", onKey);
+  }, [cur, answer, pick, win]);
 
   if (!cur) return null;
   const promptRows = styleOptRows(params, cur.opts, "prompt");

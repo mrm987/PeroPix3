@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./Icon";
+import { useWin } from "../lib/floatWin";
 
 /** **우리가 그리는 드롭다운** (사용자 지시 2026-08-30).
  *
@@ -33,6 +34,7 @@ export function Dropdown({
   /** 판정·QA 가 잡는 표식 — `data-dropdown={mark}` */
   mark?: string;
 }) {
+  const win = useWin();
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0);
   /** 상자의 자리 — 목록을 어디에 붙일지는 목록을 **재고 나서** 정한다 (아래 `useLayoutEffect`) */
@@ -72,19 +74,20 @@ export function Dropdown({
       }
     };
     const away = () => setOpen(false);
-    document.addEventListener("pointerdown", down, true);
-    document.addEventListener("keydown", key);
-    window.addEventListener("scroll", away, true);
-    window.addEventListener("resize", away);
-    window.addEventListener("blur", away);
+    const doc = win.document;
+    doc.addEventListener("pointerdown", down, true);
+    doc.addEventListener("keydown", key);
+    win.addEventListener("scroll", away, true);
+    win.addEventListener("resize", away);
+    win.addEventListener("blur", away);
     return () => {
-      document.removeEventListener("pointerdown", down, true);
-      document.removeEventListener("keydown", key);
-      window.removeEventListener("scroll", away, true);
-      window.removeEventListener("resize", away);
-      window.removeEventListener("blur", away);
+      doc.removeEventListener("pointerdown", down, true);
+      doc.removeEventListener("keydown", key);
+      win.removeEventListener("scroll", away, true);
+      win.removeEventListener("resize", away);
+      win.removeEventListener("blur", away);
     };
-  }, [open]);
+  }, [open, win]);
 
   /* ★★**자리는 목록을 재고 나서 정한다.** 가로: 상자 아래, 아래가 모자라면 **위로 뒤집는다**.
      세로: 상자 오른쪽, 오른쪽이 모자라면 **왼쪽으로**. 그러고도 넘치면 안쪽으로 민다
@@ -95,8 +98,8 @@ export function Dropdown({
     if (!el || !anchor) return;
     el.focus();
     const r = el.getBoundingClientRect();
-    const W = window.innerWidth;
-    const H = window.innerHeight;
+    const W = win.innerWidth;
+    const H = win.innerHeight;
     let x: number;
     let y: number;
     if (vert) {
@@ -109,7 +112,7 @@ export function Dropdown({
     x = Math.max(8, Math.min(W - 8 - r.width, x));
     y = Math.max(8, Math.min(H - 8 - r.height, y));
     if (!pos || pos.x !== x || pos.y !== y) setPos({ x, y });
-  }, [open, anchor, pos, vert]);
+  }, [open, anchor, pos, vert, win]);
 
   const onListKey = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
@@ -221,7 +224,7 @@ export function Dropdown({
               );
             })}
           </div>,
-          document.body,
+          win.document.body,
         )}
     </>
   );

@@ -28,6 +28,6 @@ export function wheelIsOver(el: Element | null | undefined, e: WheelEvent): bool
      ★커서 아래의 **맨 위 요소**를 물어 그것이 내 안의 것인지 본다 — 창이든 말풍선이든
        무엇이 덮여도 같은 규칙으로 걸러진다 (모달마다 예외를 적지 않는다).
      ★`pointer-events: none` 인 껍데기는 애초에 안 잡히므로 그런 덮개는 방해하지 않는다. */
-  const hit = document.elementFromPoint(e.clientX, e.clientY);
+  const hit = el.ownerDocument.elementFromPoint(e.clientX, e.clientY);
   return !!hit && (el === hit || el.contains(hit));
 }

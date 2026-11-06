@@ -1,4 +1,5 @@
 import { useDrag } from "./dragStore";
+import { useWin } from "../lib/floatWin";
 import { DragGhost } from "./DragGhost";
 import { artBackground } from "./CardArt";
 import { FittedImg } from "./FittedImg";
@@ -31,8 +32,10 @@ const dark = (
  *  ★고스트: 포인터 드래그에는 브라우저가 만들어 주는 드래그 이미지가 없으므로 직접 그린다.
  *    자리·층·투명도는 `DragGhost` 가 갖는다 — 고스트를 그리는 자리가 넷이라 껍데기를 하나로 둔다. */
 export function DragLayer() {
+  /* ★창마다 하나다. 어둠은 창마다 깔고, 고스트는 커서가 있는 창에만 뜬다 (`lib/floatWin`) */
+  const win = useWin();
   const drag = useDrag((s) => s.drag);
-  const pos = useDrag((s) => s.pos);
+  const pos = useDrag((s) => (s.at?.win === win ? s.at : null));
   if (!drag) return null;
 
   // ★블록 저장소는 **어둠을 깔지 않는다** — 놓을 자리가 프롬프트 패널 안의 목록들이라,
@@ -43,7 +46,7 @@ export function DragLayer() {
     return (
       <>
         {drag.charGroup && dark}
-        <DragGhost
+        {pos && <DragGhost
           x={pos.x}
           y={pos.y}
           tilt={0}
@@ -60,7 +63,7 @@ export function DragLayer() {
           }}
         >
           {drag.charGroup?.name ?? (drag.folder !== undefined ? drag.folder.split("/").pop() : (drag.item?.label ?? drag.block?.label))}
-        </DragGhost>
+        </DragGhost>}
       </>
     );
   }
@@ -70,7 +73,7 @@ export function DragLayer() {
       {dark}
       {/* ★잔상은 **커서 오른쪽 아래**에 작게 매단다 (사용자 지시 2026-08-19) —
           커서 한가운데에 쥐고 있으면 정작 가리키는 자리를 자기가 덮는다 */}
-      <DragGhost
+      {pos && <DragGhost
         x={pos.x}
         y={pos.y}
         tilt={0}
@@ -159,7 +162,7 @@ export function DragLayer() {
             </div>
           </>
         )}
-      </DragGhost>
+      </DragGhost>}
     </>
   );
 }

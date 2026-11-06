@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useWin } from "../lib/floatWin";
 
 /** 패널 폭 조절 손잡이.
  *  드래그 중에는 상태만 바꾸고, 손을 뗐을 때 한 번만 저장한다(onCommit). */
@@ -18,6 +19,7 @@ export function ResizeHandle({
   /** left = 손잡이 왼쪽에 패널이 있음 / right = 오른쪽에 있음 */
   side?: "left" | "right";
 }) {
+  const win = useWin();
   const [dragging, setDragging] = useState(false);
   const start = useRef({ x: 0, w: 0 });
 
@@ -32,19 +34,20 @@ export function ResizeHandle({
       setDragging(false);
       onCommit?.();
     };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
+    win.addEventListener("mousemove", move);
+    win.addEventListener("mouseup", up);
     // 드래그 중 텍스트 선택·커서 깜빡임 방지
-    const prev = document.body.style.cursor;
-    document.body.style.cursor = "ew-resize";
-    document.body.style.userSelect = "none";
+    const body = win.document.body;
+    const prev = body.style.cursor;
+    body.style.cursor = "ew-resize";
+    body.style.userSelect = "none";
     return () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-      document.body.style.cursor = prev;
-      document.body.style.userSelect = "";
+      win.removeEventListener("mousemove", move);
+      win.removeEventListener("mouseup", up);
+      body.style.cursor = prev;
+      body.style.userSelect = "";
     };
-  }, [dragging, min, max, onCommit, setWidth, side]);
+  }, [dragging, min, max, onCommit, setWidth, side, win]);
 
   /** ★★**자리를 먹지 않는다** (사용자 지시 2026-08-26: *"가로 모드일 때 씬 헤더가 좌측 끝까지
    *    안 닿는다. 생성 패널의 리사이즈 핸들러 두께만큼 여백이 있는 느낌인데, 생성 패널과

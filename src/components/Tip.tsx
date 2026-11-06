@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
+import { useWin } from "../lib/floatWin";
 
 /** 툴팁 — **우리가 그린다** (사용자 지시 2026-08-19).
  *
@@ -22,6 +23,8 @@ const DELAY_HELP = 120;
 type Shown = { text: string; x: number; y: number; below: boolean };
 
 export function TipLayer() {
+  /* ★창마다 하나다. 앱 밖 창은 `document` 가 달라 메인의 위임이 안 닿는다 (`lib/floatWin`) */
+  const win = useWin();
   const [tip, setTip] = useState<Shown | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const timer = useRef<number | null>(null);
@@ -78,30 +81,31 @@ export function TipLayer() {
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") hide();
     };
-    document.addEventListener("pointerover", enter);
-    document.addEventListener("pointerout", leave);
-    document.addEventListener("focusin", enter);
-    document.addEventListener("focusout", hide);
+    const doc = win.document;
+    doc.addEventListener("pointerover", enter);
+    doc.addEventListener("pointerout", leave);
+    doc.addEventListener("focusin", enter);
+    doc.addEventListener("focusout", hide);
     // 누르는 순간 사라진다 — 누른 뒤에도 떠 있으면 결과를 가린다
-    document.addEventListener("pointerdown", hide, true);
-    document.addEventListener("keydown", key);
+    doc.addEventListener("pointerdown", hide, true);
+    doc.addEventListener("keydown", key);
     // 스크롤·휠은 자리를 어긋나게 하므로 그냥 닫는다
-    window.addEventListener("scroll", hide, true);
-    window.addEventListener("wheel", hide, { passive: true });
-    window.addEventListener("blur", hide);
+    win.addEventListener("scroll", hide, true);
+    win.addEventListener("wheel", hide, { passive: true });
+    win.addEventListener("blur", hide);
     return () => {
       stop();
-      document.removeEventListener("pointerover", enter);
-      document.removeEventListener("pointerout", leave);
-      document.removeEventListener("focusin", enter);
-      document.removeEventListener("focusout", hide);
-      document.removeEventListener("pointerdown", hide, true);
-      document.removeEventListener("keydown", key);
-      window.removeEventListener("scroll", hide, true);
-      window.removeEventListener("wheel", hide);
-      window.removeEventListener("blur", hide);
+      doc.removeEventListener("pointerover", enter);
+      doc.removeEventListener("pointerout", leave);
+      doc.removeEventListener("focusin", enter);
+      doc.removeEventListener("focusout", hide);
+      doc.removeEventListener("pointerdown", hide, true);
+      doc.removeEventListener("keydown", key);
+      win.removeEventListener("scroll", hide, true);
+      win.removeEventListener("wheel", hide);
+      win.removeEventListener("blur", hide);
     };
-  }, []);
+  }, [win]);
 
   /** 재고 나서 화면 안으로 밀어 넣는다 (재기 전에는 안 보인다).
    *
@@ -115,11 +119,11 @@ export function TipLayer() {
     if (!el || !tip) return;
     const w = el.offsetWidth;
     const h = el.offsetHeight;
-    const x = Math.max(8, Math.min(window.innerWidth - 8 - w, tip.x - w / 2));
-    const y = Math.max(8, Math.min(window.innerHeight - 8 - h, tip.below ? tip.y : tip.y - h));
+    const x = Math.max(8, Math.min(win.innerWidth - 8 - w, tip.x - w / 2));
+    const y = Math.max(8, Math.min(win.innerHeight - 8 - h, tip.below ? tip.y : tip.y - h));
     el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
     el.style.opacity = "1";
-  }, [tip]);
+  }, [tip, win]);
 
   if (!tip) return null;
   return (

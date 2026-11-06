@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type { AnyCard, CardKind } from "../store/cards";
 import type { LibItem } from "../store/blockLib";
 import type { Block } from "../lib/blocks";
+import { locate, onEveryWindow, raiseWindow, refreshFrames, type WinPoint } from "../lib/floatWin";
 
 /** 카드 드래그 — **포인터 이벤트로 직접 구현한다.**
  *
@@ -75,11 +76,18 @@ type Zone = {
   dir: DragDir;
   prio: number;
   rect: () => DOMRect | null;
+  /** 존이 사는 창. `rect` 는 그 창 기준 좌표다 */
+  win: () => Window | null;
   onDrop: (d: Dragging) => void;
 };
 
 type S = {
   drag: Dragging | null;
+  /** 커서가 지금 어느 창의 어디인가 (앱 창 위가 아니면 null). 고스트가 그 창에 뜬다 */
+  at: WinPoint | null;
+  /** 끌기가 시작된 창. 포인터 좌표는 언제나 이 창 기준으로 온다 */
+  src: Window;
+  /** 마지막 포인터 좌표 (`src` 기준) */
   pos: { x: number; y: number };
   over: string | null;
   /** 방금 끝난 끌기가 **놓인 존의 id** (안 놓였으면 null). 끌기가 끝난 뒤(`drag === null`)에 읽는다 —
@@ -87,7 +95,7 @@ type S = {
   droppedOn: string | null;
   zones: Zone[];
 
-  begin: (d: Dragging, x: number, y: number) => void;
+  begin: (d: Dragging, x: number, y: number, src?: Window) => void;
   move: (x: number, y: number) => void;
   end: () => boolean;
   cancel: () => void;
@@ -96,44 +104,52 @@ type S = {
 
 export const useDrag = create<S>((set, get) => ({
   drag: null,
+  at: null,
+  src: typeof window === "undefined" ? (undefined as never) : window,
   pos: { x: 0, y: 0 },
   over: null,
   droppedOn: null,
   zones: [],
 
-  begin(d, x, y) {
-    set({ drag: d, pos: { x, y }, over: null, droppedOn: null });
-    window.addEventListener("scroll", rehit, true);
+  begin(d, x, y, src = window) {
+    set({ drag: d, src, pos: { x, y }, at: locate(src, x, y), over: null, droppedOn: null });
+    offScroll = onEveryWindow("scroll", rehit, true);
   },
 
   move(x, y) {
-    const { drag, zones } = get();
+    const { drag, zones, src } = get();
     if (!drag) return;
     let hit: Zone | null = null;
-    for (const z of zones) {
-      if (!z.kinds.includes(drag.kind) || z.dir !== drag.dir) continue;
-      const r = z.rect();
-      if (!r) continue;
-      if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue;
-      // 같은 우선순위가 겹치면 **나중에 등록된 것**이 이긴다 — 나중 것이 위에 그려진다
-      if (!hit || z.prio >= hit.prio) hit = z;
-    }
-    set({ pos: { x, y }, over: hit ? hit.id : null });
+    // ★커서가 있는 창의 존만 본다. 좌표도 그 창 기준으로 옮겨서 잰다 (`lib/floatWin`)
+    const at = locate(src, x, y);
+    if (at)
+      for (const z of zones) {
+        if (!z.kinds.includes(drag.kind) || z.dir !== drag.dir) continue;
+        if (z.win() !== at.win) continue;
+        const r = z.rect();
+        if (!r) continue;
+        if (at.x < r.left || at.x > r.right || at.y < r.top || at.y > r.bottom) continue;
+        // 같은 우선순위가 겹치면 **나중에 등록된 것**이 이긴다 — 나중 것이 위에 그려진다
+        if (!hit || z.prio >= hit.prio) hit = z;
+      }
+    set({ pos: { x, y }, at, over: hit ? hit.id : null });
   },
 
   /** 손을 뗐다. 드롭이 실제로 일어났으면 true — 덱을 닫을지 판단에 쓴다. */
   end() {
-    window.removeEventListener("scroll", rehit, true);
-    const { drag, over, zones } = get();
-    set({ drag: null, over: null, droppedOn: drag && over ? over : null });
+    offScroll?.();
+    const { drag, over, zones, at } = get();
+    set({ drag: null, at: null, over: null, droppedOn: drag && over ? over : null });
     if (!drag || !over) return false;
+    // ★놓은 창을 앞으로 — 드롭이 띄우는 창(스타일 고르기 등)이 거기 뜬다
+    if (at) raiseWindow(at.win);
     zones.find((z) => z.id === over)?.onDrop(drag);
     return true;
   },
 
   cancel() {
-    window.removeEventListener("scroll", rehit, true);
-    set({ drag: null, over: null, droppedOn: null });
+    offScroll?.();
+    set({ drag: null, at: null, over: null, droppedOn: null });
   },
 
   addZone(z) {
@@ -146,6 +162,7 @@ export const useDrag = create<S>((set, get) => ({
  *  끄는 채로 휠을 굴리면 커서는 그대로이고 밑의 칸만 바뀐다 (이미지 입력은 왼쪽 기둥 아래에 있어
  *  굴려 내려가서 놓는다). 안 재면 강조가 옛 칸에 남고 놓으면 옛 칸이 받는다.
  *  ★스크롤은 거품이 안 올라오므로 캡처로 받는다. `begin` 에서 걸고 `end`·`cancel` 에서 뗀다 */
+let offScroll: (() => void) | undefined;
 function rehit() {
   const { drag, pos, move } = useDrag.getState();
   if (drag) move(pos.x, pos.y);
@@ -198,6 +215,7 @@ export function useDropZone(opts: {
           if (right <= left || bottom <= top) return null;
           return new DOMRect(left, top, right - left, bottom - top);
         },
+        win: () => ref.current?.ownerDocument.defaultView ?? null,
         onDrop: (d) => cb.current(d),
       }),
     [id, kindKey, dir, prio],
@@ -238,12 +256,16 @@ export function pointerGesture(
   e.preventDefault();
 
   const el = e.currentTarget as HTMLElement;
+  // ★그 요소의 창에서 듣는다. 포인터를 잡았으므로 커서가 다른 창으로 가도 여기로 온다 (`lib/floatWin`)
+  const win = el.ownerDocument.defaultView ?? window;
+  void refreshFrames();
   const pid = e.pointerId;
   try {
     el.setPointerCapture(pid);
   } catch {
     /* 캡처를 못 해도 window 리스너로 동작한다 */
   }
+  // ★메인의 `<html>` 에 달면 앱 밖 창에도 옮겨 적힌다 (`mirrorHtml`)
   document.documentElement.classList.add("is-dragging");
 
   const move = (ev: PointerEvent) => {
@@ -252,10 +274,10 @@ export function pointerGesture(
   const finish = (committed: boolean) => {
     if (activeCancel !== cancel) return; // 이미 끝난 제스처
     activeCancel = null;
-    window.removeEventListener("pointermove", move);
-    window.removeEventListener("pointerup", up);
-    window.removeEventListener("pointercancel", cancel);
-    window.removeEventListener("blur", cancel);
+    win.removeEventListener("pointermove", move);
+    win.removeEventListener("pointerup", up);
+    win.removeEventListener("pointercancel", cancel);
+    win.removeEventListener("blur", cancel);
     document.documentElement.classList.remove("is-dragging");
     try {
       el.releasePointerCapture(pid);
@@ -270,10 +292,10 @@ export function pointerGesture(
   const cancel = () => finish(false);
 
   activeCancel = cancel;
-  window.addEventListener("pointermove", move);
-  window.addEventListener("pointerup", up);
-  window.addEventListener("pointercancel", cancel);
-  window.addEventListener("blur", cancel);
+  win.addEventListener("pointermove", move);
+  win.addEventListener("pointerup", up);
+  win.addEventListener("pointercancel", cancel);
+  win.addEventListener("blur", cancel);
   return true;
 }
 
@@ -291,6 +313,7 @@ export function useDragSource() {
   ) => {
     const sx = e.clientX;
     const sy = e.clientY;
+    const win = (e.currentTarget as Element).ownerDocument.defaultView ?? window;
     let started = false;
 
     pointerGesture(e, {
@@ -298,7 +321,7 @@ export function useDragSource() {
         if (!started) {
           if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
           started = true;
-          useDrag.getState().begin(d, ev.clientX, ev.clientY);
+          useDrag.getState().begin(d, ev.clientX, ev.clientY, win);
         }
         useDrag.getState().move(ev.clientX, ev.clientY);
       },

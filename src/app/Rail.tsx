@@ -9,6 +9,7 @@ export function Rail({
   onExpand,
   footer,
   dot,
+  tip,
 }: {
   side: "left" | "right";
   label: string;
@@ -20,6 +21,8 @@ export function Rail({
    *    ★도는 중까지 함께 내는 까닭: 접는 순간 「일하는 중」 표시가 사라져 **멈춘 것처럼**
    *      보인다 (같은 날 지적). 레일에 점 하나만 있어도 살아 있는지가 보인다. */
   dot?: "busy" | "done" | null;
+  /** 버튼의 툴팁. 없으면 「펼치기」 (앱 밖 창으로 분리된 동안은 「앞으로」) */
+  tip?: string;
 }) {
   const t = useI18n((s) => s.t);
   return (
@@ -35,7 +38,7 @@ export function Rail({
       }}
     >
       {/* ★`title` 이다 — `data-tip` 으로 넘기면 버려진다 (`PanelCollapseButton` 의 프롭) */}
-      <PanelCollapseButton side={side} collapsed onClick={onExpand} title={t("panel.expand", { name: label })} />
+      <PanelCollapseButton side={side} collapsed onClick={onExpand} title={tip ?? t("panel.expand", { name: label })} />
       <div
         style={{
           writingMode: "vertical-rl",

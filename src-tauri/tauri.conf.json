@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "create": false,
         "title": "PeroPix",
         "width": 1440,
         "height": 900,

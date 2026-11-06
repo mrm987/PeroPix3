@@ -332,6 +332,13 @@ export const Icon = {
     14,
   ),
   /** 바깥 주소로 나간다 — 기본 브라우저가 연다 */
+  /* 새 창으로 분리 — `external` 은 이미 「보내기」 다 */
+  popOut: s(
+    <>
+      <path d="M10 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
+      <rect x="13" y="3" width="8" height="7" rx="1.2" />
+    </>,
+  ),
   external: s(
     <>
       <path d="M14 4h6v6" />

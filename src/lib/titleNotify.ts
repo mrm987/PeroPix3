@@ -11,6 +11,7 @@
  *  ★v2 에서 **항상 켜져** 있던 알림이라 설정으로 끄지 않는다 (소리·토스트와 다르다).
  */
 import { appWindow } from "./window";
+import { appHasFocus, onEveryWindow } from "./floatWin";
 
 const ORIGINAL = "PeroPix";
 /** 이미 걸어 뒀나 — 여러 번 부르면 리스너가 쌓인다 */
@@ -23,7 +24,7 @@ function put(title: string) {
 
 export function notifyByTitle(text: string) {
   // 보고 있으면 알릴 것이 없다
-  if (document.hasFocus()) return;
+  if (appHasFocus()) return;
   if (armed) return;
   armed = true;
   put(text);
@@ -31,12 +32,12 @@ export function notifyByTitle(text: string) {
   const reset = () => {
     armed = false;
     put(ORIGINAL);
-    window.removeEventListener("focus", reset);
+    offFocus();
     document.removeEventListener("visibilitychange", onVisible);
   };
   const onVisible = () => {
     if (document.visibilityState === "visible") reset();
   };
-  window.addEventListener("focus", reset);
+  const offFocus = onEveryWindow("focus", reset);
   document.addEventListener("visibilitychange", onVisible);
 }

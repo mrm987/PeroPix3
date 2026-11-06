@@ -6,6 +6,8 @@
  *  ★누르기 처리가 다 끝난 **뒤에** 본다. 브라우저가 이미 옮긴 자리에서는 할 일이 없으므로, 막는 표면에서만 동작이 바뀐다.
  */
 
+import { onEveryWindow } from "./floatWin";
+
 const TEXT_ENTRY = "input, textarea, select, [contenteditable=true]";
 
 /** 일부러 포커스를 지키는 자리.
@@ -17,15 +19,16 @@ const KEEPS = "[data-rename-btn], [data-tag-suggest], [data-block-drawer], [data
 
 export function releaseFocusOnPress(): () => void {
   const onDown = (e: PointerEvent) => {
-    const a = document.activeElement as HTMLElement | null;
-    if (!a?.matches(TEXT_ENTRY)) return;
+    // ★누른 창의 문서를 본다. 앱 밖 창은 `document` 가 다르다 (`lib/floatWin`)
     const t = e.target as Element | null;
+    const doc = t?.ownerDocument ?? document;
+    const a = doc.activeElement as HTMLElement | null;
+    if (!a?.matches(TEXT_ENTRY)) return;
     if (t?.closest?.(`${TEXT_ENTRY}, ${KEEPS}`)) return;
     window.setTimeout(() => {
-      if (document.activeElement === a) a.blur();
+      if (doc.activeElement === a) a.blur();
     }, 0);
   };
   // ★잡기 단계로 듣는다. 버블을 기다리면 `stopPropagation` 하는 표면에서 못 듣는다
-  window.addEventListener("pointerdown", onDown, true);
-  return () => window.removeEventListener("pointerdown", onDown, true);
+  return onEveryWindow("pointerdown", onDown, true);
 }

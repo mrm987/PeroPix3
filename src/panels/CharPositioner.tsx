@@ -1,3 +1,4 @@
+import { observeSize } from "../lib/floatWin";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useGen, modelCaps } from "../store/gen";
 import { usePrompt } from "../store/prompt";
@@ -209,10 +210,9 @@ function Board(p: { w: number; h: number; bg: string | null; children: React.Rea
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver((es) => {
+    const ro = observeSize(el, (es) => {
       for (const e of es) setAvail({ width: e.contentRect.width, height: e.contentRect.height });
     });
-    ro.observe(el);
     return () => ro.disconnect();
   }, []);
   const k =

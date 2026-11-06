@@ -4,7 +4,8 @@ import { DropLine } from "../components/DropLine";
 import { useGen } from "../store/gen";
 import { usePrompt } from "../store/prompt";
 import { runningPendingId, stepKey, useQueue } from "../store/queue";
-import { LANE_MAX, LANE_MIN, useUi } from "../store/ui";
+import { isGenerateKey, LANE_MAX, LANE_MIN, useUi } from "../store/ui";
+import { observeSize, onEveryWindow } from "../lib/floatWin";
 import { allCells, useWs, takesOfScene, type Rec, type SceneCard, type Slot } from "../store/workspace";
 import { newestFirst } from "../lib/takes";
 import { cardLocked } from "../lib/sceneCards";
@@ -153,8 +154,9 @@ export function SceneLane() {
       if (t?.closest("[data-tag-suggest]")) return;
       expand(null);
     };
-    document.addEventListener("pointerdown", onDown, true);
-    return () => document.removeEventListener("pointerdown", onDown, true);
+    const doc = scrollRef.current?.ownerDocument ?? document;
+    doc.addEventListener("pointerdown", onDown, true);
+    return () => doc.removeEventListener("pointerdown", onDown, true);
   }, [expandedId]);
   /** 이름을 그 자리에서 고치는 중인 씬 — ★**줄이 아니라 여기**가 들고 있다.
    *  Tab 으로 다음 씬의 이름 칸으로 건너뛰려면 누가 열려 있는지를 한 곳이 알아야 한다. */
@@ -199,8 +201,7 @@ export function SceneLane() {
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(measure); };
     measure();
     el.addEventListener("scroll", onScroll, { passive: true });
-    const ro = new ResizeObserver(onScroll);
-    ro.observe(el);
+    const ro = observeSize(el, onScroll);
     return () => {
       el.removeEventListener("scroll", onScroll);
       ro.disconnect();
@@ -287,15 +288,16 @@ export function SceneLane() {
     el.addEventListener("pointerdown", down);
     // 포인터를 뺏겼으면 끌기도 거기서 끝난다 (창을 벗어나거나 다른 창으로 갔을 때)
     el.addEventListener("lostpointercapture", up);
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    const win = el.ownerDocument.defaultView ?? window;
+    win.addEventListener("pointermove", move);
+    win.addEventListener("pointerup", up);
     el.addEventListener("click", click, true);
     return () => {
       el.removeEventListener("dragstart", noDrag);
       el.removeEventListener("pointerdown", down);
       el.removeEventListener("lostpointercapture", up);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
+      win.removeEventListener("pointermove", move);
+      win.removeEventListener("pointerup", up);
       el.removeEventListener("click", click, true);
     };
   }, []);
@@ -471,6 +473,7 @@ export function SceneLane() {
   // Del = 숨김(휴지통) · Enter = 미저장 저장 · Ctrl+Z = 되돌리기 · Esc = 선택 해제 (멀티 무대의 규칙 그대로)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!isGenerateKey(e)) return;
       const el = e.target as HTMLElement;
       if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable) return;
       if (e.key === "Escape" && picked.length) return useSceneFocus.getState().setPicked([]);
@@ -539,8 +542,8 @@ export function SceneLane() {
         }
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // ★이미지 프리뷰를 앱 밖 창으로 분리해도 그 창에서 키가 먹어야 한다 (`lib/floatWin`)
+    return onEveryWindow("keydown", onKey);
   }, [picked]);
 
   /** ★★**훅은 이른 반환보다 위에 둔다** — 아래 `tab?.kind !== "sceneGroup"` 에서 빠지므로,

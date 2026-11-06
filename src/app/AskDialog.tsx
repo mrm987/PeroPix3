@@ -1,11 +1,13 @@
 import { useEffect } from "react";
 import { useAsk } from "../store/ask";
+import { useWin } from "../lib/floatWin";
 
 /** 확인 창 — `store/ask.ts` 의 답을 화면으로 받는다.
  *  ★`Esc` = 취소, `Enter` = 확인. 손이 키보드에 있을 때 마우스로 옮기지 않게 한다. */
 export function AskDialog() {
   const cur = useAsk((s) => s.cur);
   const answer = useAsk((s) => s.answer);
+  const win = useWin();
 
   useEffect(() => {
     if (!cur) return;
@@ -13,9 +15,9 @@ export function AskDialog() {
       if (e.key === "Escape") answer(false);
       if (e.key === "Enter") answer(cur.options ? cur.options[0].key : true);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [cur, answer]);
+    win.addEventListener("keydown", onKey);
+    return () => win.removeEventListener("keydown", onKey);
+  }, [cur, answer, win]);
 
   if (!cur) return null;
   return (

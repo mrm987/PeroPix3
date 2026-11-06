@@ -43,8 +43,14 @@ async fn backend_url() -> String {
 /// 백엔드도 같은 값을 알려 주므로(`/api/health` 의 `root`), 둘이 다르면 남의 것에 붙은 것이다.
 /// 최대화 창을 커서 아래로 한 번에 복원하고 끌기를 시작한다 — 까닭은 `window_edge::drag_restore`.
 /// `offset_y` 는 논리 픽셀로 받아 여기서 물리 픽셀로 바꾼다.
+///
+/// ★`label` 을 주면 그 창을 옮긴다. 앱 밖 창(`lib/floatWin`)의 화면도 메인 JS 가 그리므로 부르는 쪽은 언제나 메인이다.
 #[tauri::command]
-fn drag_restore(window: tauri::WebviewWindow, ratio_x: f64, offset_y: f64) -> Result<(), String> {
+fn drag_restore(app: tauri::AppHandle, window: tauri::WebviewWindow, label: Option<String>, ratio_x: f64, offset_y: f64) -> Result<(), String> {
+    let window = match label {
+        Some(l) => app.get_webview_window(&l).ok_or("창이 없습니다")?,
+        None => window,
+    };
     #[cfg(windows)]
     {
         let h = window.hwnd().map_err(|e| e.to_string())?;
@@ -237,6 +243,48 @@ fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// 앱 밖 창을 만든다 — 화면(`lib/floatWin`)이 `window.open("about:blank#float-<영역>")` 을 부르면 여기로 온다.
+///
+/// ★창만 추가하고 JS 는 메인 하나다. 새 창의 화면은 메인의 React 가 포털로 그리므로 스토어를 동기화할 것이 없다
+///   (`docs/floating-windows-review.md`). 그래서 about:blank 만 받는다.
+/// ★나머지는 전부 거절한다. 플러그인 iframe 과 `lib/openExternal` 의 대체 경로가 창을 만들면 안 된다.
+/// ★`.parent(main)`: 메인 위에 뜨고 메인과 함께 숨는다. 그래서 최소화 버튼과 작업 표시줄 버튼이 없다.
+/// ★`visible(false)`: 화면이 자리를 잡고 내용을 그린 뒤에 띄운다 (`spawn`). 바로 띄우면 빈 창이 한 번 보인다.
+#[cfg(windows)]
+fn float_window(
+    app: &tauri::AppHandle,
+    url: tauri::Url,
+    features: tauri::webview::NewWindowFeatures,
+) -> tauri::webview::NewWindowResponse<tauri::Wry> {
+    use tauri::webview::NewWindowResponse::{Create, Deny};
+    let Some(label) = url.fragment().filter(|l| url.scheme() == "about" && l.starts_with("float-")) else {
+        return Deny;
+    };
+    let Some(main) = app.get_webview_window("main") else {
+        return Deny;
+    };
+    let built = tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::External("about:blank".parse().unwrap()))
+        .window_features(features)
+        .parent(&main)
+        .map(|b| {
+            b.title("PeroPix")
+                .visible(false)
+                .skip_taskbar(true)
+                .decorations(false)
+                .shadow(false)
+                .min_inner_size(320.0, 240.0)
+                .background_color(tauri::window::Color(0x16, 0x16, 0x1a, 0xff))
+                .build()
+        });
+    match built {
+        Ok(Ok(window)) => Create { window },
+        Ok(Err(e)) | Err(e) => {
+            backend::log_line(&format!("[float] {label} 창을 못 만들었습니다: {e}"));
+            Deny
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     /* ★★**같은 폴더를 두 번 열지 않는다** (사용자 지시 2026-08-26). 같은 `workspaces/` 를
@@ -264,6 +312,17 @@ pub fn run() {
         .setup(move |app| {
             // ★`apply_update` 가 새 판을 띄우기 전에 자물쇠를 놓을 수 있게 맡겨 둔다
             app.manage(InstanceLock(lock));
+            /* ★★**메인 창을 여기서 만든다** (`tauri.conf.json` 의 `create: false`). 앱 밖 창을 받는 핸들러
+                 (`on_new_window`)는 빌더에서만 달 수 있고, 핸들러가 없으면 wry 가 `window.open` 을 거절한다.
+               ★윈도우만 단다. 맥은 앱 밖 창을 아직 안 연다 (`docs/floating-windows-review.md`). */
+            let cfg = app.config().app.windows.iter().find(|w| w.label == "main").cloned().ok_or("main 창 설정이 없습니다")?;
+            let builder = tauri::WebviewWindowBuilder::from_config(app.handle(), &cfg)?;
+            #[cfg(windows)]
+            let builder = {
+                let h = app.handle().clone();
+                builder.on_new_window(move |url, features| float_window(&h, url, features))
+            };
+            builder.build()?;
             /* ★★**웹뷰 바탕을 어둡게 깔아 둔다** (사용자 지적 2026-08-27: *"처음에 흰 화면이
                  한참 뜨다가"*). `index.html` 이 첫 페인트부터 스플래시를 그리지만, 그보다
                  **앞선 순간** — 창은 떴고 웹뷰가 아직 문서를 안 받은 때 — 에는 웹뷰의 기본
@@ -332,6 +391,16 @@ pub fn run() {
         RunEvent::ExitRequested { .. } | RunEvent::Exit => {
             if let Some(state) = app_handle.try_state::<backend::Backend>() {
                 state.kill();
+            }
+        }
+        /* ★★메인이 닫히면 앱 밖 창도 닫는다. 안 닫으면 창과 프로세스가 남는다 (측정).
+           ★닫는 요청이 아니라 **사라진 뒤에** 닫는다. 그때는 메인 JS 가 없어서, 앱 밖 창이 닫힌 것을 화면이
+             「사용자가 닫았다」로 읽어 저장해 둔 분리 상태를 지우는 일이 없다. */
+        RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main" => {
+            for (l, w) in app_handle.webview_windows() {
+                if l != "main" {
+                    let _ = w.destroy();
+                }
             }
         }
         _ => {}

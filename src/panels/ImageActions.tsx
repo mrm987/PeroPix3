@@ -26,6 +26,7 @@ import { droppedOf, previewOf, usePreviews } from "../store/previews";
 import type { ImageMeta } from "../store/gallery";
 import { sendToTagger } from "./tools/TaggerTool";
 import { FolderOpenButton } from "../components/FolderOpenButton";
+import { copyText, useWin } from "../lib/floatWin";
 
 /** 크게 본 그림 **아래에 붙는 한 줄** — "이 장으로 무엇을 할까" (페로픽스파이 `result-meta` 이식).
  *
@@ -530,7 +531,7 @@ export function ImageActions({
                  ★**시드 규칙(고정/랜덤)은 건드리지 않는다** — 사용자가 고른 것이다. */
               onClick={() => {
                 useGen.getState().set("seed", Number(seed));
-                void navigator.clipboard?.writeText(String(seed));
+                void copyText(String(seed));
                 toast(t("act.seedApplied", { n: seed }));
               }}
               onPointerEnter={() => setSeedHot(true)}
@@ -649,9 +650,7 @@ function PromptView({
           <button
             data-prompt-copy
             onClick={() =>
-              void navigator.clipboard
-                ?.writeText(all)
-                .then(() => toast(t("act.copied")))
+              void copyText(all).then(() => toast(t("act.copied")))
             }
             style={btn}
           >
@@ -685,9 +684,7 @@ function PromptView({
                 data-prompt-copy-one={i}
                 disabled={!r.text}
                 onClick={() =>
-                  void navigator.clipboard
-                    ?.writeText(r.text)
-                    .then(() => toast(t("act.copied")))
+                  void copyText(r.text).then(() => toast(t("act.copied")))
                 }
                 style={{
                   display: "grid",
@@ -775,6 +772,7 @@ function SendMenu({ busy, items: given, img }: { busy: boolean; items: SendItem[
   /* ★플러그인이 「보내기」에 둔 갈래 (`lib/pluginHost`, 메뉴 이름 image.send) — 앱 갈래 뒤에 붙는다.
      그림은 주소와 이름만 넘긴다 (개별 책임: 무엇을 하든 플러그인 몫이다). */
   const pick = usePickText();   // 갈래 이름표가 언어별 묶음일 수 있다
+  const win = useWin();
   const plug = usePlugins((s) => s.menus["image.send"]);
   usePlugins((s) => s.items); // 켜기/끄기가 바뀌면 다시 그린다
   const items: SendItem[] = [
@@ -792,7 +790,8 @@ function SendMenu({ busy, items: given, img }: { busy: boolean; items: SendItem[
   useEffect(() => {
     if (!open) return;
     const close = (e: Event) => {
-      const n = e.target instanceof Node ? e.target : null;
+      // ★`instanceof Node` 는 다른 창의 노드에서 거짓이다 (`lib/floatWin`)
+      const n = e.target as Node | null;
       if (n && (ref.current?.contains(n) || menuRef.current?.contains(n))) return;
       setOpen(false);
     };
@@ -801,15 +800,16 @@ function SendMenu({ busy, items: given, img }: { busy: boolean; items: SendItem[
        사라져야 하는데 그대로 있음"*). 씬 칸·갤러리 칸은 `pointerdown` 에 `stopPropagation` 을
        걸어 두어(끌기와 클릭을 가르려고), 거품 단계에서 듣는 이 창구까지 올라오지 않았다.
        캡처는 그 앞을 지나므로 어디를 눌러도 닫힌다. */
-    document.addEventListener("pointerdown", close, true);
-    document.addEventListener("keydown", key);
-    window.addEventListener("scroll", close, true);
+    const doc = win.document;
+    doc.addEventListener("pointerdown", close, true);
+    doc.addEventListener("keydown", key);
+    win.addEventListener("scroll", close, true);
     return () => {
-      document.removeEventListener("pointerdown", close, true);
-      document.removeEventListener("keydown", key);
-      window.removeEventListener("scroll", close, true);
+      doc.removeEventListener("pointerdown", close, true);
+      doc.removeEventListener("keydown", key);
+      win.removeEventListener("scroll", close, true);
     };
-  }, [open]);
+  }, [open, win]);
 
   if (!items.length) return null;
 
@@ -844,7 +844,7 @@ function SendMenu({ busy, items: given, img }: { busy: boolean; items: SendItem[
               position: "fixed",
               // ★단추 **위쪽**에 편다 — 이 줄은 그림 아래에 붙어 있어 아래로 펴면 화면 밖이다
               left: at.x,
-              bottom: window.innerHeight - at.y + 6,
+              bottom: win.innerHeight - at.y + 6,
               zIndex: 60,
               minWidth: 150,
               padding: "var(--sp-1)",
@@ -877,7 +877,7 @@ function SendMenu({ busy, items: given, img }: { busy: boolean; items: SendItem[
               </button>
             ))}
           </div>,
-          document.body,
+          win.document.body,
         )}
     </>
   );

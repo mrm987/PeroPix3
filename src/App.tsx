@@ -30,7 +30,7 @@ import { BusyOverlay } from "./app/BusyOverlay";
 import { AskDialog } from "./app/AskDialog";
 import { StylePickDialog } from "./app/StylePickDialog";
 import { AiChat } from "./panels/AiChat";
-import { Canvas } from "./panels/Canvas";
+import { Canvas, PreviewArea } from "./panels/Canvas";
 import { CanvasTabs } from "./panels/CanvasTabs";
 import { Gallery } from "./panels/Gallery";
 import { Censor } from "./panels/Censor";
@@ -63,6 +63,8 @@ import { usePrompt, defaultView, normThumb, thumbUrl } from "./store/prompt";
 import { useCards } from "./store/cards";
 import { setThumbAsker, type ThumbTarget } from "./cards/thumbAsk";
 import { releaseFocusOnPress } from "./lib/releaseFocus";
+import { bootFloats, onEveryWindow } from "./lib/floatWin";
+import { FloatWindow, OnActiveWindow } from "./app/FloatWindow";
 
 /** 위치 잡는 창이 겨눌 수 있는 목적지 — 섹션 배너 또는 **덱 카드 한 장**.
  *
@@ -147,13 +149,18 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Alt" && !e.ctrlKey && !e.shiftKey && !e.metaKey) e.preventDefault();
     };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("keyup", onKey);
+    const offDown = onEveryWindow("keydown", onKey);
+    const offUp = onEveryWindow("keyup", onKey);
     return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("keyup", onKey);
+      offDown();
+      offUp();
     };
   }, []);
+
+  // ★분리해 둔 창은 워크스페이스가 뜬 뒤에 다시 연다 — 그려 넣을 내용이 그때 생긴다 (`lib/floatWin`)
+  useEffect(() => {
+    if (wsCurrent) void bootFloats();
+  }, [wsCurrent]);
 
   useEffect(() => {
     let alive = true;
@@ -274,10 +281,13 @@ export function App() {
         </div>
         {/* 아직 목록을 읽는 중이면 모달을 안 띄운다 — 부팅 때 한 번 깜빡인다 */}
         {!wsLoading && <WorkspaceGate />}
-        <AskDialog />
-        <Toasts />
+        <OnActiveWindow>
+          <AskDialog />
+          <Toasts />
+        </OnActiveWindow>
         <TipLayer />
         <BusyOverlay />
+        <Floats onOpenSettings={() => openSettings("llm")} />
       </WindowFrame>
     );
 
@@ -528,15 +538,33 @@ export function App() {
           (`ExifTool` 의 `wide`), 여기까지 두면 한 번 떨군 것을 둘이 잡는다
           (v2 도 같은 자리에서 갈랐다: `!isInCensorMode() && !isInUtilityMode()`). */}
       {(mode === "generate" || mode === "gallery") && <DropImport />}
-      <StylePickDialog />
-      <AskDialog />
-      <Toasts />
+      <OnActiveWindow>
+        <StylePickDialog />
+        <AskDialog />
+        <Toasts />
+      </OnActiveWindow>
+      <Floats onOpenSettings={() => openSettings("llm")} />
       {/* 툴팁 층 — 화면 아무 데나 `data-tip` 을 달면 여기서 뜬다 (`components/Tip`) */}
       <TipLayer />
       <DragLayer />
       {/* ★파일을 옮기는 동안 조작을 막는 덮개 — **맨 위**다 (`store/busy` 의 ★★주) */}
       <BusyOverlay />
     </WindowFrame>
+  );
+}
+
+/** 앱 밖 창에 나가 있는 영역들 (`lib/floatWin`). 나가 있지 않으면 아무것도 안 그린다 */
+function Floats({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const t = useI18n((s) => s.t);
+  return (
+    <>
+      <FloatWindow area="ai" title={t("ai.title")}>
+        <AiChat onOpenSettings={onOpenSettings} />
+      </FloatWindow>
+      <FloatWindow area="preview" title={t("float.preview")}>
+        <PreviewArea />
+      </FloatWindow>
+    </>
   );
 }
 

@@ -10,7 +10,8 @@ import { useQueue } from "../store/queue";
 import { allScenes, useWs } from "../store/workspace";
 import { useImageInput } from "../store/imageInput";
 import { ImageInputBadge } from "./ImageInputPanel";
-import { useUi } from "../store/ui";
+import { isGenerateKey, useUi } from "../store/ui";
+import { onEveryWindow, queryAnyWindow } from "../lib/floatWin";
 import { toast } from "../store/toast";
 import { MAX_PER_IMAGE } from "../lib/anlas";
 import { costNow, countNow } from "../lib/costNow";
@@ -193,16 +194,16 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
     //   그래서 접어 둔 채로도 단축키가 살아 있고, 두 번 걸리지도 않는다.
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || e.repeat) return;
+      if (!isGenerateKey(e)) return;
       // ★마스크 편집기는 **빼지 않는다** — 인페인트도 이 버튼이 만들므로(2026-08-19),
       //   칠하다가 그대로 눌러 생성하는 것이 이 단축키의 쓰임이다
-      if (document.querySelector("[data-enhance], [data-settings], [data-ask], [data-prompt-view]"))
+      if (queryAnyWindow("[data-enhance], [data-settings], [data-ask], [data-prompt-view]"))
         return;
       if (off) return;
       e.preventDefault();
       fire();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return onEveryWindow("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [off, perSlot, noToken, generateAll]);
 

@@ -22,6 +22,14 @@ export const en = {
     themeToDark: "Dark",
   },
 
+  float: {
+    split: "Open in a new window",
+    close: "Close to return it to the main window",
+    toFront: "Bring {name} window to front",
+    preview: "Image preview",
+    scene: "Scenes",
+  },
+
   status: {
     connecting: "Connecting",
     connected: "Connected",
