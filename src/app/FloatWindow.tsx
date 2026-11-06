@@ -9,6 +9,7 @@ import { BusyOverlay } from "./BusyOverlay";
 import { WinBtn } from "./TitleBar";
 import { dockArea, FLOAT_OK, splitArea, useFloat, WinCtx, type FloatArea, type FloatLive } from "../lib/floatWin";
 import { useUi } from "../store/ui";
+import { IS_MAC } from "../lib/platform";
 
 /** 앱 밖 창 하나 — 영역을 새 창 문서에 포털로 그린다 (`lib/floatWin`).
  *
@@ -31,10 +32,13 @@ export function FloatWindow({ area, title, children }: { area: FloatArea; title:
   );
 }
 
-/** 제목 줄 + 내용. 제목 줄에는 이름 · 최대화 · 닫기뿐이다 (메인에 종속되어 함께 숨으므로 최소화가 없다) */
+/** 제목 줄 + 내용. 제목 줄에는 이름 · 최대화 · 닫기뿐이다 (메인에 종속되어 함께 숨으므로 최소화가 없다).
+ *  ★맥은 시스템 신호등 버튼을 겹쳐 쓰므로 창 버튼을 안 그리고 왼쪽에 그 자리를 비운다 (`TitleBar` 와 같다) */
 function FloatFrame({ live, title, children }: { live: FloatLive; title: string; children: ReactNode }) {
   const t = useI18n((s) => s.t);
   const [maxed, setMaxed] = useState(false);
+  /** 맥의 전체 화면 — 신호등 버튼이 숨는다 */
+  const [full, setFull] = useState(false);
   const { tw, win, area } = live;
 
   useEffect(() => {
@@ -45,7 +49,10 @@ function FloatFrame({ live, title, children }: { live: FloatLive; title: string;
   useEffect(() => {
     let dead = false;
     let un: (() => void) | undefined;
-    const read = () => void tw.isMaximized().then((v) => !dead && setMaxed(v)).catch(() => {});
+    const read = () => {
+      void tw.isMaximized().then((v) => !dead && setMaxed(v)).catch(() => {});
+      if (IS_MAC) void tw.isFullscreen().then((v) => !dead && setFull(v)).catch(() => {});
+    };
     read();
     void tw.onResized(read).then((off) => (dead ? off() : (un = off)));
     return () => {
@@ -61,6 +68,12 @@ function FloatFrame({ live, title, children }: { live: FloatLive; title: string;
     e.preventDefault();
     if (e.detail === 2) {
       void tw.toggleMaximize();
+      return;
+    }
+    /* ★맥은 누를 때 바로 시작한다 (Tauri 의 drag-region 과 같다). 맥의 창 이동은 다음 누름을 막지 않아 더블클릭이 그대로 온다.
+         움직인 후에 시작하면 시작이 늦은 만큼 커서가 창에서 미끄러진다 (CI 의 맥 실측: 120 끌어 111 옮겨졌다). */
+    if (IS_MAC) {
+      void tw.startDragging().catch(() => {});
       return;
     }
     const box = e.currentTarget.getBoundingClientRect();
@@ -93,21 +106,23 @@ function FloatFrame({ live, title, children }: { live: FloatLive; title: string;
           flexShrink: 0,
           display: "flex",
           alignItems: "center",
-          padding: "0 0 0 var(--sp-5)",
+          padding: IS_MAC ? `0 var(--sp-4) 0 ${full ? "var(--sp-5)" : "78px"}` : "0 0 0 var(--sp-5)",
           background: "var(--surface)",
           borderBottom: "1px solid var(--line)",
           userSelect: "none",
         }}
       >
         <b style={{ flex: 1, fontSize: "var(--text-xs)", color: "var(--ink-soft)" }}>{title}</b>
-        <div style={{ display: "flex", alignSelf: "stretch" }}>
-          <WinBtn title={maxed ? t("window.restore") : t("window.maximize")} onClick={() => void tw.toggleMaximize()}>
-            {maxed ? Icon.restore : Icon.maximize}
-          </WinBtn>
-          <WinBtn title={t("float.close")} danger mark={`float-close-${area}`} onClick={() => dockArea(area)}>
-            {Icon.close}
-          </WinBtn>
-        </div>
+        {!IS_MAC && (
+          <div style={{ display: "flex", alignSelf: "stretch" }}>
+            <WinBtn title={maxed ? t("window.restore") : t("window.maximize")} onClick={() => void tw.toggleMaximize()}>
+              {maxed ? Icon.restore : Icon.maximize}
+            </WinBtn>
+            <WinBtn title={t("float.close")} danger mark={`float-close-${area}`} onClick={() => dockArea(area)}>
+              {Icon.close}
+            </WinBtn>
+          </div>
+        )}
       </header>
       {/* ★크게 보기·번역 창처럼 `inset: 0` 으로 덮는 것이 이 칸을 기준으로 잡히게 `relative` 를 준다 */}
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>{children}</div>
@@ -127,7 +142,7 @@ export function OnActiveWindow({ hold, children }: { hold?: boolean; children: R
   return createPortal(<WinCtx.Provider value={live.win}>{children}</WinCtx.Provider>, live.root);
 }
 
-/** 「새 창으로 분리」. 맥에서는 안 보인다 (`FLOAT_OK`) */
+/** 「새 창으로 분리」 */
 export function SplitButton({ area, style }: { area: FloatArea; style?: CSSProperties }) {
   const t = useI18n((s) => s.t);
   if (!FLOAT_OK) return null;

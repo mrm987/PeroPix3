@@ -248,41 +248,101 @@ fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
 /// ★창만 추가하고 JS 는 메인 하나다. 새 창의 화면은 메인의 React 가 포털로 그리므로 스토어를 동기화할 것이 없다
 ///   (`docs/floating-windows-review.md`). 그래서 about:blank 만 받는다.
 /// ★나머지는 전부 거절한다. 플러그인 iframe 과 `lib/openExternal` 의 대체 경로가 창을 만들면 안 된다.
-/// ★`.parent(main)`: 메인 위에 뜨고 메인과 함께 숨는다. 그래서 최소화 버튼과 작업 표시줄 버튼이 없다.
+/// ★윈도우 `.parent(main)`: 메인 위에 뜨고 메인과 함께 숨는다. 그래서 최소화 버튼과 작업 표시줄 버튼이 없다.
+/// ★맥은 종속시키지 않는다. 맥의 자식 창은 부모를 따라 움직이고, 옆 모니터로 옮기는 것과 맞지 않는다
+///   (`docs/floating-windows-review.md`). 메인 위에 두는 것은 `sync_float_levels` 가 한다.
+///   제목 표시줄은 메인처럼 겹쳐 쓴다 (`tauri.macos.conf.json`).
 /// ★`visible(false)`: 화면이 자리를 잡고 내용을 그린 뒤에 띄운다 (`spawn`). 바로 띄우면 빈 창이 한 번 보인다.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn float_window(
     app: &tauri::AppHandle,
     url: tauri::Url,
     features: tauri::webview::NewWindowFeatures,
 ) -> tauri::webview::NewWindowResponse<tauri::Wry> {
     use tauri::webview::NewWindowResponse::{Create, Deny};
-    let Some(label) = url.fragment().filter(|l| url.scheme() == "about" && l.starts_with("float-")) else {
+    // ★맥의 WebKit 은 `about:blank#float-ai` 의 `#` 을 `%23` 으로 바꿔 넘긴다 (CI 의 맥 실측). 그래서 둘 다 받는다.
+    let label = url.fragment().or_else(|| url.path().strip_prefix("blank%23"));
+    let Some(label) = label.filter(|l| url.scheme() == "about" && l.starts_with("float-")) else {
+        backend::log_line(&format!("[float] 거절한 새 창: {url}"));
         return Deny;
     };
-    let Some(main) = app.get_webview_window("main") else {
-        return Deny;
-    };
-    let built = tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::External("about:blank".parse().unwrap()))
+    let builder = tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::External("about:blank".parse().unwrap()))
         .window_features(features)
-        .parent(&main)
-        .map(|b| {
-            b.title("PeroPix")
-                .visible(false)
-                .skip_taskbar(true)
-                .minimizable(false)
-                .decorations(false)
-                .shadow(false)
-                .min_inner_size(320.0, 240.0)
-                .background_color(tauri::window::Color(0x16, 0x16, 0x1a, 0xff))
-                .build()
-        });
-    match built {
-        Ok(Ok(window)) => Create { window },
-        Ok(Err(e)) | Err(e) => {
+        .title("PeroPix")
+        .visible(false)
+        .min_inner_size(320.0, 240.0)
+        .background_color(tauri::window::Color(0x16, 0x16, 0x1a, 0xff));
+    #[cfg(windows)]
+    let builder = {
+        let Some(main) = app.get_webview_window("main") else {
+            return Deny;
+        };
+        builder
+            .parent(&main)
+            .map(|b| b.skip_taskbar(true).minimizable(false).decorations(false).shadow(false))
+    };
+    #[cfg(target_os = "macos")]
+    let builder = tauri::Result::Ok(builder.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true));
+    match builder.and_then(|b| b.build()) {
+        Ok(window) => {
+            // ★레벨을 올려도 보통 창처럼 Spaces · Mission Control · Cmd+` 에 남게 한다 (Managed | ParticipatesInCycle).
+            //   안 적으면 레벨이 보통이 아닌 창은 임시 창으로 다뤄진다 (`NSWindowCollectionBehavior`)
+            #[cfg(target_os = "macos")]
+            if let Ok(ns) = window.ns_window() {
+                use objc2::{msg_send, runtime::AnyObject};
+                unsafe {
+                    let _: () = msg_send![ns as *mut AnyObject, setCollectionBehavior: (1usize << 2) | (1usize << 5)];
+                }
+            }
+            Create { window }
+        }
+        Err(e) => {
             backend::log_line(&format!("[float] {label} 창을 못 만들었습니다: {e}"));
             Deny
         }
+    }
+}
+
+/// 맥: 앱을 쓰는 동안은 앱 밖 창의 창 레벨을 올리고, 다른 앱으로 가면 되돌린다. 윈도우의 종속 창과 같게 언제나 메인 위에 있게 한다.
+/// ★독립 창이라 그냥 두면 메인을 누르는 순간 메인 뒤로 사라지고, 모니터가 하나면 다시 꺼낼 곳이 없다 (CI 의 맥 실측).
+/// ★순서를 바꾸는 `orderWindow` 를 쓰지 않는다. 메인은 포커스를 받은 후 마우스를 뗄 때 앞으로 나와서 언제 올려야 할지 정할 수 없다 (실측).
+/// ★레벨을 내리지 않으면 다른 앱 창 위에도 떠 있다 (실측). 포커스 이벤트 시점의 `isActive` 는 맞는 값이다 (실측).
+/// ★뒤에서 앞 순서로 바꾼다. 앱 밖 창끼리의 순서를 유지한다.
+#[cfg(target_os = "macos")]
+fn sync_float_levels(app: &tauri::AppHandle) {
+    use objc2::{class, msg_send, runtime::AnyObject};
+    let mut rest: Vec<*mut AnyObject> = app
+        .webview_windows()
+        .iter()
+        .filter(|(l, _)| l.starts_with("float-"))
+        .filter_map(|(_, w)| w.ns_window().ok())
+        .map(|w| w.cast())
+        .collect();
+    if rest.is_empty() {
+        return;
+    }
+    unsafe {
+        let ns_app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+        let active: bool = msg_send![ns_app, isActive];
+        // NSFloatingWindowLevel · NSNormalWindowLevel
+        let level: isize = if active { 3 } else { 0 };
+        let set = |w: *mut AnyObject| {
+            let now: isize = msg_send![w, level];
+            if now != level {
+                let _: () = msg_send![w, setLevel: level];
+            }
+        };
+        let list: *mut AnyObject = msg_send![ns_app, orderedWindows];
+        let n: usize = msg_send![list, count];
+        for i in (0..n).rev() {
+            let w: *mut AnyObject = msg_send![list, objectAtIndex: i];
+            if let Some(at) = rest.iter().position(|f| *f == w) {
+                rest.remove(at);
+                set(w);
+            }
+        }
+        // 목록에 없는 것 (다른 Space 에 있거나 최소화한 창)
+        rest.into_iter().for_each(set);
     }
 }
 
@@ -314,11 +374,10 @@ pub fn run() {
             // ★`apply_update` 가 새 판을 띄우기 전에 자물쇠를 놓을 수 있게 맡겨 둔다
             app.manage(InstanceLock(lock));
             /* ★★**메인 창을 여기서 만든다** (`tauri.conf.json` 의 `create: false`). 앱 밖 창을 받는 핸들러
-                 (`on_new_window`)는 빌더에서만 달 수 있고, 핸들러가 없으면 wry 가 `window.open` 을 거절한다.
-               ★윈도우만 단다. 맥은 앱 밖 창을 아직 안 연다 (`docs/floating-windows-review.md`). */
+                 (`on_new_window`)는 빌더에서만 달 수 있고, 핸들러가 없으면 wry 가 `window.open` 을 거절한다. */
             let cfg = app.config().app.windows.iter().find(|w| w.label == "main").cloned().ok_or("main 창 설정이 없습니다")?;
             let builder = tauri::WebviewWindowBuilder::from_config(app.handle(), &cfg)?;
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "macos"))]
             let builder = {
                 let h = app.handle().clone();
                 builder.on_new_window(move |url, features| float_window(&h, url, features))
@@ -404,6 +463,8 @@ pub fn run() {
                 }
             }
         }
+        #[cfg(target_os = "macos")]
+        RunEvent::WindowEvent { event: tauri::WindowEvent::Focused(_), .. } => sync_float_levels(app_handle),
         _ => {}
     });
 }

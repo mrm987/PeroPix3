@@ -34,6 +34,10 @@ windows-sys = { version = "0.59", features = [
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# ★맥 — 앱 밖 창을 메인 위에 둔다 (lib.rs `sync_float_levels`). tauri 가 이미 끌어오는 크레이트다
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+
 [profile.release]
 codegen-units = 1
 lto = true

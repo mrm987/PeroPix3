@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import { create } from "zustand";
 import { getAllWindows, getCurrentWindow, availableMonitors, Window as TauriWindow } from "@tauri-apps/api/window";
-import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
+import { LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import { IS_MAC } from "./platform";
 import { logLine } from "./report";
 
@@ -14,10 +14,13 @@ import { logLine } from "./report";
  *      · 모든 창에서 들을 것: `onEveryWindow` (단축키)
  *      · 창을 넘는 끌기: `locate` (`cards/dragStore`)
  *  ★한 영역은 창 하나다. 스토어가 하나라 같은 영역을 두 창에 띄우거나 창마다 다른 탭을 볼 수 없다.
- *  ★윈도우만 연다. 맥은 실행해 보지 못했다 (`FLOAT_OK`). */
+ *  ★★맥은 창 만드는 법이 다르다 (베타, 사용자 결정 2026-11-06). 메인에 종속시키지 않는 독립 창이고 좌표 단위가 논리 좌표다 (`FloatGeo`).
+ *    메인 위에 두는 것은 껍데기가 한다 (`sync_float_levels`). */
 export type FloatArea = "ai" | "preview" | "gallery" | "prompt" | "scene";
 
-/** 물리 픽셀이다 (`winstate.rs` 와 같은 이유: 배율이 다른 모니터로 옮겨 다니면 논리 좌표는 다른 곳을 가리킨다) */
+/** 윈도우는 물리 픽셀이다 (`winstate.rs` 와 같은 이유: 배율이 다른 모니터로 옮겨 다니면 논리 좌표는 다른 곳을 가리킨다).
+ *  ★맥은 반대로 논리 좌표다. 맥의 논리 좌표는 모니터 전체에 이어지지만, Tauri 가 주는 물리 좌표는 그 창의 배율을 곱한 값이라
+ *    배율이 다른 모니터 사이에서 이어지지 않는다 (tao `macos/window.rs` 의 `outer_position`). */
 export type FloatGeo = { x: number; y: number; w: number; h: number; max?: boolean };
 
 export type FloatLive = {
@@ -29,7 +32,7 @@ export type FloatLive = {
   off: (() => void)[];
 };
 
-export const FLOAT_OK = typeof window !== "undefined" && !IS_MAC && "__TAURI_INTERNALS__" in window;
+export const FLOAT_OK = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 /** 지금 그려지는 창. 포털을 지나도 컨텍스트는 이어지므로 새 창 안의 컴포넌트는 새 창의 `Window` 를 받는다 */
 export const WinCtx = createContext<Window>(typeof window === "undefined" ? (undefined as never) : window);
@@ -203,13 +206,20 @@ const FIRST_SIZE: Record<FloatArea, { w: number; h: number }> = {
 /** 처음 분리할 때는 메인의 그 영역 쪽 가장자리에 띄운다 (왼쪽 기둥은 왼쪽, 나머지는 오른쪽). 옆 모니터로 옮기면 그 위치를 기억한다 */
 async function firstGeo(area: FloatArea): Promise<FloatGeo> {
   const m = getCurrentWindow();
-  const [p, s, k] = await Promise.all([m.outerPosition(), m.outerSize(), m.scaleFactor()]);
-  const w = Math.min(Math.round(FIRST_SIZE[area].w * k), s.width);
-  const h = Math.min(Math.round(FIRST_SIZE[area].h * k), s.height);
+  const [p, s, scale] = await Promise.all([m.outerPosition(), m.outerSize(), m.scaleFactor()]);
+  // ★맥은 논리 좌표로 계산한다 (`FloatGeo`)
+  const d = IS_MAC ? scale : 1;
+  const k = scale / d;
+  const mw = s.width / d;
   const step = Math.round(lives().length * 32 * k);
   const pad = Math.round(40 * k);
+  const top = Math.round(48 * k) + step;
+  const w = Math.min(Math.round(FIRST_SIZE[area].w * k), mw);
+  // ★맥은 메인의 아래쪽 가장자리까지만 쓴다. 넘치면 창 아래쪽이 Dock 뒤로 들어가 입력칸이 가려진다 (CI 의 맥 실측)
+  const h = Math.min(Math.round(FIRST_SIZE[area].h * k), s.height / d - (IS_MAC ? top : 0));
   const left = area === "ai" || area === "prompt";
-  return { x: left ? p.x + pad + step : p.x + s.width - w - pad - step, y: p.y + Math.round(48 * k) + step, w, h };
+  const px = p.x / d;
+  return { x: left ? px + pad + step : px + mw - w - pad - step, y: p.y / d + top, w, h };
 }
 
 async function spawn(area: FloatArea, geo: FloatGeo): Promise<boolean> {
@@ -228,7 +238,7 @@ const spawning = new Set<FloatArea>();
 
 async function open(area: FloatArea, geo: FloatGeo): Promise<boolean> {
   const label = `float-${area}`;
-  const k = window.devicePixelRatio || 1;
+  const k = IS_MAC ? 1 : window.devicePixelRatio || 1;
   const win = window.open(
     `about:blank#${label}`,
     label,
@@ -261,8 +271,14 @@ async function open(area: FloatArea, geo: FloatGeo): Promise<boolean> {
 
   try {
     if (!(await waitNative(label))) throw new Error("창이 만들어지지 않았습니다");
-    await tw.setPosition(new PhysicalPosition(geo.x, geo.y));
-    await tw.setSize(new PhysicalSize(geo.w, geo.h));
+    /* ★맥은 크기를 먼저 맞춘다. 맥의 크기 변경은 왼쪽 아래를 고정하므로, 나중에 하면 맞춰 놓은 위쪽 위치가 밀린다 (CI 의 맥 실측: y 87 → 28) */
+    if (IS_MAC) {
+      await tw.setSize(new LogicalSize(geo.w, geo.h));
+      await tw.setPosition(new LogicalPosition(geo.x, geo.y));
+    } else {
+      await tw.setPosition(new PhysicalPosition(geo.x, geo.y));
+      await tw.setSize(new PhysicalSize(geo.w, geo.h));
+    }
     if (geo.max) await tw.maximize();
     await tw.show();
     await tw.setFocus();
@@ -299,11 +315,19 @@ async function noteGeo(area: FloatArea) {
   const l = useFloat.getState().live[area];
   if (!l) return;
   try {
-    const [min, max, p, s] = await Promise.all([l.tw.isMinimized(), l.tw.isMaximized(), l.tw.outerPosition(), l.tw.innerSize()]);
-    if (min) return;
+    const [min, full, max, p, s, scale] = await Promise.all([
+      l.tw.isMinimized(),
+      l.tw.isFullscreen(),
+      l.tw.isMaximized(),
+      l.tw.outerPosition(),
+      l.tw.innerSize(),
+      l.tw.scaleFactor(),
+    ]);
+    if (min || full) return;
     const st = useFloat.getState();
     const old = st.geo[area];
-    const geo = max && old ? { ...old, max: true } : { x: p.x, y: p.y, w: s.width, h: s.height, max };
+    const d = IS_MAC ? scale : 1;
+    const geo = max && old ? { ...old, max: true } : { x: p.x / d, y: p.y / d, w: s.width / d, h: s.height / d, max };
     useFloat.setState({ geo: { ...st.geo, [area]: geo } });
     persist();
   } catch {
@@ -383,8 +407,10 @@ export async function bootFloats() {
     const mons = await availableMonitors();
     const visible = (g: FloatGeo) =>
       mons.some((m) => {
+        const d = IS_MAC ? m.scaleFactor : 1;
+        const [x, y, w, h] = [m.position.x / d, m.position.y / d, m.size.width / d, m.size.height / d];
         const head = g.y + 40;
-        return g.x + g.w > m.position.x && g.x < m.position.x + m.size.width && head > m.position.y && head < m.position.y + m.size.height;
+        return g.x + g.w > x && g.x < x + w && head > y && head < y + h;
       });
     const keep = out.filter((a) => geo[a] && visible(geo[a]!));
     useFloat.setState({ out: keep });
@@ -398,8 +424,14 @@ export async function bootFloats() {
 
 /* ── 창을 넘는 좌표 ────────────────────────────────────────────────
  * 포인터를 잡은 창은 창 밖에서도 그 창 기준의 client 좌표를 계속 받는다 (측정). 그것을 물리 픽셀로 옮겨 어느 창 위인지 가린다.
- * ★`screenX` 대신 껍데기가 아는 물리 좌표를 쓴다. 배율이 다른 모니터 사이에서는 `screenX` 의 기준이 흔들린다. */
+ * ★`screenX` 대신 껍데기가 아는 물리 좌표를 쓴다. 배율이 다른 모니터 사이에서는 `screenX` 의 기준이 흔들린다.
+ * ★맥은 논리 좌표로 계산한다 (`FloatGeo`). client 좌표와 단위가 같아 배율을 곱하지 않는다. */
 const frames = new Map<Window, { x: number; y: number }>();
+
+/** client 좌표 1 이 화면 좌표로 얼마인가 */
+const unit = (w: Window) => (IS_MAC ? 1 : w.devicePixelRatio || 1);
+/** 껍데기가 준 위치를 화면 좌표로 */
+const screenOf = (p: { x: number; y: number }, w: Window) => (IS_MAC ? { x: p.x / (w.devicePixelRatio || 1), y: p.y / (w.devicePixelRatio || 1) } : p);
 
 /** 창들의 물리 위치를 다시 읽는다. 끌기를 시작할 때와 창이 움직였을 때 */
 export async function refreshFrames() {
@@ -407,8 +439,8 @@ export async function refreshFrames() {
   if (!list.length) return;
   try {
     const [m, ...rest] = await Promise.all([getCurrentWindow().innerPosition(), ...list.map((l) => l.tw.innerPosition())]);
-    frames.set(window, m);
-    list.forEach((l, i) => frames.set(l.win, rest[i]));
+    frames.set(window, screenOf(m, window));
+    list.forEach((l, i) => frames.set(l.win, screenOf(rest[i], l.win)));
   } catch {
     /* 창이 막 닫혔다. 아래 `origin` 이 `screenX` 로 대신한다 */
   }
@@ -417,24 +449,24 @@ export async function refreshFrames() {
 function origin(w: Window) {
   const f = frames.get(w);
   if (f) return f;
-  const k = w.devicePixelRatio || 1;
+  const k = unit(w);
   return { x: w.screenX * k, y: w.screenY * k };
 }
 
 export type WinPoint = { win: Window; x: number; y: number };
 
 /** `src` 창 기준 좌표가 어느 창의 어디인가. 앱 창 위가 아니면 null. 새 창이 없으면 언제나 `src` 그대로다.
- *  ★새 창은 언제나 메인 위에 있고(메인에 종속), 새 창끼리는 포커스 순서로 본다. */
+ *  ★새 창은 언제나 메인 위에 있고, 새 창끼리는 포커스 순서로 본다. */
 export function locate(src: Window, x: number, y: number): WinPoint | null {
   const list = lives();
   if (!list.length) return { win: src, x, y };
   const so = origin(src);
-  const sk = src.devicePixelRatio || 1;
+  const sk = unit(src);
   const px = so.x + x * sk;
   const py = so.y + y * sk;
   for (const w of [...list.map((l) => l.win), window]) {
     const o = origin(w);
-    const k = w.devicePixelRatio || 1;
+    const k = unit(w);
     const cx = (px - o.x) / k;
     const cy = (py - o.y) / k;
     if (cx >= 0 && cy >= 0 && cx < w.innerWidth && cy < w.innerHeight) return { win: w, x: cx, y: cy };
