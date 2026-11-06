@@ -5,6 +5,8 @@ import { useGallery } from "../store/gallery";
 import { useWs } from "../store/workspace";
 import { toast } from "../store/toast";
 import { PluginSlot } from "../components/PluginSlot";
+import { Icon } from "../components/Icon";
+import { dockArea, useFloat } from "../lib/floatWin";
 
 /** 하단 네비 = v2.x 의 모드 전환 자리 (ui-guide.md 6절).
  *  모드마다 고유색이 있고, 활성 모드는 상단에 1.5px 색 선이 그어진다.
@@ -81,10 +83,13 @@ export function BottomNav({ right }: { right?: React.ReactNode }) {
  *  ★생성물을 여기 떨구면 보관함에 들어간다 (크게 본 그림의 「보관」 단추와 같은 일).
  *  ★★**무르지 않는다** (`toggle: false`) — 이미 보관된 그림을 떨궜다고 빼 버리면
  *    "놓았는데 사라졌다"가 된다. 이미 있으면 있다고 알리기만 한다.
- *  ★모드를 옮기지 않는다 — 옮기면 하던 작업 화면에서 튕겨 나간다. */
+ *  ★모드를 옮기지 않는다 — 옮기면 하던 작업 화면에서 튕겨 나간다.
+ *  ★갤러리를 앱 밖 창으로 분리한 동안은 분리 아이콘을 달고, 누르면 갤러리가 메인으로 돌아와 그 모드로 간다.
+ *    `dockArea` 가 분리 표시를 먼저 지우므로 뒤따르는 `setMode` 가 메인의 모드를 옮긴다. */
 function GalleryTab({ on, onClick }: { on: boolean; onClick: () => void }) {
   const t = useI18n((s) => s.t);
   const m = MODES.find((x) => x.id === "gallery")!;
+  const out = useFloat((s) => !!s.live.gallery);
   const zone = useDropZone({
     id: "nav-gallery",
     kind: "image",
@@ -113,12 +118,16 @@ function GalleryTab({ on, onClick }: { on: boolean; onClick: () => void }) {
       //   상관없다 (다른 자리도 이렇게 쓴다)
       ref={zone.ref as unknown as React.Ref<HTMLButtonElement>}
       data-nav-gallery
-      onClick={onClick}
-      data-tip={zone.active ? t("gallery.dropToKeep") : undefined}
+      onClick={() => {
+        if (out) dockArea("gallery");
+        onClick();
+      }}
+      data-tip={zone.active ? t("gallery.dropToKeep") : out ? t("float.dock", { name: t("mode.gallery") }) : undefined}
       style={{
         position: "relative",
         display: "flex",
         alignItems: "center",
+        gap: "var(--sp-2)",
         padding: "0 var(--sp-7)",
         fontSize: "var(--text-md)",
         fontWeight: on ? "var(--w-semi)" : "var(--w-normal)",
@@ -132,6 +141,7 @@ function GalleryTab({ on, onClick }: { on: boolean; onClick: () => void }) {
       }}
     >
       {t("mode.gallery")}
+      {out && Icon.popOut}
       {on && (
         <span
           style={{

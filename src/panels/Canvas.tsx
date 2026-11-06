@@ -38,7 +38,7 @@ import { applyMetaParams, applyMetaVibes } from "./GalleryMeta";
 import { hasMeta } from "../lib/metaApply";
 import { CharPositioner } from "./CharPositioner";
 import { sendToEditor } from "../editor/sendTo";
-import { observeSize, raiseArea, raiseMain, useFloat, useWin } from "../lib/floatWin";
+import { dockArea, observeSize, raiseMain, useFloat, useWin } from "../lib/floatWin";
 import { SplitButton } from "../app/FloatWindow";
 
 /** 캔버스 — 씬 세트 줄 + 씬 무대 (마스크를 칠하는 동안에는 그 자리가 편집기다).
@@ -256,15 +256,15 @@ const STRIP: React.CSSProperties = {
   textAlign: "left",
 };
 
-/** 씬을 분리한 동안 메인에 남는 줄 — 지금 씬 그룹 이름. 누르면 그 창이 앞으로 온다 */
+/** 씬을 분리한 동안 메인에 남는 줄 — 지금 씬 그룹 이름. 누르면 메인으로 돌아온다 */
 function SceneStrip() {
   const tr = useI18n((s) => s.t);
   const name = useWs((s) => s.activeSceneGroup()?.name);
   return (
     <button
       data-float-strip="scene"
-      data-tip={tr("float.toFront", { name: tr("float.scene") })}
-      onClick={() => raiseArea("scene")}
+      data-tip={tr("float.dock", { name: tr("float.scene") })}
+      onClick={() => dockArea("scene")}
       style={{ ...STRIP, borderBottom: "none", borderTop: "1px solid var(--line)" }}
     >
       {Icon.popOut}
@@ -274,15 +274,15 @@ function SceneStrip() {
   );
 }
 
-/** 이미지 프리뷰를 분리한 동안 메인에 남는 줄 — 보고 있는 그림의 이름. 누르면 그 창이 앞으로 온다 */
+/** 이미지 프리뷰를 분리한 동안 메인에 남는 줄 — 보고 있는 그림의 이름. 누르면 메인으로 돌아온다 */
 function PreviewStrip() {
   const tr = useI18n((s) => s.t);
   const file = useSceneFocus((s) => s.file);
   return (
     <button
       data-float-strip="preview"
-      data-tip={tr("float.toFront", { name: tr("float.preview") })}
-      onClick={() => raiseArea("preview")}
+      data-tip={tr("float.dock", { name: tr("float.preview") })}
+      onClick={() => dockArea("preview")}
       style={STRIP}
     >
       {Icon.popOut}

@@ -14,11 +14,14 @@ export function PanelCollapseButton({
   collapsed,
   onClick,
   title,
+  icon,
 }: {
   side: "left" | "right";
   collapsed: boolean;
   onClick: () => void;
   title?: string;
+  /** 셰브런 대신 그릴 것. 앱 밖 창으로 분리된 영역의 레일이 쓴다 */
+  icon?: React.ReactNode;
 }) {
   const t = useI18n((s) => s.t);
   const pointingLeft = (side === "left" && !collapsed) || (side === "right" && collapsed);
@@ -39,7 +42,7 @@ export function PanelCollapseButton({
         ...(collapsed ? {} : { [sepSide]: "1px solid var(--line)" }),
       }}
     >
-      {pointingLeft ? Icon.chevL : Icon.chevR}
+      {icon ?? (pointingLeft ? Icon.chevL : Icon.chevR)}
     </button>
   );
 }

@@ -25,7 +25,7 @@ export const en = {
   float: {
     split: "Open in a new window",
     close: "Close to return it to the main window",
-    toFront: "Bring {name} window to front",
+    dock: "Return {name} to the main window",
     preview: "Image preview",
     scene: "Scenes",
   },

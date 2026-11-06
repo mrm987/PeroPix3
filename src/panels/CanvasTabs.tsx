@@ -108,11 +108,15 @@ export function CanvasTabs({ part = "all" }: { part?: "all" | "top" | "sceneGrou
           display: "flex",
           alignItems: "center",
           gap: 4,
-          flexWrap: "wrap",
           padding: "var(--sp-2) var(--sp-5) var(--sp-2) var(--sp-8)",
           borderBottom: "1px solid var(--line)",
         }}
       >
+      {/* ★★여러 줄로 접히는 것은 세트 칩뿐이다. 이 줄 전체를 접으면 저장 경로와 분리 버튼이 자리가 모자랄 때 다음 줄로 내려가는데,
+          이 줄은 `Canvas` 의 세로 flex 항목이라 높이가 확정되어 `DropLine` 의 `minHeight: 100%` 가 첫 줄을 줄 전체 높이로 늘린다.
+          그래서 다음 줄이 줄 밖으로 밀려 아래 프리뷰에 가려졌다 (사용자 지적 2026-11-06, 실측: 창 폭 1440 에서 분리 버튼이 안 눌림).
+          여기는 `alignItems: center` 인 품 안이라 높이가 확정되지 않아 `minHeight: 100%` 가 늘리지 않는다. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", minWidth: 0 }}>
       {inGroup.map((t, i) => {
         /* ★★**씬 그룹은 `activeSceneGroup` 과 맞댄다** (사용자 지적 2026-08-27:
            *"지금 선택된 씬 그룹이 선택되어 있는 표시가 안 보임"*). 2026-08-24 개명 전에는
@@ -138,6 +142,8 @@ export function CanvasTabs({ part = "all" }: { part?: "all" | "top" | "sceneGrou
               borderRadius: "var(--r-2)",
               border: `1px solid ${on ? "var(--accent)" : "var(--line)"}`,
               maxWidth: 220,
+              // ★한 줄에 혼자 남아도 넘치면 이름이 말줄임으로 줄어든다. 안 그러면 칩이 넘쳐 분리 버튼을 덮는다
+              minWidth: 0,
               background: on ? "color-mix(in srgb, var(--accent) 14%, var(--surface))" : "var(--panel)",
               color: on ? "var(--ink)" : "var(--ink-dim)",
               fontSize: "var(--text-xs)",
@@ -241,8 +247,8 @@ export function CanvasTabs({ part = "all" }: { part?: "all" | "top" | "sceneGrou
       >
         {Icon.plus}
       </button>
+      </div>
 
-        <span style={{ flex: 1 }} />
         <SaveHint />
         {!sceneOut && (
           <SplitButton
@@ -485,8 +491,11 @@ function SaveHint() {
         /* ★★자리가 모자라면 **줄이 밀리는 대신 말줄임**이다 (사용자 지시 2026-08-19) —
            서브탭이 늘면 이 줄이 탭을 밀어냈다. 폴더 이름은 뒤쪽이 중요하지만, 여기서는
            **어느 탭·세트인지**가 뒤에 오므로 앞을 자르지 않고 끝을 자른다 (툴팁에 전체가 있다). */
-        minWidth: 0,
-        flexShrink: 1,
+        /* ★칩이 쓰고 남은 폭만 쓴다 (기준 크기 0). 그래서 칩은 자리가 정말 모자랄 때만 다음 줄로 접히고,
+           저장 경로가 먼저 말줄임으로 줄어든다. 폭은 폴더 열기 버튼 하나까지 줄어든다. */
+        flex: "1 1 0",
+        minWidth: 28,
+        justifyContent: "flex-end",
         overflow: "hidden",
         whiteSpace: "nowrap",
         fontSize: "var(--text-2xs)",

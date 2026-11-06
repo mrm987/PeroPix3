@@ -7,7 +7,8 @@ import { ResizeHandle } from "../components/ResizeHandle";
 import { PanelCollapseButton } from "../components/PanelCollapseButton";
 import { useUi } from "../store/ui";
 import { useLlm } from "../store/llm";
-import { raiseArea, useFloat } from "../lib/floatWin";
+import { dockArea, useFloat } from "../lib/floatWin";
+import { Icon } from "../components/Icon";
 import { SplitButton } from "./FloatWindow";
 
 /* ★기둥·틀은 **가장 어두운 바탕**(`--bg`)이다 — 페로픽스파이는 `.params-panel` 에
@@ -46,7 +47,7 @@ export function Shell({
   leftHeaderRight,
   /** 좌 패널 **옆**에 붙는 서랍 — 덮지 않고 나란히 선다 (블록 저장소) */
   leftDrawer,
-  /** 좌 패널의 내용을 앱 밖 창으로 분리했나 — 그동안은 레일만 남고, 누르면 그 창이 앞으로 온다 (`lib/floatWin`) */
+  /** 좌 패널의 내용을 앱 밖 창으로 분리했나 — 그동안은 레일만 남고, 누르면 메인으로 돌아온다 (`lib/floatWin`) */
   leftOut,
 }: {
   left: ReactNode;
@@ -96,7 +97,7 @@ export function Shell({
   /** 접힌 레일의 점 — 도는 중인가 · 접어 둔 사이에 끝났는가 (`Rail` 의 `dot`) */
   const aiBusy = useLlm((s) => s.sending);
   const aiUnread = useLlm((s) => s.unread);
-  /** AI 어시스턴트를 앱 밖 창으로 분리했나 — 그동안은 레일만 남고, 누르면 그 창이 앞으로 온다 */
+  /** AI 어시스턴트를 앱 밖 창으로 분리했나 — 그동안은 레일만 남고, 누르면 메인으로 돌아온다 */
   const aiOut = useFloat((s) => !!s.live.ai);
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -111,8 +112,9 @@ export function Shell({
             <Rail
               side="left"
               label={t("ai.title")}
-              onExpand={() => raiseArea("ai")}
-              tip={t("float.toFront", { name: t("ai.title") })}
+              onExpand={() => dockArea("ai")}
+              tip={t("float.dock", { name: t("ai.title") })}
+              icon={Icon.popOut}
               dot={aiBusy ? "busy" : null}
             />
           ) : aiCollapsed ? (
@@ -173,8 +175,9 @@ export function Shell({
           <Rail
             side="left"
             label={leftLabel}
-            onExpand={() => raiseArea("prompt")}
-            tip={t("float.toFront", { name: leftLabel })}
+            onExpand={() => dockArea("prompt")}
+            tip={t("float.dock", { name: leftLabel })}
+            icon={Icon.popOut}
           />
         ) : (
           <SideColumn

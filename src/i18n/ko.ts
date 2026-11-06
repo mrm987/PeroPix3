@@ -25,7 +25,7 @@ export const ko: Dict = {
   float: {
     split: "새 창으로 분리",
     close: "닫으면 메인 창으로 돌아갑니다",
-    toFront: "{name} 창을 앞으로",
+    dock: "{name} 창을 메인으로 되돌리기",
     preview: "이미지 프리뷰",
     scene: "씬",
   },

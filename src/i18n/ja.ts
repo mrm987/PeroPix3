@@ -25,7 +25,7 @@ export const ja: Dict = {
   float: {
     split: "新しいウィンドウに分離",
     close: "閉じるとメインウィンドウに戻ります",
-    toFront: "{name}のウィンドウを前面へ",
+    dock: "{name}をメインウィンドウに戻す",
     preview: "画像プレビュー",
     scene: "シーン",
   },
