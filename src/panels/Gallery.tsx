@@ -22,6 +22,8 @@ import { onNearBottom } from "../lib/nearBottom";
 import { COLOR_HEX } from "../lib/blocks";
 import { normTag } from "../lib/tagSearch";
 import { sendToEditor } from "../editor/sendTo";
+import { useFloat, useWin } from "../lib/floatWin";
+import { SplitButton } from "../app/FloatWindow";
 
 /** 옮길 곳 드롭다운에서 **최상위**를 가리키는 값. 서버가 쓰는 값은 빈 문자열인데,
  *  그것은 이 드롭다운에서 「고르지 않음」자리표시자가 이미 쓰고 있다. 보낼 때 되돌린다. */
@@ -46,6 +48,7 @@ const PAGE = 60;
  *    창이 먼저 열렸다. 고른 장의 생성 정보는 크게 보지 않아도 오른쪽 패널에 뜬다 (`focus`). */
 export function Gallery() {
   const t = useI18n((s) => s.t);
+  const win = useWin();
   const base = useGen((s) => s.base);
   const ws = useWs((s) => s.current);
   /** ★별표는 **보관함이 든다** — 워크스페이스가 아니다 (store/gallery.ts `starred` 주석) */
@@ -117,9 +120,9 @@ export function Gallery() {
         return void setFocus(ws, shown[idx + 1].file);
       if (e.key === "s" || e.key === "S") return void toggleStar(focus);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [focus, big, picked, idx, shown, ws, setFocus, setBig, clearPick, toggleStar]);
+    win.addEventListener("keydown", onKey);
+    return () => win.removeEventListener("keydown", onKey);
+  }, [win, focus, big, picked, idx, shown, ws, setFocus, setBig, clearPick, toggleStar]);
 
   /** 마지막에 **수식키 없이** 누른 장 — Shift+클릭이 여기서부터 범위를 잡는다 */
   const anchor = useRef<string | null>(null);
@@ -313,6 +316,7 @@ function Toolbar({
   onMove: () => void;
 }) {
   const t = useI18n((s) => s.t);
+  const out = useFloat((s) => !!s.live.gallery);
   return (
     <div
       style={{
@@ -388,6 +392,7 @@ function Toolbar({
           </button>
         </>
       )}
+      {!out && <SplitButton area="gallery" style={{ ...linkBtn, display: "grid", placeItems: "center" }} />}
     </div>
   );
 }

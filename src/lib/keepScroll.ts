@@ -1,3 +1,5 @@
+import { queryAnyWindow } from "./floatWin";
+
 /** 어떤 일이 벌어지는 동안 **보던 자리를 그대로** 붙잡아 둔다.
  *
  *  ★★「설정 불러오기」가 그 자리다 (사용자 지시 2026-08-21: 현재 위치에 고정).
@@ -10,7 +12,8 @@
  *    그 뒤에도 움직이는 것은 사용자가 스스로 굴린 것이라 건드리지 않는다.
  */
 export function keepScroll(selector: string, run: () => void) {
-  const el = typeof document === "undefined" ? null : document.querySelector<HTMLElement>(selector);
+  // ★프롬프트를 앱 밖 창으로 분리했으면 거기 있다
+  const el = typeof document === "undefined" ? null : (queryAnyWindow(selector) as HTMLElement | null);
   if (!el) return run();
   const top = el.scrollTop;
   const left = el.scrollLeft;

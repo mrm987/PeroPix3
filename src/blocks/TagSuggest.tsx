@@ -15,6 +15,7 @@ import {
 } from "../lib/tagData";
 import { useWildcards } from "../store/wildcards";
 import { useUi } from "../store/ui";
+import { useWin } from "../lib/floatWin";
 import { useI18n } from "../i18n";
 import { toStore } from "../lib/softWrap";
 
@@ -43,6 +44,7 @@ export function useTagSuggest(
   /** ★와일드카드 **정의 편집기**용 (v2 `dataset.noTagComma`). 한 줄에 한 후보라 쉼표를 안 붙인다 */
   opt?: { noComma?: boolean },
 ) {
+  const win = useWin();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<TagEntry[]>([]);
   const [sel, setSel] = useState(0);
@@ -229,9 +231,9 @@ export function useTagSuggest(
   useLayoutEffect(() => {
     const el = list.current;
     if (!open || !el) return;
-    const over = el.getBoundingClientRect().right - (window.innerWidth - 10);
+    const over = el.getBoundingClientRect().right - (win.innerWidth - 10);
     if (over > 0) setPos((p) => ({ ...p, left: Math.max(10, p.left - over) }));
-  }, [open, items, pos.left]);
+  }, [open, items, pos.left, win]);
 
   useEffect(() => {
     if (!open) return;
@@ -360,7 +362,7 @@ export function useTagSuggest(
             </div>
           ))}
         </div>,
-        document.body,
+        win.document.body,
       )
     ) : null;
 
@@ -417,8 +419,11 @@ const MIRROR_COPY = [
  *    몇 줄이든 언제나 커서 바로 위에 붙는다.
  *  ★남은 자리에 맞춰 **높이도 줄인다** — 그래야 화면 밖으로 밀려나지 않는다. */
 function dropdownPos(ta: Field) {
-  const cs = window.getComputedStyle(ta);
-  const mirror = document.createElement("div");
+  // ★글 상자가 사는 창 기준이다 (`lib/floatWin`)
+  const doc = ta.ownerDocument;
+  const win = doc.defaultView ?? window;
+  const cs = win.getComputedStyle(ta);
+  const mirror = doc.createElement("div");
   const s = mirror.style;
   s.position = "absolute";
   s.visibility = "hidden";
@@ -437,15 +442,15 @@ function dropdownPos(ta: Field) {
      한 번 더 더하니 목록이 반 칸 넘게 내려갔다.
      `vertical-align: top` 인 빈 상자는 **윗변이 줄칸의 윗변에 붙으므로**, 재는 값이 곧
      줄칸의 위아래가 된다. 폭이 0 이라 줄바꿈에는 영향이 없다. */
-  const mark = document.createElement("span");
+  const mark = doc.createElement("span");
   mark.style.cssText = `display:inline-block;width:0;height:${line}px;vertical-align:top`;
   mirror.appendChild(mark);
-  document.body.appendChild(mirror);
+  doc.body.appendChild(mirror);
   const m = mark.getBoundingClientRect();
   const d = mirror.getBoundingClientRect();
   const x = m.left - d.left;
   const y = m.top - d.top;
-  document.body.removeChild(mirror);
+  doc.body.removeChild(mirror);
 
   const r = ta.getBoundingClientRect();
   // ★거울에는 테두리가 없으므로 글 상자의 테두리 두께만큼 더해 준다
@@ -455,18 +460,18 @@ function dropdownPos(ta: Field) {
   const width = Math.min(440, Math.max(360, r.width));
 
   let left = r.left + bl + x - ta.scrollLeft;
-  if (left + width > window.innerWidth - 10) left = window.innerWidth - width - 10;
+  if (left + width > win.innerWidth - 10) left = win.innerWidth - width - 10;
   if (left < 10) left = 10;
 
   /** 커서가 선 줄의 위·아래 끝 (화면 좌표) */
   const lineTop = r.top + bt + y - ta.scrollTop;
   const lineBottom = lineTop + line;
-  const below = window.innerHeight - lineBottom - 10;
+  const below = win.innerHeight - lineBottom - 10;
   const above = lineTop - 10;
   // ★아래가 너무 좁고 위가 더 넓을 때만 뒤집는다 — 어중간하면 아래가 눈에 자연스럽다
   const flip = below < 160 && above > below;
   const maxH = Math.max(80, Math.min(300, flip ? above : below));
   return flip
-    ? { left, width, maxH, top: null, bottom: window.innerHeight - lineTop + 4 }
+    ? { left, width, maxH, top: null, bottom: win.innerHeight - lineTop + 4 }
     : { left, width, maxH, top: lineBottom + 4, bottom: null };
 }

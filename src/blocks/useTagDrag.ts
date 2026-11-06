@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { locate } from "../lib/floatWin";
 
 /** 태그 칩 하나가 놓일 자리 — 어느 목록의 몇 번째 블록, 그 안의 몇 번째 칸인가.
  *  `index === -1` 은 **그 블록의 끝**이다 (접힌 블록에 떨어뜨렸을 때).
@@ -32,6 +33,10 @@ export function useTagDrag(onMove: (from: Spot, to: Spot) => void) {
   /** 접힌 블록이 받을 때 — 막대 대신 그 줄 전체를 두른다 */
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null);
+  /** 표시들이 그려질 창 — 커서가 있는 창이다. 칩은 앱 밖 창으로 넘어갈 수 있다 (`lib/floatWin`) */
+  const [win, setWin] = useState<Window | null>(null);
+  /** 끌기가 시작된 창. 포인터 좌표는 언제나 이 창 기준으로 온다 */
+  const src = useRef<Window | null>(null);
 
   /** 사각형까지의 거리 — 안에 있으면 0 */
   const distTo = (r: DOMRect, x: number, y: number) =>
@@ -47,16 +52,23 @@ export function useTagDrag(onMove: (from: Spot, to: Spot) => void) {
     for (let n: HTMLElement | null = el; n; n = n.parentElement) {
       if (getComputedStyle(n).position === "fixed") return n;
     }
-    return document.body;
+    return el.ownerDocument.body;
   };
   const layer = useRef<Element | null>(null);
 
   /** 포인터 아래의 자리. 칩이 행 우선으로 놓이므로 **앞선 칩의 수**가 곧 끼울 자리다. */
-  const spotAt = useCallback((x: number, y: number) => {
+  const spotAt = useCallback((x0: number, y0: number) => {
+    const loc = locate(src.current ?? window, x0, y0);
+    if (!loc) return null;
+    const { x, y } = loc;
+    const doc = loc.win.document;
+    /* ★모달 안에서 시작한 끌기는 그 모달 밖으로 못 나간다. 평범한 화면에서 시작했으면 다른 창의 줄도 받는다 */
+    const lay = layer.current;
+    if (lay && lay.ownerDocument !== doc && lay !== lay.ownerDocument.body) return null;
     let row: HTMLElement | null = null;
     let best = 24; // 블록 사이 틈(DropLine)만큼은 가까운 줄로 쳐 준다
-    for (const el of document.querySelectorAll<HTMLElement>("[data-block-row]")) {
-      if (layer.current && !layer.current.contains(el)) continue;
+    for (const el of doc.querySelectorAll<HTMLElement>("[data-block-row]")) {
+      if (lay && lay.ownerDocument === doc && !lay.contains(el)) continue;
       const d = distTo(el.getBoundingClientRect(), x, y);
       if (d < best || (d === 0 && !row)) {
         best = d;
@@ -112,6 +124,7 @@ export function useTagDrag(onMove: (from: Spot, to: Spot) => void) {
     setBar(null);
     setBox(null);
     setGhost(null);
+    setWin(null);
   }, []);
 
   const handle = useCallback(
@@ -122,6 +135,7 @@ export function useTagDrag(onMove: (from: Spot, to: Spot) => void) {
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         // ★받을 수 있는 층을 여기서 한 번 정한다 (위 `layerOf` 의 ★주)
         layer.current = layerOf(e.currentTarget as HTMLElement);
+        src.current = (e.currentTarget as HTMLElement).ownerDocument.defaultView;
         start.current = { from: { block, index }, label: tagLabel, x: e.clientX, y: e.clientY };
       },
       onPointerMove: (e: React.PointerEvent) => {
@@ -137,7 +151,9 @@ export function useTagDrag(onMove: (from: Spot, to: Spot) => void) {
         overRef.current = hit?.spot ?? null;
         setBar(hit?.bar ?? null);
         setBox(hit?.box ?? null);
-        setGhost({ x: e.clientX + 10, y: e.clientY + 12 });
+        const at = locate(src.current ?? window, e.clientX, e.clientY);
+        setWin(at?.win ?? null);
+        setGhost(at ? { x: at.x + 10, y: at.y + 12 } : null);
       },
       onPointerUp: (e: React.PointerEvent) => {
         (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
@@ -162,6 +178,7 @@ export function useTagDrag(onMove: (from: Spot, to: Spot) => void) {
     bar,
     box,
     ghost,
+    win,
     /** 끌고 난 직후의 클릭인가 (텍스트 편집이 딸려 열리는 것을 막는다) */
     justDragged: () => performance.now() - endedAt.current < 250,
   };

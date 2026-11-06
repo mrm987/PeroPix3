@@ -17,6 +17,7 @@ import { useGallery } from "../store/gallery";
 import { useWs } from "../store/workspace";
 import { applyMeta, PICK_DROP, ReproNote, type MetaPick } from "../panels/GalleryMeta";
 import { showInExif } from "../panels/tools/ExifTool";
+import { areaOf, useWin } from "../lib/floatWin";
 
 /** 밖에서 떨군 그림 하나를 **무엇으로 쓸지 고르는 자리** (v2 「드롭 확인 모달」 이식).
  *
@@ -32,6 +33,8 @@ import { showInExif } from "../panels/tools/ExifTool";
  */
 export function DropImport() {
   const t = useI18n((s) => s.t);
+  /** ★앱 밖 창이면 그 창이 무엇인지로 가른다 (메인의 모드와 무관하다) */
+  const win = useWin();
   const model = useGen((g) => g.params.model);
   const cap = modelCaps(model);
   const [sheet, setSheet] = useState<DropRead | null>(null);
@@ -49,7 +52,8 @@ export function DropImport() {
          ★NAI 메타데이터가 있으면 **바로** 넣고, 없으면 한 번 묻는다 — 설정이 안 남은 그림은
            나중에 그 그림에서 되돌릴 것이 없으므로, 그것을 알고 넣는 편이 낫다.
          ★바이브 파일은 그림이 아니다 — 갤러리에 넣을 것이 없으니 지금까지대로 시트로 간다. */
-      if (useUi.getState().mode === "gallery" && read.kind === "image") {
+      const area = areaOf(win);
+      if ((area === "main" ? useUi.getState().mode === "gallery" : area === "gallery") && read.kind === "image") {
         /* ★★**여러 장을 한 번에 받는다** (사용자 지시 2026-08-29: *"갤러리 다중 드롭"*).
            첫 장은 이미 읽었고 나머지는 여기서 읽는다 — 하나가 깨졌다고 전부 버리지 않는다.
            ★설정이 없는 장이 섞여 있으면 **한 번만** 묻는다: 그래도 넣겠다고 하면 그것까지,

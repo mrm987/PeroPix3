@@ -1,3 +1,5 @@
+import { useFloat, useWin } from "../lib/floatWin";
+import { SplitButton } from "../app/FloatWindow";
 import { Fragment } from "react";
 import { useI18n } from "../i18n";
 import { useReorder } from "../lib/useReorder";
@@ -37,6 +39,9 @@ export function CanvasTabs({ part = "all" }: { part?: "all" | "top" | "sceneGrou
     switchTab, addTab, renameTab, moveTab, moveSceneGroup, planRemove, removeAt,
     current: wsName, moveTabToWs, moveGroupToTab } = useWs();
   const tr = useI18n((s) => s.t);
+  const win = useWin();
+  /** 씬을 앱 밖 창으로 분리했나 — 그 창의 이 줄에는 분리 버튼이 없다 */
+  const sceneOut = useFloat((s) => !!s.live.scene);
   const [editing, setEditing] = useState<string | null>(null);
   const [editingChar, setEditingChar] = useState<string | null>(null);
   /* ★끌던 것을 **받을 자리 위**에 올려 두었나 (사용자 지적 2026-08-28: *"워크스페이스에
@@ -76,7 +81,7 @@ export function CanvasTabs({ part = "all" }: { part?: "all" | "top" | "sceneGrou
     ...hp,
     onPointerMove: (e: React.PointerEvent) => {
       hp.onPointerMove(e);
-      if (setOrd.dragIdx != null) useTabDrop.getState().set(canvasTabAt(e.clientX, e.clientY));
+      if (setOrd.dragIdx != null) useTabDrop.getState().set(canvasTabAt(e.clientX, e.clientY, win));
     },
     onPointerUp: (e: React.PointerEvent) => {
       const to = useTabDrop.getState().over;
@@ -239,6 +244,12 @@ export function CanvasTabs({ part = "all" }: { part?: "all" | "top" | "sceneGrou
 
         <span style={{ flex: 1 }} />
         <SaveHint />
+        {!sceneOut && (
+          <SplitButton
+            area="scene"
+            style={{ border: "1px solid var(--line)", borderRadius: "var(--r-2)", background: "var(--panel)", color: "var(--ink-soft)", padding: "4px 6px", marginBottom: 3, display: "grid", placeItems: "center" }}
+          />
+        )}
         <TabGhost ord={setOrd} names={inGroup.map((x) => x.name)} />
       </div>
   );

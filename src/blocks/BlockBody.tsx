@@ -7,6 +7,7 @@ import { pushUndo } from "../lib/undo";
 import { toEdit, toStore } from "../lib/softWrap";
 import { t as tr } from "../i18n";
 import { useTagSuggest } from "./TagSuggest";
+import { observeSize, useWin } from "../lib/floatWin";
 
 /* ★★글 상자가 화면에서만 쓰는 글자 바꾸기는 `lib/softWrap` 에 있다 — **자동완성도 같은 것을
      본다.** 자동완성은 화면의 날것 값을 읽어 낱말을 자르는데, 되돌리지 않고 읽으면
@@ -100,6 +101,7 @@ export function BlockBody({
   zone?: string;
 }) {
   const t = useI18n((s) => s.t);
+  const win = useWin();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const ta = useRef<HTMLTextAreaElement>(null);
@@ -231,10 +233,11 @@ export function BlockBody({
       commitRef.current();
       if (fill) onDoneRef.current?.();
     };
-    document.addEventListener("pointerdown", onDown, true);
-    return () => document.removeEventListener("pointerdown", onDown, true);
+    const doc = win.document;
+    doc.addEventListener("pointerdown", onDown, true);
+    return () => doc.removeEventListener("pointerdown", onDown, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fill, editing]);
+  }, [fill, editing, win]);
 
   /** ★★값이 갈아 끼워진 **바로 뒤에** 커서를 제자리로 (위 `caretKeep` 의 ★★주).
    *  ★치환은 한 글자를 한 글자로 바꿔 **길이가 안 변하므로** 자리 숫자가 그대로 맞는다.
@@ -253,12 +256,11 @@ export function BlockBody({
     const el = ta.current?.parentElement;
     if (!editing || !el) return;
     let w = el.clientWidth;
-    const ro = new ResizeObserver(() => {
+    const ro = observeSize(el, () => {
       if (el.clientWidth === w) return;
       w = el.clientWidth;
       fit();
     });
-    ro.observe(el);
     return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);

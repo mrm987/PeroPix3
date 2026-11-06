@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useWin } from "../lib/floatWin";
 
 /** 이름 고치기 — **앱에 하나뿐인 규칙** (사용자 지시 2026-08-20:
  *  *"편집버튼도 모든 편집버튼이 각각 만들어서 일관성이 보장이 안되잖아.
@@ -22,6 +23,7 @@ export function useRename(
   onRename?: (v: string) => void,
   ctrl?: { editing: boolean; setEditing: (v: boolean) => void },
 ) {
+  const win = useWin();
   const [selfOn, setSelfOn] = useState(false);
   const on = ctrl ? ctrl.editing : selfOn;
   const setOn = ctrl ? ctrl.setEditing : setSelfOn;
@@ -80,10 +82,11 @@ export function useRename(
       if (t?.closest?.("[data-rename-input]") || t?.closest?.("[data-rename-btn]")) return;
       commit();
     };
-    document.addEventListener("pointerdown", onDown, true);
-    return () => document.removeEventListener("pointerdown", onDown, true);
+    const doc = win.document;
+    doc.addEventListener("pointerdown", onDown, true);
+    return () => doc.removeEventListener("pointerdown", onDown, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [on, draft]);
+  }, [on, draft, win]);
 
   return {
     editing: on,

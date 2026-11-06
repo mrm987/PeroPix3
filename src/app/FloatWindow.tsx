@@ -8,6 +8,7 @@ import { DragLayer } from "../cards/DragLayer";
 import { BusyOverlay } from "./BusyOverlay";
 import { WinBtn } from "./TitleBar";
 import { dockArea, FLOAT_OK, splitArea, useFloat, WinCtx, type FloatArea, type FloatLive } from "../lib/floatWin";
+import { useUi } from "../store/ui";
 
 /** 앱 밖 창 하나 — 영역을 새 창 문서에 포털로 그린다 (`lib/floatWin`).
  *
@@ -131,7 +132,11 @@ export function SplitButton({ area, style }: { area: FloatArea; style?: CSSPrope
   const t = useI18n((s) => s.t);
   if (!FLOAT_OK) return null;
   return (
-    <button data-float-split={area} data-tip={t("float.split")} onClick={() => void splitArea(area)} style={style}>
+    <button data-float-split={area} data-tip={t("float.split")} onClick={() => {
+        void splitArea(area);
+        // ★갤러리는 모드 하나를 통째로 쓰므로 나가면 메인은 앞서 보던 모드로 돌아간다
+        if (area === "gallery") useUi.getState().leaveGallery();
+      }} style={style}>
       {Icon.popOut}
     </button>
   );

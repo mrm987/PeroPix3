@@ -8,6 +8,7 @@ import { useGallery, type ImageMeta } from "../store/gallery";
 import { CHAR_COLOR, usePrompt, type Char } from "../store/prompt";
 import { useImageInput } from "../store/imageInput";
 import { useUi } from "../store/ui";
+import { copyText } from "../lib/floatWin";
 import { keepScroll, LEFT_SCROLL } from "../lib/keepScroll";
 import { useSceneFocus } from "../store/sceneFocus";
 import { useWs } from "../store/workspace";
@@ -486,7 +487,7 @@ function Text({ label, body, dim, mark }: { label: string; body?: string; dim?: 
   const t = useI18n((s) => s.t);
   if (!body) return null;
   const copy = () => {
-    void navigator.clipboard?.writeText(body);
+    void copyText(body);
     toast(t("act.copied"));
   };
   return (

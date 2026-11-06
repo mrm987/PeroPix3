@@ -88,6 +88,8 @@ type S = {
   /** 끌기가 시작된 창. 포인터 좌표는 언제나 이 창 기준으로 온다 */
   src: Window;
   /** 마지막 포인터 좌표 (`src` 기준) */
+  raw: { x: number; y: number };
+  /** 커서 위치 — **커서가 있는 창 기준**이다. 받는 존이 제 요소의 사각형과 견주는 값이다 */
   pos: { x: number; y: number };
   over: string | null;
   /** 방금 끝난 끌기가 **놓인 존의 id** (안 놓였으면 null). 끌기가 끝난 뒤(`drag === null`)에 읽는다 —
@@ -106,13 +108,15 @@ export const useDrag = create<S>((set, get) => ({
   drag: null,
   at: null,
   src: typeof window === "undefined" ? (undefined as never) : window,
+  raw: { x: 0, y: 0 },
   pos: { x: 0, y: 0 },
   over: null,
   droppedOn: null,
   zones: [],
 
   begin(d, x, y, src = window) {
-    set({ drag: d, src, pos: { x, y }, at: locate(src, x, y), over: null, droppedOn: null });
+    const at = locate(src, x, y);
+    set({ drag: d, src, raw: { x, y }, pos: at ? { x: at.x, y: at.y } : { x, y }, at, over: null, droppedOn: null });
     offScroll = onEveryWindow("scroll", rehit, true);
   },
 
@@ -132,7 +136,7 @@ export const useDrag = create<S>((set, get) => ({
         // 같은 우선순위가 겹치면 **나중에 등록된 것**이 이긴다 — 나중 것이 위에 그려진다
         if (!hit || z.prio >= hit.prio) hit = z;
       }
-    set({ pos: { x, y }, at, over: hit ? hit.id : null });
+    set({ raw: { x, y }, pos: at ? { x: at.x, y: at.y } : { x, y }, at, over: hit ? hit.id : null });
   },
 
   /** 손을 뗐다. 드롭이 실제로 일어났으면 true — 덱을 닫을지 판단에 쓴다. */
@@ -164,8 +168,8 @@ export const useDrag = create<S>((set, get) => ({
  *  ★스크롤은 거품이 안 올라오므로 캡처로 받는다. `begin` 에서 걸고 `end`·`cancel` 에서 뗀다 */
 let offScroll: (() => void) | undefined;
 function rehit() {
-  const { drag, pos, move } = useDrag.getState();
-  if (drag) move(pos.x, pos.y);
+  const { drag, raw, move } = useDrag.getState();
+  if (drag) move(raw.x, raw.y);
 }
 
 /** 드롭 존 등록 — 반환한 ref 를 DOM 요소에 붙인다. */

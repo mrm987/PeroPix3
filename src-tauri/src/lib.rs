@@ -270,6 +270,7 @@ fn float_window(
             b.title("PeroPix")
                 .visible(false)
                 .skip_taskbar(true)
+                .minimizable(false)
                 .decorations(false)
                 .shadow(false)
                 .min_inner_size(320.0, 240.0)

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { coverLayout } from "./FittedImg";
 import { pointerGesture, isGestureActive, cancelGesture } from "./dragStore";
+import { useWin } from "../lib/floatWin";
 import type { View } from "../store/prompt";
 import { BANNER_BG, BANNER_CUT, BANNER_IMG_W, BANNER_STEP } from "./banner";
 
@@ -40,6 +41,7 @@ export function ThumbDialog({
   onCancel: () => void;
 }) {
   const t = useI18n((s) => s.t);
+  const win = useWin();
   const [banner, setBanner] = useState<View | undefined>(ask?.banner);
   const [boxes, setBoxes] = useState<Record<string, View>>(() =>
     Object.fromEntries((ask?.boxes ?? []).map((b) => [b.key, b.view])),
@@ -58,9 +60,9 @@ export function ThumbDialog({
       if (e.key === "Escape") isGestureActive() ? cancelGesture() : onCancel();
       if (e.key === "Enter" && !isGestureActive()) onDone({ banner, boxes });
     };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [ask, onCancel, onDone, banner, boxes]);
+    win.addEventListener("keydown", key);
+    return () => win.removeEventListener("keydown", key);
+  }, [win, ask, onCancel, onDone, banner, boxes]);
 
   if (!ask) return null;
 

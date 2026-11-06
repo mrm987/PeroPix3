@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { IS_MAC } from "./platform";
+import { areaOf, useWin } from "./floatWin";
 
 /** 밖에서 떨군 그림을 받는다 — **앱과 브라우저는 받는 방법이 다르다.**
  *
@@ -38,23 +39,28 @@ export function useTauriDrop(
   cb.current = onPaths;
   const hov = useRef(onOver);
   hov.current = onOver;
+  /** ★이 컴포넌트가 사는 창. 파일 드롭은 웹뷰마다 따로 온다 (앱 밖 창은 `float-<영역>` 웹뷰다) */
+  const win = useWin();
 
   useEffect(() => {
     if (!inTauri()) return;
     let stop: (() => void) | undefined;
     let dead = false;
     void (async () => {
-      const { getCurrentWebview } = await import("@tauri-apps/api/webview");
+      const { getCurrentWebview, Webview } = await import("@tauri-apps/api/webview");
       const mine = (p: { x: number; y: number }) => {
         /* ★★맥은 좌표가 **이미 논리 픽셀**로 온다 — wry 가 `draggingLocation`(포인트)을 그대로 넘기고 Tauri 는
              이름만 물리 좌표로 붙인다 (wry 0.55 `wkwebview/drag_drop.rs`). 윈도우는 물리 픽셀이라 배율로 나눈다. */
-        const dpr = IS_MAC ? 1 : window.devicePixelRatio || 1;
-        const el = document.elementFromPoint(p.x / dpr, p.y / dpr);
+        const dpr = IS_MAC ? 1 : win.devicePixelRatio || 1;
+        const el = win.document.elementFromPoint(p.x / dpr, p.y / dpr);
         if (el && ref.current?.contains(el)) return true;
         // ★넓게 받는 자리: **다른 드롭존이 아닌 곳**이면 내 것이다
         return wide && !el?.closest?.("[data-drop-file]");
       };
-      const un = await getCurrentWebview().onDragDropEvent((e) => {
+      const area = areaOf(win);
+      const view = area === "main" ? getCurrentWebview() : await Webview.getByLabel(`float-${area}`);
+      if (!view) return;
+      const un = await view.onDragDropEvent((e) => {
         const p = e.payload;
         if (p.type === "leave") return hov.current?.(false);
         if (p.type === "enter" || p.type === "over") return hov.current?.(mine(p.position));
@@ -73,7 +79,7 @@ export function useTauriDrop(
       stop?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [win]);
 }
 
 const readAsData = (f: File) =>
@@ -88,6 +94,7 @@ const readAsData = (f: File) =>
  *   (그 파일은 그림이 아니라 인코딩이 든 JSON 이다, `lib/naiVibeFile`). */
 export function useImageDrop(onDrop: (items: Dropped[]) => void, wide = false, accept = IMG) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const win = useWin();
   const [over, setOver] = useState(false);
   const cb = useRef(onDrop);
   cb.current = onDrop;
@@ -124,15 +131,15 @@ export function useImageDrop(onDrop: (items: Dropped[]) => void, wide = false, a
       if (!fs.length) return;
       cb.current(await Promise.all(fs.map(async (f) => ({ name: f.name, data: await readAsData(f) }))));
     };
-    window.addEventListener("dragover", onOver);
-    window.addEventListener("dragleave", onLeave);
-    window.addEventListener("drop", onDropAny);
+    win.addEventListener("dragover", onOver);
+    win.addEventListener("dragleave", onLeave);
+    win.addEventListener("drop", onDropAny);
     return () => {
-      window.removeEventListener("dragover", onOver);
-      window.removeEventListener("dragleave", onLeave);
-      window.removeEventListener("drop", onDropAny);
+      win.removeEventListener("dragover", onOver);
+      win.removeEventListener("dragleave", onLeave);
+      win.removeEventListener("drop", onDropAny);
     };
-  }, [wide]);
+  }, [wide, win]);
 
   /** 브라우저 쪽 손잡이. Tauri 에서는 이 이벤트가 안 오므로 그냥 놀고 있는다. */
   const zone = {
@@ -157,7 +164,8 @@ export function useImageDrop(onDrop: (items: Dropped[]) => void, wide = false, a
   /** 파일 고르기 대화상자 — 떨구기 말고 눌러서 고르는 길 (v2 도 둘 다 있었다) */
   const pick = () =>
     new Promise<void>((res) => {
-      const inp = document.createElement("input");
+      // ★누른 창의 문서에 만든다. 파일 창은 사용자 조작이 있었던 창에서만 열린다
+      const inp = win.document.createElement("input");
       inp.type = "file";
       inp.accept = "image/png,image/jpeg,image/webp";
       inp.multiple = true;

@@ -8,6 +8,9 @@ import { normTag } from "../lib/tagSearch";
 import { useEffect, useRef } from "react";
 import { areaOf, raiseArea, raiseMain, useFloat } from "../lib/floatWin";
 
+/** 앞서 보던 모드 — 갤러리를 앱 밖 창으로 내보낼 때 메인이 돌아갈 곳 */
+let lastMode: ModeId = "generate";
+
 /** 모드 = 하단 네비의 자리. v2.x 의 모드 전환이 여기로 온다.
  *  싱글·세트는 모드가 아니라 캔버스 탭이므로 여기 없다. */
 export type ModeId = "generate" | "gallery" | "censor" | "editor" | "utility" | "plugins";
@@ -340,6 +343,8 @@ function load(): Persisted {
 type S = Persisted & {
   mode: ModeId;
   setMode: (m: ModeId) => void;
+  /** 메인이 갤러리 모드면 앞서 보던 모드로 돌아간다 (갤러리를 앱 밖 창으로 내보낼 때) */
+  leaveGallery: () => void;
   /** 캐릭터 배치 판을 펴 놓았나 (큰 그림 위에 겹친다 — `panels/CharPositioner`).
    *
    *  ★**저장하지 않는다** — 켜 둔 채로 앱을 켜면
@@ -446,11 +451,17 @@ export const useUi = create<S>((set, get) => ({
   ...load(),
   mode: "generate",
   /* ★★갤러리를 앱 밖 창으로 분리했으면 모드를 안 옮기고 그 창을 앞으로 낸다 (`lib/floatWin`).
-     ★다른 창에서 부른 모드 전환(「일괄 변환으로 보내기」 등)은 메인에서 일어나므로 메인을 앞으로 낸다. */
+     ★다른 창에서 부른 모드 전환(「일괄 변환으로 보내기」 등)은 메인에서 일어나므로 메인을 앞으로 낸다.
+     ★생성 화면을 분리한 창에서 「생성으로」를 부른 것은 그대로 둔다. 하던 일이 거기 있다. */
   setMode: (m) => {
-    if (m === "gallery" && useFloat.getState().live.gallery) return raiseArea("gallery");
-    raiseMain();
+    const f = useFloat.getState();
+    if (m === "gallery" && f.live.gallery) return raiseArea("gallery");
+    if (!(m === "generate" && (f.active === "preview" || f.active === "prompt" || f.active === "scene"))) raiseMain();
+    if (m !== get().mode) lastMode = get().mode;
     set({ mode: m });
+  },
+  leaveGallery: () => {
+    if (get().mode === "gallery") set({ mode: lastMode === "gallery" ? "generate" : lastMode });
   },
   positioning: false,
   setPositioning: (v) => set({ positioning: v }),

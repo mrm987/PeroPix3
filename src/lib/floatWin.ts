@@ -196,7 +196,7 @@ const FIRST_SIZE: Record<FloatArea, { w: number; h: number }> = {
   ai: { w: 420, h: 760 },
   preview: { w: 900, h: 780 },
   gallery: { w: 1240, h: 800 },
-  prompt: { w: 460, h: 860 },
+  prompt: { w: 520, h: 860 },
   scene: { w: 1000, h: 420 },
 };
 
@@ -214,6 +214,19 @@ async function firstGeo(area: FloatArea): Promise<FloatGeo> {
 
 async function spawn(area: FloatArea, geo: FloatGeo): Promise<boolean> {
   if (useFloat.getState().live[area]) return true;
+  // ★창이 뜨는 동안 또 눌러도 하나만 연다
+  if (spawning.has(area)) return false;
+  spawning.add(area);
+  try {
+    return await open(area, geo);
+  } finally {
+    spawning.delete(area);
+  }
+}
+
+const spawning = new Set<FloatArea>();
+
+async function open(area: FloatArea, geo: FloatGeo): Promise<boolean> {
   const label = `float-${area}`;
   const k = window.devicePixelRatio || 1;
   const win = window.open(
@@ -245,15 +258,6 @@ async function spawn(area: FloatArea, geo: FloatGeo): Promise<boolean> {
 
   const tw = new TauriWindow(label, { skip: true } as never);
   const live: FloatLive = { area, win, root, tw, off: [] };
-  const s = useFloat.getState();
-  useFloat.setState({
-    live: { ...s.live, [area]: live },
-    out: s.out.includes(area) ? s.out : [...s.out, area],
-    geo: { ...s.geo, [area]: geo },
-    order: [area, ...s.order.filter((a) => a !== area)],
-    active: area,
-  });
-  persist();
 
   try {
     if (!(await waitNative(label))) throw new Error("창이 만들어지지 않았습니다");
@@ -262,6 +266,17 @@ async function spawn(area: FloatArea, geo: FloatGeo): Promise<boolean> {
     if (geo.max) await tw.maximize();
     await tw.show();
     await tw.setFocus();
+    /* ★★창이 제 크기로 뜬 **다음에** 내용을 그린다. 크기가 잡히기 전에 마운트하면 처음 한 번 재는 곳이 틀린 값을 든다
+         (실측: AI 입력칸이 좁은 폭으로 재어 창 절반 높이가 됐다). 그동안 메인은 그대로 있어 빈 자리도 안 생긴다. */
+    const s = useFloat.getState();
+    useFloat.setState({
+      live: { ...s.live, [area]: live },
+      out: s.out.includes(area) ? s.out : [...s.out, area],
+      geo: { ...s.geo, [area]: geo },
+      order: [area, ...s.order.filter((a) => a !== area)],
+      active: area,
+    });
+    persist();
     void refreshFrames();
     let t: ReturnType<typeof setTimeout> | undefined;
     const note = () => {
@@ -272,6 +287,9 @@ async function spawn(area: FloatArea, geo: FloatGeo): Promise<boolean> {
     live.off.push(await tw.onMoved(note), await tw.onResized(note), () => clearTimeout(t));
   } catch (e) {
     logLine("error", "새 창", `${label}: ${String(e)}`);
+    // 내용을 그리기 전에 실패했으면 빈 창을 남기지 않는다
+    if (!useFloat.getState().live[area]) void tw.destroy().catch(() => {});
+    return false;
   }
   return true;
 }
@@ -298,6 +316,7 @@ function forget(area: FloatArea) {
   const s = useFloat.getState();
   const l = s.live[area];
   l?.off.forEach((f) => f());
+  if (l) frames.delete(l.win);
   const { [area]: _gone, ...live } = s.live;
   useFloat.setState({
     live,

@@ -12,6 +12,7 @@ import { FolderOpenButton } from "../components/FolderOpenButton";
 import { filterTags, normTag } from "../lib/tagSearch";
 import { COLOR_HEX } from "../lib/blocks";
 import { useUi } from "../store/ui";
+import { copyText } from "../lib/floatWin";
 
 /** 갤러리의 폴더 목록 — 좌 패널.
  *
@@ -466,7 +467,7 @@ function ArtistFilter() {
      ★표는 저장소가 하나만 짓는다 (`artistsByFile`) — 격자 칸에 적히는 이름과 같은 것이다. */
   const ofFocus = focus ? artistsByFile().get(focus) : undefined;
   const copy = (text: string) =>
-    void navigator.clipboard?.writeText(text).then(() => toast(t("act.copied")));
+    void copyText(text).then(() => toast(t("act.copied")));
 
   const scopeBtn = (v: "all" | "folder", label: string) => (
     <button

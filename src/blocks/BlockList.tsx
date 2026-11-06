@@ -1,3 +1,4 @@
+import { observeSize } from "../lib/floatWin";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { dupSet, liveTags, makeBlock, parseSegs, putTag, takeTag, type Block } from "../lib/blocks";
@@ -304,8 +305,7 @@ export function BlockList({
       setOver(kids.filter((k) => k.offsetTop + k.offsetHeight > h + 1).length);
     };
     measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    const ro = observeSize(el, measure);
     return () => ro.disconnect();
     // ★태그를 **글로 굳혀** 의존한다 — 배열은 다시 그릴 때마다 새것이라, 그대로 걸면
     //   측정을 붙였다 뗐다 한다

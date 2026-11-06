@@ -38,7 +38,7 @@ import { applyMetaParams, applyMetaVibes } from "./GalleryMeta";
 import { hasMeta } from "../lib/metaApply";
 import { CharPositioner } from "./CharPositioner";
 import { sendToEditor } from "../editor/sendTo";
-import { observeSize, raiseArea, useFloat, useWin } from "../lib/floatWin";
+import { observeSize, raiseArea, raiseMain, useFloat, useWin } from "../lib/floatWin";
 import { SplitButton } from "../app/FloatWindow";
 
 /** 캔버스 — 씬 세트 줄 + 씬 무대 (마스크를 칠하는 동안에는 그 자리가 편집기다).
@@ -52,6 +52,12 @@ export function Canvas() {
   /** ★마스크를 칠하는 동안 **이 자리가 편집기로 바뀐다** (사용자 결정 2026-08-13).
    *  모달로 띄우면 칠하는 동안 프롬프트도 결과도 못 본다. 생성 버튼은 그동안 「인페인트」다. */
   const editing = useImageInput((s) => s.editing);
+  /** ★씬을 앱 밖 창으로 분리하면 씬 그룹 줄도 함께 간다. 이 줄이 가르는 것이 씬이기 때문이다 */
+  const sceneOut = useFloat((s) => !!s.live.scene);
+  // ★마스크 편집기는 메인 가운데에 뜬다. 앱 밖 창에서 인페인트를 눌렀으면 메인을 앞으로 낸다
+  useEffect(() => {
+    if (editing) raiseMain();
+  }, [editing]);
   const tab = activeSceneGroup();
   if (!tab) return null;
 
@@ -66,7 +72,7 @@ export function Canvas() {
       }}
     >
       {/* ★씬 세트 줄 — 이 층이 가르는 것이 바로 아래 결과라 여기 붙는다 (사용자 제안 2026-08-05) */}
-      <CanvasTabs part="sceneGroups" />
+      {!sceneOut && <CanvasTabs part="sceneGroups" />}
 
       {/* ★씬 칸 (2026-08-11) — 그릇 + 얹은 카드 + 씬 줄. 위는 **고른 한 장**의 프리뷰다 */}
       {editing ? <MaskEditor /> : <SceneStage />}
@@ -95,8 +101,9 @@ function SceneStage() {
   const grip = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const side = laneSide === "right";
-  /** 이미지 프리뷰를 앱 밖 창으로 분리했나 — 그동안 여기는 그 창으로 보내는 줄과 씬뿐이다 (`lib/floatWin`) */
+  /** 앱 밖 창으로 분리했나 — 분리한 쪽은 그 창으로 보내는 줄만 남고, 남은 쪽이 가운데를 전부 쓴다 (`lib/floatWin`) */
   const previewOut = useFloat((s) => !!s.live.preview);
+  const sceneOut = useFloat((s) => !!s.live.scene);
 
   /** 손잡이를 끄는 동안 크기를 따라 바꾼다 — 놓을 때 한 번만 저장한다(`commitLayout`) */
   const drag = (e: React.PointerEvent) => {
@@ -170,13 +177,24 @@ function SceneStage() {
     </div>
   );
 
-  if (previewOut)
+  if (previewOut || sceneOut)
     return (
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        <PreviewStrip />
-        <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex" }}>
-          <SceneLane />
-        </div>
+        {previewOut ? (
+          <PreviewStrip />
+        ) : (
+          <>
+            <ScenePreview />
+            <SceneActions pad />
+          </>
+        )}
+        {sceneOut ? (
+          <SceneStrip />
+        ) : (
+          <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex" }}>
+            <SceneLane />
+          </div>
+        )}
       </div>
     );
 
@@ -208,8 +226,51 @@ export function PreviewArea() {
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <ScenePreview />
-      <SceneActions floated />
+      <SceneActions floated pad />
     </div>
+  );
+}
+
+/** 앱 밖 창에 그리는 씬 — 씬 그룹 줄과 함께 */
+export function SceneArea() {
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <CanvasTabs part="sceneGroups" />
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex" }}>
+        <SceneLane />
+      </div>
+    </div>
+  );
+}
+
+const STRIP: React.CSSProperties = {
+  height: 32,
+  flexShrink: 0,
+  display: "flex",
+  alignItems: "center",
+  gap: "var(--sp-2)",
+  padding: "0 var(--sp-4)",
+  borderBottom: "1px solid var(--line)",
+  fontSize: "var(--text-2xs)",
+  color: "var(--ink-dim)",
+  textAlign: "left",
+};
+
+/** 씬을 분리한 동안 메인에 남는 줄 — 지금 씬 그룹 이름. 누르면 그 창이 앞으로 온다 */
+function SceneStrip() {
+  const tr = useI18n((s) => s.t);
+  const name = useWs((s) => s.activeSceneGroup()?.name);
+  return (
+    <button
+      data-float-strip="scene"
+      data-tip={tr("float.toFront", { name: tr("float.scene") })}
+      onClick={() => raiseArea("scene")}
+      style={{ ...STRIP, borderBottom: "none", borderTop: "1px solid var(--line)" }}
+    >
+      {Icon.popOut}
+      <b style={{ fontWeight: "var(--w-semi)", flexShrink: 0 }}>{tr("float.scene")}</b>
+      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--ink-faint)" }}>{name}</span>
+    </button>
   );
 }
 
@@ -222,18 +283,7 @@ function PreviewStrip() {
       data-float-strip="preview"
       data-tip={tr("float.toFront", { name: tr("float.preview") })}
       onClick={() => raiseArea("preview")}
-      style={{
-        height: 32,
-        flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--sp-2)",
-        padding: "0 var(--sp-4)",
-        borderBottom: "1px solid var(--line)",
-        fontSize: "var(--text-2xs)",
-        color: "var(--ink-dim)",
-        textAlign: "left",
-      }}
+      style={STRIP}
     >
       {Icon.popOut}
       <b style={{ fontWeight: "var(--w-semi)", flexShrink: 0 }}>{tr("float.preview")}</b>
@@ -248,7 +298,7 @@ function PreviewStrip() {
  *
  *  ★싱글 화면이 없어지면서 갈 곳이 사라진 것들이라 여기로 옮겼다 (CLAUDE.md 의
  *    「시안에 없다고 지우면 안 되는 것이 있었다」 — 화면을 갈아 끼울 때마다 밟는 자리다). */
-function SceneActions({ floated }: { floated?: boolean }) {
+function SceneActions({ floated, pad }: { floated?: boolean; pad?: boolean }) {
   const tr = useI18n((s) => s.t);
   /** 씬을 오른쪽에 두는 모드인가 — 아래 여백이 그때만 필요하다 (반환 자리의 ★★주) */
   const vert = useUi((u) => u.laneSide === "right");
@@ -404,8 +454,8 @@ function SceneActions({ floated }: { floated?: boolean }) {
         flexShrink: 0,
         display: "flex",
         gap: "var(--sp-2)",
-        // ★앱 밖 창도 이 줄 아래가 창 끝이다. 세로 모드와 같다
-        padding: vert || floated ? "var(--sp-3) var(--sp-4)" : "var(--sp-3) var(--sp-4) 0",
+        // ★앱 밖 창이나 씬을 분리한 메인도 이 줄 아래에 씬이 없다. 세로 모드와 같다
+        padding: vert || pad ? "var(--sp-3) var(--sp-4)" : "var(--sp-3) var(--sp-4) 0",
       }}
     >
     <div data-scene-actions={idle ? "idle" : "on"} inert={idle} style={{ flex: 1, minWidth: 0, opacity: idle ? 0.4 : 1 }}>
