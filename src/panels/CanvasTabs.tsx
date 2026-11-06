@@ -1,5 +1,3 @@
-import { useFloat, useWin } from "../lib/floatWin";
-import { SplitButton } from "../app/FloatWindow";
 import { Fragment } from "react";
 import { useI18n } from "../i18n";
 import { useReorder } from "../lib/useReorder";
@@ -39,9 +37,6 @@ export function CanvasTabs({ part = "all" }: { part?: "all" | "top" | "sceneGrou
     switchTab, addTab, renameTab, moveTab, moveSceneGroup, planRemove, removeAt,
     current: wsName, moveTabToWs, moveGroupToTab } = useWs();
   const tr = useI18n((s) => s.t);
-  const win = useWin();
-  /** 씬을 앱 밖 창으로 분리했나 — 그 창의 이 줄에는 분리 버튼이 없다 */
-  const sceneOut = useFloat((s) => !!s.live.scene);
   const [editing, setEditing] = useState<string | null>(null);
   const [editingChar, setEditingChar] = useState<string | null>(null);
   /* ★끌던 것을 **받을 자리 위**에 올려 두었나 (사용자 지적 2026-08-28: *"워크스페이스에
@@ -81,7 +76,7 @@ export function CanvasTabs({ part = "all" }: { part?: "all" | "top" | "sceneGrou
     ...hp,
     onPointerMove: (e: React.PointerEvent) => {
       hp.onPointerMove(e);
-      if (setOrd.dragIdx != null) useTabDrop.getState().set(canvasTabAt(e.clientX, e.clientY, win));
+      if (setOrd.dragIdx != null) useTabDrop.getState().set(canvasTabAt(e.clientX, e.clientY));
     },
     onPointerUp: (e: React.PointerEvent) => {
       const to = useTabDrop.getState().over;
@@ -112,9 +107,9 @@ export function CanvasTabs({ part = "all" }: { part?: "all" | "top" | "sceneGrou
           borderBottom: "1px solid var(--line)",
         }}
       >
-      {/* ★★여러 줄로 접히는 것은 세트 칩뿐이다. 이 줄 전체를 접으면 저장 경로와 분리 버튼이 자리가 모자랄 때 다음 줄로 내려가는데,
+      {/* ★★여러 줄로 접히는 것은 세트 칩뿐이다. 이 줄 전체를 접으면 저장 경로가 자리가 모자랄 때 다음 줄로 내려가는데,
           이 줄은 `Canvas` 의 세로 flex 항목이라 높이가 확정되어 `DropLine` 의 `minHeight: 100%` 가 첫 줄을 줄 전체 높이로 늘린다.
-          그래서 다음 줄이 줄 밖으로 밀려 아래 프리뷰에 가려졌다 (사용자 지적 2026-11-06, 실측: 창 폭 1440 에서 분리 버튼이 안 눌림).
+          그래서 다음 줄이 줄 밖으로 밀려 아래 프리뷰에 가려졌다 (실측 2026-11-06: 창 폭 1440 에서 이 줄의 버튼이 안 눌렸다).
           여기는 `alignItems: center` 인 품 안이라 높이가 확정되지 않아 `minHeight: 100%` 가 늘리지 않는다. */}
       <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", minWidth: 0 }}>
       {inGroup.map((t, i) => {
@@ -142,7 +137,7 @@ export function CanvasTabs({ part = "all" }: { part?: "all" | "top" | "sceneGrou
               borderRadius: "var(--r-2)",
               border: `1px solid ${on ? "var(--accent)" : "var(--line)"}`,
               maxWidth: 220,
-              // ★한 줄에 혼자 남아도 넘치면 이름이 말줄임으로 줄어든다. 안 그러면 칩이 넘쳐 분리 버튼을 덮는다
+              // ★한 줄에 혼자 남아도 넘치면 이름이 말줄임으로 줄어든다. 안 그러면 칩이 넘쳐 폴더 열기 버튼을 덮는다
               minWidth: 0,
               background: on ? "color-mix(in srgb, var(--accent) 14%, var(--surface))" : "var(--panel)",
               color: on ? "var(--ink)" : "var(--ink-dim)",
@@ -250,12 +245,6 @@ export function CanvasTabs({ part = "all" }: { part?: "all" | "top" | "sceneGrou
       </div>
 
         <SaveHint />
-        {!sceneOut && (
-          <SplitButton
-            area="scene"
-            style={{ border: "1px solid var(--line)", borderRadius: "var(--r-2)", background: "var(--panel)", color: "var(--ink-soft)", padding: "4px 6px", marginBottom: 3, display: "grid", placeItems: "center" }}
-          />
-        )}
         <TabGhost ord={setOrd} names={inGroup.map((x) => x.name)} />
       </div>
   );

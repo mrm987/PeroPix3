@@ -52,8 +52,6 @@ export function Canvas() {
   /** ★마스크를 칠하는 동안 **이 자리가 편집기로 바뀐다** (사용자 결정 2026-08-13).
    *  모달로 띄우면 칠하는 동안 프롬프트도 결과도 못 본다. 생성 버튼은 그동안 「인페인트」다. */
   const editing = useImageInput((s) => s.editing);
-  /** ★씬을 앱 밖 창으로 분리하면 씬 그룹 줄도 함께 간다. 이 줄이 가르는 것이 씬이기 때문이다 */
-  const sceneOut = useFloat((s) => !!s.live.scene);
   // ★마스크 편집기는 메인 가운데에 뜬다. 앱 밖 창에서 인페인트를 눌렀으면 메인을 앞으로 낸다
   useEffect(() => {
     if (editing) raiseMain();
@@ -72,7 +70,8 @@ export function Canvas() {
       }}
     >
       {/* ★씬 세트 줄 — 이 층이 가르는 것이 바로 아래 결과라 여기 붙는다 (사용자 제안 2026-08-05) */}
-      {!sceneOut && <CanvasTabs part="sceneGroups" />}
+      {/* ★앱 밖 창으로 분리되는 것은 씬뿐이고 이 줄은 메인에 남는다 (사용자 지시 2026-11-06) */}
+      <CanvasTabs part="sceneGroups" />
 
       {/* ★씬 칸 (2026-08-11) — 그릇 + 얹은 카드 + 씬 줄. 위는 **고른 한 장**의 프리뷰다 */}
       {editing ? <MaskEditor /> : <SceneStage />}
@@ -231,14 +230,11 @@ export function PreviewArea() {
   );
 }
 
-/** 앱 밖 창에 그리는 씬 — 씬 그룹 줄과 함께 */
+/** 앱 밖 창에 그리는 씬 */
 export function SceneArea() {
   return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-      <CanvasTabs part="sceneGroups" />
-      <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex" }}>
-        <SceneLane />
-      </div>
+    <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex" }}>
+      <SceneLane />
     </div>
   );
 }
@@ -256,10 +252,9 @@ const STRIP: React.CSSProperties = {
   textAlign: "left",
 };
 
-/** 씬을 분리한 동안 메인에 남는 줄 — 지금 씬 그룹 이름. 누르면 메인으로 돌아온다 */
+/** 씬을 분리한 동안 메인에 남는 줄. 누르면 메인으로 돌아온다 */
 function SceneStrip() {
   const tr = useI18n((s) => s.t);
-  const name = useWs((s) => s.activeSceneGroup()?.name);
   return (
     <button
       data-float-strip="scene"
@@ -269,7 +264,6 @@ function SceneStrip() {
     >
       {Icon.popOut}
       <b style={{ fontWeight: "var(--w-semi)", flexShrink: 0 }}>{tr("float.scene")}</b>
-      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--ink-faint)" }}>{name}</span>
     </button>
   );
 }

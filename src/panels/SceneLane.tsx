@@ -5,7 +5,8 @@ import { useGen } from "../store/gen";
 import { usePrompt } from "../store/prompt";
 import { runningPendingId, stepKey, useQueue } from "../store/queue";
 import { isGenerateKey, LANE_MAX, LANE_MIN, useUi } from "../store/ui";
-import { observeSize, onEveryWindow } from "../lib/floatWin";
+import { observeSize, onEveryWindow, useFloat } from "../lib/floatWin";
+import { SplitButton } from "../app/FloatWindow";
 import { allCells, useWs, takesOfScene, type Rec, type SceneCard, type Slot } from "../store/workspace";
 import { newestFirst } from "../lib/takes";
 import { cardLocked } from "../lib/sceneCards";
@@ -554,6 +555,8 @@ export function SceneLane() {
    *  서버가 지금 만들고 있는 씬 — 이 세트의 것일 때만 쓴다 (`store/queue` 의 `current_cell`) */
   /** ★「별표만 보기」 — 훅이라 **이른 반환보다 위**에 둔다 (바로 위 ★★주) */
   const starOnly = useUi((u) => u.laneStarOnly);
+  /** 씬을 앱 밖 창으로 분리했나 — 그 창의 머리줄에는 분리 버튼이 없다. 훅이라 이른 반환보다 위에 둔다 */
+  const sceneOut = useFloat((s) => !!s.live.scene);
   /** 칸별 **그리는 중인 그림** — 훅이라 이른 반환보다 위에 둔다 */
   const steps = useQueue((q) => q.steps);
   /** 지금 그리고 있는 **대기 칸의 번호**.
@@ -795,6 +798,8 @@ export function SceneLane() {
             gap: "var(--sp-2)",
             fontSize: "var(--text-2xs)",
             color: "var(--ink-faint)",
+            // ★칸이 좁으면 여기가 잘린다. 안 그러면 머리줄이 넘쳐 맨 끝의 별표 · 분리 버튼이 오른쪽 기둥에 가려진다
+            ...(vert ? null : { minWidth: 0, overflow: "hidden", whiteSpace: "nowrap" as const }),
           }}
         >
           {t("scenes.destLabel")}
@@ -870,6 +875,22 @@ export function SceneLane() {
           >
             {Icon.broom}
           </button>
+        )}
+        {/* ★분리 — 머리줄 맨 끝. 씬 카드는 그대로 두고 씬 줄만 앱 밖 창으로 나간다 */}
+        {!sceneOut && (
+          <SplitButton
+            area="scene"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 22,
+              height: 22,
+              flexShrink: 0,
+              borderRadius: "var(--r-1)",
+              color: "var(--ink-dim)",
+            }}
+          />
         )}
         {/* ★칸 크기는 **Ctrl + 휠**로 바꾼다 (사용자 지시 2026-08-14). 버튼 셋이
             차지하던 자리를 돌려주고, 손이 줄 위에 있는 채로 바로 조절된다.

@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { locate } from "./floatWin";
 
 /** 지금 끌고 있는 것을 **놓으면 받을 자리** (사용자 지시 2026-08-28).
  *
@@ -43,10 +42,8 @@ export function wsTabAt(x: number, y: number): DropTarget | null {
   return name ? { kind: "ws", name } : null;
 }
 
-/** 그 화면 좌표 밑의 **탭** (없으면 `null`) — 씬 그룹을 받을 자리다.
- *  ★씬을 앱 밖 창으로 분리하면 씬 그룹 줄이 거기 있고 탭 줄은 메인에 있다. `src` 는 끌기가 시작된 창이다 */
-export function canvasTabAt(x: number, y: number, src: Window = window): DropTarget | null {
-  const at = locate(src, x, y);
-  const id = at?.win.document.elementFromPoint(at.x, at.y)?.closest("[data-tab]")?.getAttribute("data-tab");
+/** 그 화면 좌표 밑의 **탭** (없으면 `null`) — 씬 그룹을 받을 자리다 */
+export function canvasTabAt(x: number, y: number): DropTarget | null {
+  const id = document.elementFromPoint(x, y)?.closest("[data-tab]")?.getAttribute("data-tab");
   return id ? { kind: "tab", id } : null;
 }
