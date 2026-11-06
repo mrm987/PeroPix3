@@ -57,9 +57,10 @@ jobs:
   #   실제 맥이 없으므로 **맥에서 도는 확인은 여기가 전부다** — Rust 판정(맥 갈래) · 꾸러미 조립과 서명 ·
   #   함께 담은 파이썬으로 백엔드 확인 · 앱을 켜서 백엔드가 뜨고 꺼지는지까지 본다.
   #   ★화면이 맞게 보이는지는 여기서도 모른다 — 켠 화면을 찍어 아티팩트로 남긴다 (사람이 본다).
-  # ★macos-14 는 우리가 받쳐 주는 가장 낮은 판이다 (`tauri.macos.conf.json` 의 `minimumSystemVersion`).
+  # ★받쳐 주는 가장 낮은 판은 macOS 14 다 (`tauri.macos.conf.json` 의 `minimumSystemVersion`). macos-14 이미지가
+  #   2026-11-02 에 사라져 여기서는 15 로 돈다. 14 에서 못 읽는 파일은 `macos-package.sh` 가 막는다.
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4

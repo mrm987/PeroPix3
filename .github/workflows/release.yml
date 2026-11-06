@@ -190,7 +190,7 @@ jobs:
   # ★맥은 패치가 없다 — 업데이트는 언제나 이 zip 으로 `.app` 을 통째로 바꾼다 (`src-tauri/src/update.rs` 의 맥 `apply`).
   # ★조립은 `scripts/macos-package.sh` 하나가 한다. 확인(켜 보기까지)은 `check.yml` 의 맥 잡이 한다.
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4

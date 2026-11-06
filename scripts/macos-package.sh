@@ -78,6 +78,21 @@ done
 # ★버전을 파일로 남긴다 — 업데이트가 「지금 무엇을 쓰고 있나」를 이걸로 안다 (`backend/server.py` 의 `APP_VERSION`)
 printf '{"version": "%s", "built": "%s"}\n' "$VERSION" "$(date +%F)" > "$RES/version.json"
 
+# ★★빌드 기계(macos-15)가 받쳐 주는 판(14)보다 높다. pip 은 빌드 기계에 맞는 휠을 고르므로 macOS 15 를 요구하는 파일이
+#   섞일 수 있는데, 그러면 14 에서 앱이 안 켜지고 CI 는 15 에서 켜 보므로 못 잡는다. 그래서 여기서 막는다.
+MIN_MAC=14
+echo "[맥] 앱 실행 파일의 최소 판: $(vtool -show-build "$APP/Contents/MacOS/peropix" | awk '$1 == "minos" { print $2; exit }')"
+vtool -show-build "$APP/Contents/MacOS/peropix" | grep -q minos   # ★vtool 이 안 돌면 아래 검사가 아무것도 못 본 채 통과한다
+TOO_NEW=$(find "$APP" -type f \( -name '*.so' -o -name '*.dylib' -o -perm +111 \) -print0 | while IFS= read -r -d '' f; do
+  minos=$(vtool -show-build "$f" 2>/dev/null | awk '$1 == "minos" { print $2; exit }') || true
+  if [[ -n "$minos" && "${minos%%.*}" -gt "$MIN_MAC" ]]; then echo "$minos $f"; fi
+done)
+if [[ -n "$TOO_NEW" ]]; then
+  echo "[맥] macOS $MIN_MAC 에서 못 읽는 파일이 있습니다:" >&2
+  echo "$TOO_NEW" >&2
+  exit 1
+fi
+
 # ★★`.pyc` 를 미리 굽는다 — 앱은 `.app` 안에 쓰지 않으므로(`PYTHONDONTWRITEBYTECODE`) 안 구워 두면 켤 때마다
 #   전부 다시 읽는다. 원본 시각을 안 보는 꼴(`unchecked-hash`)로 굽는다.
 #   ★표준 라이브러리에는 일부러 틀린 문법의 시험 파일이 섞여 있어 몇 개는 실패한다 — 그 파일만 굽지 않을 뿐이다.
