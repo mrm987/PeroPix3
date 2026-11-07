@@ -18,7 +18,7 @@ export type Toast = {
 type S = {
   items: Toast[];
   /** 띄운 토스트의 id 를 돌려준다 — 단추를 누른 쪽이 그 줄을 바로 치울 수 있게 */
-  show: (text: string, kind?: Toast["kind"], action?: Toast["action"]) => number;
+  show: (text: string, kind?: Toast["kind"], action?: Toast["action"], ms?: number) => number;
   drop: (id: number) => void;
 };
 
@@ -26,21 +26,23 @@ let seq = 1;
 /** ★단추가 붙은 토스트는 오래 둔다 — 누를 틈이 있어야 한다 (2.6초로는 못 누른다) */
 const MS = 2600;
 const MS_ACTION = 9000;
+/** 읽어야 하는 안내 (두 문장짜리 실패 안내). v2 의 생성 실패 토스트와 같은 길이다 */
+export const TOAST_READ_MS = 6000;
 
 export const useToast = create<S>((set, get) => ({
   items: [],
-  show(text, kind = "ok", action) {
+  show(text, kind = "ok", action, ms) {
     const id = seq++;
     set({ items: [...get().items, { id, text, kind, action }] });
-    setTimeout(() => get().drop(id), action ? MS_ACTION : MS);
+    setTimeout(() => get().drop(id), ms ?? (action ? MS_ACTION : MS));
     return id;
   },
   drop: (id) => set({ items: get().items.filter((x) => x.id !== id) }),
 }));
 
 /** 컴포넌트 밖(스토어·이벤트)에서 부르는 단축 */
-export const toast = (text: string, kind?: Toast["kind"], action?: Toast["action"]) =>
-  useToast.getState().show(text, kind, action);
+export const toast = (text: string, kind?: Toast["kind"], action?: Toast["action"], ms?: number) =>
+  useToast.getState().show(text, kind, action, ms);
 
 /** ★**지운 직후의 되돌리기 창구** (사용자 결정 2026-08-18, v2-port-audit D7).
  *

@@ -44,7 +44,7 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
   const account = useCurrentAccount();
   const setAccount = useWs((s) => s.setAccount);
   const { params, busy, error, generateAll } = useGen();
-  const { progress, phase, cancelAll } = useQueue();
+  const { progress, phase, cancelAll, error: queueError } = useQueue();
   /** 잔액을 다시 물어본 횟수 — 누를 때마다 아이콘을 **한 바퀴 더** 돌린다 (v2 `refreshAnlasBtn`).
    *  ★각도를 원위치시키지 않고 누적한다. 되돌리면 애니메이션이 거꾸로 돌아 흔들려 보인다. */
   const [turns, setTurns] = useState(0);
@@ -368,7 +368,10 @@ export function GenerateFooter({ compact = false }: { compact?: boolean }) {
         gap: "var(--sp-2)",
       }}
     >
-      {error && <span style={{ fontSize: "var(--text-2xs)", color: "var(--err-ink)" }}>{error}</span>}
+      {/* ★`error` 는 큐에 넣기 전의 실패, `queueError` 는 NAI 가 거절한 실패다 */}
+      {(error || queueError) && (
+        <span data-gen-error style={{ fontSize: "var(--text-2xs)", color: "var(--err-ink)" }}>{error || queueError}</span>
+      )}
 
       {/* ★★생성할 씬이 없으면 **누르기 전에** 말해 준다 (사용자 지시 2026-08-22).
           툴팁만으로는 마우스를 올려야 보이므로, 토큰 안내와 **같은 모양의 줄**로 낸다.

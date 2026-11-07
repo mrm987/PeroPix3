@@ -7,7 +7,8 @@ import { useImageInput } from "../store/imageInput";
 import { pushUndo } from "../lib/undo";
 import { useUi } from "../store/ui";
 import { ask } from "../store/ask";
-import { toast } from "../store/toast";
+import { toast, TOAST_READ_MS } from "../store/toast";
+import { naiErrorText } from "../lib/naiError";
 import { usePlugins, isOn, usePickText } from "../lib/pluginHost";
 import {
   applyMeta,
@@ -289,7 +290,8 @@ export function ImageActions({
       }
       toast(t("upscale.done"));
     } catch (e) {
-      toast(String(e), "warn");
+      // ★업스케일은 생성 푸터가 없는 모드에서도 누르므로 토스트에서 안내를 다 읽을 수 있어야 한다
+      toast(naiErrorText(String(e), t), "warn", undefined, TOAST_READ_MS);
     } finally {
       setBusy(false);
     }

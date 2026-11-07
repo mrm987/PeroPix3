@@ -326,6 +326,8 @@ export const en = {
     err402: "Not enough Anlas. Try a smaller size or fewer images.",
     err401: "The NAI token is not valid. Set it again in settings.",
     err429: "NAI is rate limiting. Try again shortly.",
+    errBlocked: "Cloudflare blocked the request to NAI. Turn off any VPN or proxy, or try again shortly in case of a network outage.",
+    errServer: "The NAI server is not responding. Try again shortly.",
     errOther: "Generation failed: {m}",
     allDone: "{n} images done",
     /** Shown in the window title while the window is not focused (taskbar, Alt+Tab).

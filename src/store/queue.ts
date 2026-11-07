@@ -9,6 +9,7 @@ import { useFiles } from "./files";
 import { useSub } from "./sub";
 import { useAnlasMeter } from "./anlasMeter";
 import { localTs } from "../lib/takes";
+import { naiErrorText } from "../lib/naiError";
 import type { Block } from "../lib/blocks";
 import { useSceneFocus } from "./sceneFocus";
 import { usePreviews } from "./previews";
@@ -297,6 +298,8 @@ export const useQueue = create<S>((set, get) => ({
   },
 
   async enqueue(base, items = [], count = 1) {
+    // ★앞선 실패 문구는 새 생성을 넣을 때 지운다 (생성 푸터가 보여 주는 값이다)
+    set({ error: "" });
     // ★보내기 **전에** 자리를 잡는다 — 누른 즉시 카드가 떠야 눌린 것을 안다
     const groupId = (base.scene_group_id as string) ?? null;
     const add: Pending[] = [];
@@ -362,10 +365,7 @@ export const useQueue = create<S>((set, get) => ({
 /** 큐가 낸 실패를 **사람 말로** (v2 `formatGenerationError`, `index.html:16245`).
  *  ★그대로 던지면 `HTTP 402` 같은 것만 뜬다 — 무엇을 해야 하는지가 안 보인다. */
 function queueErrorText(raw: string): string {
-  if (/402/.test(raw)) return t("queue.err402");
-  if (/401/.test(raw)) return t("queue.err401");
-  if (/429/.test(raw)) return t("queue.err429");
-  return t("queue.errOther", { m: raw.slice(0, 120) });
+  return naiErrorText(raw, t, (m) => t("queue.errOther", { m: m.slice(0, 120) }));
 }
 
 type Setter = (p: Partial<S> | ((s: S) => Partial<S>)) => void;
@@ -847,16 +847,19 @@ function handle(m: Record<string, any>, set: Setter, get: () => S) {
       takeCli(m);
       break;
     case "image_error":
-    case "job_error":
+    case "job_error": {
       // ★★큐 실패를 **토스트로 알린다** — 예전에는 `error` 에 담기만 하고 그것을 읽는
       //   화면이 하나도 없어서, 20장이 전부 실패해도 아무 일도 안 일어났다 (감사 2026-08-16).
-      set({ error: String(m.error ?? "") });
-      toast(queueErrorText(String(m.error ?? "")), "warn");
+      // ★토스트는 2.6초면 사라져 안내를 다 못 읽는다. 같은 문구를 `error` 에 두고 생성 푸터가 다음 생성까지 보여 준다
+      const why = queueErrorText(String(m.error ?? ""));
+      set({ error: why });
+      toast(why, "warn");
       bump(String(m.account ?? ""), "err");
       takeProgress(m.progress, set);
       // ★잡이 통째로 죽으면 `job_done` 이 안 온다 — 그때까지 나간 몫이 화면 잔액에 들게 여기서 묻는다 (`settleBatch` 의 ★★주)
       if (m.type === "job_error") void useSub.getState().load(String(m.account ?? "") || undefined);
       break;
+    }
   }
 }
 
