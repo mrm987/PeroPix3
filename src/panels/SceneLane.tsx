@@ -504,6 +504,18 @@ export function SceneLane() {
         if (removeTakes().length) e.preventDefault();
         return;
       }
+      /* ★★**S = 별표** (사용자 지시 2026-11-11: 갤러리의 단축키를 씬에서도). 대상은 `Del` 과 같다 —
+         고른 것이 있으면 **전부**, 없으면 보고 있는 한 장. 전부 켜져 있으면 끄고, 아니면 전부 켠다.
+         ★`setStars` 하나로 부른다: 한 번에 저장하고 `Ctrl+Z` 한 번이 되돌린다. */
+      if ((e.key === "s" || e.key === "S") && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat) {
+        const f = useSceneFocus.getState();
+        const files = f.picked.length ? [...f.picked] : f.file ? [f.file] : [];
+        if (!files.length) return;
+        e.preventDefault();
+        const w = useWs.getState();
+        w.setStars(files, !files.every((x) => w.isStarred(x)));
+        return;
+      }
       /* ★★고른 장이 있으면 **방향키로 장을 넘긴다** (사용자 지시 2026-08-21).
          예전에는 브라우저 기본대로 줄이 **스크롤**됐다 — 그림을 견주려고 방향키를 눌렀는데
          화면만 밀렸다. 아무것도 안 골랐을 때는 평소대로 스크롤이다.

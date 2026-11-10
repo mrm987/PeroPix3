@@ -421,7 +421,7 @@ const TABS = [
 const KEY_GROUPS: readonly (readonly [string, readonly string[]])[] = [
   ["prompt", ["chipDelete", "chipWeight", "chipWeightBig", "chipReset", "chipDrag", "blockDrag", "charDrag",
               "editEnter", "editShiftEnter", "editTab", "editEsc", "editUndo"]],
-  ["scene", ["pickMulti", "pickRange", "pickDelete", "pickSave", "pickClear", "arrowTake", "arrowScene", "wheelTake", "wheelZoom",
+  ["scene", ["pickMulti", "pickRange", "pickDelete", "pickStar", "pickSave", "pickClear", "arrowTake", "arrowScene", "wheelTake", "wheelZoom",
              "wheelLane", "sceneRename", "sceneTab", "dragGroup", "dragTab", "undo"]],
   ["gallery", ["galArrows", "galStar", "galMulti", "galRename", "galClose"]],
   ["censor", ["cenTools", "cenSize", "cenUndo", "cenRight", "cenWheel", "cenArrows"]],

@@ -111,11 +111,13 @@ def stars(root: Path) -> list[str]:
     return _state(root)["starred"]
 
 
-def set_star(root: Path, file: str, on: bool) -> list[str]:
+def set_star(root: Path, files: list[str], on: bool) -> list[str]:
+    """여러 장을 한 번에 켜고 끈다 — 고른 것 전부에 S 를 누를 때 (한 번 쓴다)."""
     st = _state(root)
-    cur = [f for f in st["starred"] if f != file]
+    touched = set(files)
+    cur = [f for f in st["starred"] if f not in touched]
     if on:
-        cur.append(file)
+        cur.extend(dict.fromkeys(files))
     st["starred"] = cur
     _put_state(root, st)
     return cur

@@ -2916,7 +2916,7 @@ class KeepPath(BaseModel):
 
 
 class KeepStar(BaseModel):
-    file: str
+    files: list[str]
     on: bool
 
 
@@ -3020,7 +3020,7 @@ async def keep_stars():
 
 @app.post("/api/keep/star")
 async def keep_star(body: KeepStar):
-    return {"starred": keep.set_star(KEEP_DIR, body.file, body.on)}
+    return {"starred": keep.set_star(KEEP_DIR, body.files, body.on)}
 
 
 # ★한 쪽에 몇 장인가 — v2 는 50 이었다. 60 은 3열·4열 어느 쪽에도 딱 떨어진다

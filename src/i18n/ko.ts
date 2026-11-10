@@ -645,7 +645,6 @@ export const ko: Dict = {
     generating: "생성 중…",
     generateAll: "전체 생성 ({n}셀)",
     generateCell: "이 셀만 생성",
-    starKey: "선별 표시 (S)",
     /** ★생성물을 끌면 카드 그림(커버)이 된다. 우클릭 숨김은 씬 줄에 없어 뺐다 */
     takeHint: "seed {seed} · 우클릭 = 숨김",
     countTakes: "{n}장",
@@ -731,6 +730,7 @@ export const ko: Dict = {
       pickMulti: { k: "Ctrl + 클릭", v: "씬에서 여러 장을 고릅니다" },
       pickRange: { k: "Shift + 클릭", v: "범위로 고릅니다" },
       pickDelete: { k: "Delete / Backspace", v: "고른 장을 휴지통으로 보냅니다" },
+      pickStar: { k: "S", v: "고른 장의 별표를 켜고 끕니다 (안 골랐으면 보고 있는 장)" },
       pickSave: { k: "Enter", v: "보고 있는 저장 안 된 그림을 파일로 저장합니다" },
       pickClear: { k: "Esc", v: "고른 것을 풉니다" },
       arrowTake: { k: "← →", v: "앞뒤 장으로 (세로 모드에서는 ↑ ↓)" },
@@ -744,7 +744,7 @@ export const ko: Dict = {
       dragTab: { k: "탭 끌기", v: "다른 워크스페이스로 옮깁니다" },
       undo: { k: "Ctrl + Z", v: "마지막 편집을 되돌립니다 (칩 지우기·가중치·그림 삭제·조수의 변경)" },
       galArrows: { k: "← →", v: "앞뒤 그림으로" },
-      galStar: { k: "S", v: "별표를 켜고 끕니다" },
+      galStar: { k: "S", v: "고른 그림의 별표를 켜고 끕니다" },
       galMulti: { k: "Ctrl + 클릭", v: "여러 장을 고릅니다" },
       galRename: { k: "이름 더블클릭", v: "파일 이름을 바꿉니다" },
       galClose: { k: "그림 옆 빈 곳 클릭", v: "크게 보기를 닫습니다" },
@@ -1508,20 +1508,6 @@ export const ko: Dict = {
      *  씬 카드가 「새 씬 그룹」으로 생겼다). 층마다 제 이름이 있어야 화면에서 갈린다. */
     newCard: "새 씬 카드",
     posePrefix: "씬 {n}",
-  },
-
-  cell: {
-    openHint: "클릭 = 이 셀 보기 · 우클릭 = 셀 삭제",
-    tagsHint: "클릭 = 이 씬의 태그 편집",
-    tagsPlaceholder: "태그 입력…",
-    notGenerated: "이 셀은 아직 미생성입니다. 눌러서 이 셀만 생성합니다",
-    back: "← {name} (Esc)",
-    keyHint: "← → 테이크 · ↑ ↓ 옆 셀 · S 별표 · Enter 이것만 · Del 숨김",
-    keepOnly: "이것만 남기기",
-    keepOnlyHint: "Enter 를 누르면 이 셀의 나머지 {n}장을 숨깁니다 (지우지 않습니다)",
-    hidden: "숨김 {n}",
-    unhideAll: "다시 보기",
-    position: "{cell} · seed {seed} · {i}/{n}",
   },
 
   gallery: {

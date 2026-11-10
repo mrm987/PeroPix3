@@ -103,8 +103,9 @@ export function Gallery() {
 
   /** ★★**Esc 는 열려 있는 것부터 닫는다** (사용자 지시 2026-09-10: *"esc 누르면 선택 해제되게"*) —
    *  크게 보기가 떠 있으면 그것을 닫고, 닫혀 있으면 선택을 푼다. 한 키가 두 겹을 차례로 벗긴다.
-   *  ★나머지 키(←·→·S)는 **크게 보기 안에서만** 먹는다: 그리드에서 S 가 먹으면 어느 그림에 대한
-   *    별표인지가 모호해진다 (칸 위의 별표 단추가 그 일을 한다). */
+   *  ★★S 는 **목록에서 고른 그림에도** 먹는다 (사용자 지시 2026-11-11). 크게 보기에서는 보고 있는 한 장,
+   *    목록에서는 고른 것 전부다 (`Del` 이 고른 것 전부에 먹는 것과 같다). 고른 것이 없으면 아무 일도 없다.
+   *  ★←·→ 는 **크게 보기 안에서만** 먹는다. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
@@ -114,11 +115,14 @@ export function Gallery() {
         if (picked.size) return clearPick();
         return;
       }
+      if ((e.key === "s" || e.key === "S") && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat) {
+        const files = big ? (focus ? [focus] : []) : [...picked];
+        return void toggleStar(files);
+      }
       if (!big || !focus) return;
       if (e.key === "ArrowLeft" && idx > 0) return void setFocus(ws, shown[idx - 1].file);
       if (e.key === "ArrowRight" && idx >= 0 && idx < shown.length - 1)
         return void setFocus(ws, shown[idx + 1].file);
-      if (e.key === "s" || e.key === "S") return void toggleStar(focus);
     };
     win.addEventListener("keydown", onKey);
     return () => win.removeEventListener("keydown", onKey);
@@ -234,7 +238,7 @@ export function Gallery() {
                  아니면 작가 필터가 걸어 준 **고른 작가들**이다 */
               artists={byFile ? byFile.get(it.file) : it.artists}
               artistOn={onSet}
-              onStar={() => void toggleStar(it.file)}
+              onStar={() => void toggleStar([it.file])}
               onPick={(mod) => onPick(it.file, mod)}
               onOpen={() => openBig(it.file)}
               /* 고른 것이 있으면 **고른 것 전부**, 아니면 이 한 장 */

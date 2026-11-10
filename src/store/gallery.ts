@@ -166,7 +166,8 @@ type S = {
   pickAll: () => void;
   clearPick: () => void;
   isStarred: (file: string) => boolean;
-  toggleStar: (file: string) => Promise<void>;
+  /** 여러 장을 한 번에 켜고 끈다 — **전부 켜져 있으면 끄고, 하나라도 꺼져 있으면 전부 켠다** */
+  toggleStar: (files: string[]) => Promise<void>;
   /** ★`only` 를 주면 그 파일만 지운다 (안 주면 골라 둔 것) */
   remove: (ws: string, only?: string[]) => Promise<number>;
   /** @param only 끌어다 놓은 파일들 (없으면 고른 것 전부) */
@@ -401,16 +402,17 @@ export const useGallery = create<S>((set, get) => ({
 
   isStarred: (file) => get().starred.has(file),
 
-  async toggleStar(file) {
-    const on = !get().starred.has(file);
+  async toggleStar(files) {
+    if (!files.length) return;
+    const on = !files.every((f) => get().starred.has(f));
     // 눌린 것이 바로 보여야 한다 — 서버 답을 기다리지 않고 켜 두고, 답이 오면 맞춘다
     const now = new Set(get().starred);
-    on ? now.add(file) : now.delete(file);
+    for (const f of files) on ? now.add(f) : now.delete(f);
     set({ starred: now });
     const r = await api<{ starred: string[] }>(`/api/keep/star`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ file, on }),
+      body: JSON.stringify({ files, on }),
     });
     set({ starred: new Set(r.starred) });
   },
