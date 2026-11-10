@@ -14,6 +14,7 @@ import io
 import json
 from collections.abc import Awaitable, Callable
 import math
+import os
 import random
 import re
 import zipfile
@@ -976,6 +977,10 @@ async def generate_streaming(
     """
     if not token:
         raise RuntimeError("NAI 토큰이 설정되지 않았습니다.")
+    # ★C 확장(`_cmsgpack.pyd`)은 서명이 없어 윈도우 스마트 앱 컨트롤이 막고 「이 앱의 일부가
+    #  차단되었습니다」 알림을 띄운다 (유저 제보 2026-11-10). 막혀도 msgpack 이 순수 파이썬으로
+    #  넘어가 동작은 같으므로 처음부터 순수 파이썬을 쓴다 (1MB 프레임 하나에 1ms 쯤).
+    os.environ.setdefault("MSGPACK_PUREPYTHON", "1")
     import msgpack
 
     body = json.loads(json.dumps(payload))          # 원본을 안 건드린다 (기록에 남는 것이다)
