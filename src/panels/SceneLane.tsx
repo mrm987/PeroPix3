@@ -15,11 +15,10 @@ import { TYPE } from "../styles/type";
 
 import { imgUrl, thumbUrlOf } from "../lib/imgUrl";
 import { Icon } from "../components/Icon";
-import { Dropdown } from "../components/Dropdown";
 import { Ratio, RATIO_LANDSCAPE, RATIO_PORTRAIT } from "../components/Ratio";
 import { kindColor } from "../cards/kindColor";
-import { slotBlock, slotBlocksOf } from "../lib/blocks";
-import { BlockList } from "../blocks/BlockList";
+import { SceneLines, linesMinHead } from "./SceneLines";
+import { addLine } from "../lib/sceneLines";
 import { DropVeil } from "../cards/DropVeil";
 import { useDragSource, useDropZone } from "../cards/dragStore";
 import { askThumb } from "../cards/thumbAsk";
@@ -147,7 +146,9 @@ export function SceneLane() {
       const t = e.target as HTMLElement | null;
       /* ★★**열려 있는 그 칸**일 때만 비켜 간다. 접힌 줄에도 같은 블록이 있으므로
          (`clamp`) 그냥 `[data-slot-block]` 으로 보면 **다른 씬을 눌러도 안 닫힌다.** */
-      if (t?.closest("[data-slot-block]")?.getAttribute("data-slot-block") === expandedId) return;
+      if (t?.closest("[data-scene-lines]")?.getAttribute("data-scene-lines") === expandedId) return;
+      // ★줄의 이름표 목록은 body 에 뜬다 — 고르는 클릭에 줄이 접히지 않게
+      if (t?.closest("[data-dropdown-list]")) return;
       /* ★★서랍에서 블록을 끌어오는 중이면 닫지 않는다. 닫으면 받는 자리가 그 자리에서
          **사라져** 아예 놓을 수 없다 — 끌기는 서랍 쪽 `pointerdown` 으로 시작한다. */
       if (t?.closest("[data-block-drawer]")) return;
@@ -568,18 +569,6 @@ export function SceneLane() {
 
   if (tab?.kind !== "sceneGroup") return null;
 
-  /** ★「캐릭터 전원」은 **켜진 캐릭터가 둘 이상일 때만** 낸다 (사용자 결정) —
-   *  한 명이면 그 사람을 고르는 것과 같아서 뜻이 없다. */
-  const canAll = chars.length > 1;
-  // ★고른 캐릭터가 꺼지거나 지워졌으면 base 로 되돌린다 — 없는 곳으로 보내면 조용히 사라진다.
-  //   ★판정이 `gen.ts generateAll` 과 **같아야** 화면에 뜬 것과 실제로 나가는 것이 안 갈린다
-  //   (회귀 `lib/sceneDest.test.ts` 가 두 파일의 규칙 줄을 대조한다).
-  const dest =
-    tab.sceneDest === "all" && canAll
-      ? "all"
-      : chars.some((c) => c.id === tab.sceneDest)
-        ? tab.sceneDest!
-        : "base";
 
   const h = Math.min(LANE_MAX, Math.max(LANE_MIN, laneSize));
   const w = h;
@@ -784,45 +773,8 @@ export function SceneLane() {
           <Ratio {...(vert ? RATIO_PORTRAIT : RATIO_LANDSCAPE)} max={13} />
         </button>
         <b style={{ fontSize: "var(--text-2xs)", color: "var(--ink-dim)" }}>{t("scenes.title")}</b>
-        {/* ★씬 프롬프트가 payload 의 **어디로 들어가나** — 왼쪽 컨테이너 이름(베이스 프롬프트 /
-            캐릭터 프롬프트)을 그대로 가리킨다. ★탭에 **하나뿐**이다 (사용자 결정)
-            ★★상자도 목록도 **우리가 그린다** (`components/Dropdown`). 2026-08-22 에는 `<select>` 를
-              투명하게 겹쳐 두고 상자만 그렸는데(폭이 가장 긴 항목에 맞춰 벌어지고, 화살표 방향을
-              못 바꿔서), 2026-08-30 에 목록까지 우리 것으로 바꿨다 — 브라우저 목록은 항목 여백을
-              못 주고 세로 모드에서는 목록까지 세로로 섰다. 폭은 **고른 것**에 맞고, 화살표는
-              언제나 아래다. */}
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--sp-2)",
-            fontSize: "var(--text-2xs)",
-            color: "var(--ink-faint)",
-            // ★칸이 좁으면 여기가 잘린다. 안 그러면 머리줄이 넘쳐 맨 끝의 별표 · 분리 버튼이 오른쪽 기둥에 가려진다
-            ...(vert ? null : { minWidth: 0, overflow: "hidden", whiteSpace: "nowrap" as const }),
-          }}
-        >
-          {t("scenes.destLabel")}
-          {/* ★★**목록도 우리가 그린다** (`components/Dropdown`, 사용자 지시 2026-08-30) — 브라우저
-              기본 목록은 항목 여백을 못 주고, 세로 모드에서는 목록까지 세로로 섰다.
-              ★`all` 은 두 명부터만 낸다 (위 `canAll` 주석) — v2 의 `promptTarget === "char"`.
-              ★캐릭터 이름이 비어 있으면 화면에 뜨는 이름을 그대로 쓴다 (사용자 지적 2026-08-19) */}
-          <Dropdown
-            mark="scene-dest"
-            vert={vert}
-            tip={t("scenes.destHint")}
-            value={dest}
-            onChange={(v) => patchSceneGroup(tab.id, { sceneDest: v })}
-            options={[
-              { value: "base", label: t("scenes.destBase") },
-              ...(canAll ? [{ value: "all", label: t("scenes.destAll") }] : []),
-              ...chars.map((c, i) => ({
-                value: c.id,
-                label: t("scenes.destChar", { name: c.name || t("cards.charN", { n: i + 1 }) }),
-              })),
-            ]}
-          />
-        </label>
+        {/* ★씬 프롬프트를 넣을 곳은 머리줄이 아니라 **씬의 줄마다** 고른다 (사용자 결정 2026-11-10, `SceneLines`).
+            예전에는 여기에 씬 그룹 하나에 하나인 「씬 프롬프트를 [베이스에 삽입]」이 있었다. */}
         {/* ★★**별표 단추는 맨 끝**이다 (사용자 지시 2026-08-25: *"별표만 보기를 그냥 우측
             끝으로 옮겨"*). 앞에 붙여 두면 세로 모드의 좁은 머리에서 옆 글자와 겹쳐 읽힌다.
             ★가르는 것(모드·이름·목적지)과 **거르는 것**을 양 끝으로 떼어 놓는 셈이기도 하다.
@@ -991,6 +943,7 @@ export function SceneLane() {
               <DropLine on={lane.drop?.kind === "card" && lane.drop.index === ci} vert={vert} />
               <CardGroup
                 vert={vert}
+                chars={chars}
                 card={card}
                 groupId={tab.id}
                 offset={offsets[ci]}
@@ -1051,7 +1004,8 @@ export function SceneLane() {
                       id: "",
                       name: card.name,
                       color: kindColor("posesets"),
-                      cells: card.cells.map((c) => ({ name: c.name, blocks: c.blocks })),
+                      // ★줄마다의 넣을 곳도 함께 담는다 — 덱에서 꺼내 얹어도 같은 씬이어야 한다
+                      cells: card.cells.map((c) => ({ name: c.name, blocks: c.blocks, dest: c.dest, lines: c.lines })),
                     },
                   }, undefined, () => setCard(tab.id, card.id, { folded: !card.folded }))
                 }
@@ -1278,6 +1232,8 @@ function Empty({ onAdd }: { onAdd: () => void }) {
 type GroupProps = {
   /** 세로 모드인가 — 씬이 세로 기둥이 되어 오른쪽으로 늘어선다 (`SceneLane` 의 ★★주) */
   vert: boolean;
+  /** 켜진 캐릭터 — 씬 줄의 이름표가 가리키는 차례 (`SceneLines`) */
+  chars: { name: string }[];
   card: SceneCard;
   /** 이 카드가 든 탭 — 머리에 건 그림을 어디에 적을지 (`askThumb`) */
   groupId: string;
@@ -1698,9 +1654,13 @@ function SceneRow(
   const startTakeDrag = useDragSource();
   const c = p.cell;
   const expanded = p.expandedId === c.id;
-  /** ★★이 칸의 블록 — **하나뿐**이다 (`slotBlock`). 여럿이 든 옛 카드를 얹었으면
-   *  켜진 것들을 이어 붙여 보여 준다. */
-  const blk = slotBlock(c.blocks, c.id);
+  /** 줄이 여럿이면 머리가 적어도 이만큼 — 줄마다 칩 한 줄은 다 보이게 (`linesMinHead`). 줄이 하나면 0 */
+  const minHead = linesMinHead(1 + (c.lines?.length ?? 0), p.vert);
+  /** 방금 더한 줄 — 그 줄의 글 상자를 바로 연다. 줄이 접히면 놓는다 */
+  const [newLine, setNewLine] = useState<string | null>(null);
+  useEffect(() => {
+    if (!expanded) setNewLine(null);
+  }, [expanded]);
   /** 세로 모드의 머리 높이 손잡이를 잡은 자리 */
   const headGrip = useRef<{ y: number; h: number } | null>(null);
   /** ★줄은 **최신이 왼쪽**이다 (사용자 지시 2026-08-14, 싱글 히스토리 줄과 같은 규칙).
@@ -1776,7 +1736,7 @@ function SceneRow(
               borderRight: "1px solid var(--line-soft)",
             }
           : {
-              ...(expanded ? { minHeight: p.h + 12 } : { height: p.h + 12 }),
+              ...(expanded ? { minHeight: Math.max(p.h + 12, minHead) } : { height: Math.max(p.h + 12, minHead) }),
               borderBottom: "1px solid var(--line-soft)",
             }),
         // ★끌고 있는 줄은 흐리게 — 자리는 지킨 채다 (칩 드래그와 같은 규칙, CLAUDE.md)
@@ -1805,7 +1765,7 @@ function SceneRow(
              머리 높이가 고정이라 펼쳐도 잘린 채였다 — 가로 모드가 `minHeight` 로 아래로 자라듯,
              세로 모드도 펼쳤을 때는 아래로 자라게 둔다 (기둥 폭은 그대로다). */
           ...(p.vert
-            ? { top: 0, ...(expanded ? { minHeight: p.headw } : { height: p.headw }), borderBottom: "1px solid var(--line)" }
+            ? { top: 0, ...(expanded ? { minHeight: Math.max(p.headw, minHead) } : { height: Math.max(p.headw, minHead) }), borderBottom: "1px solid var(--line)" }
             : { left: 0, width: p.headw, borderRight: "1px solid var(--line)" }),
           /* ★★**강조는 「고른 씬」이 아니라 「지금 치고 있는 칸」이다** (사용자 지시
              2026-08-28: *"이미지만 선택했는데 머리가 선택된 것처럼 표시된다. 이미지를
@@ -1875,6 +1835,21 @@ function SceneRow(
           />
           {/* ★그림 수를 적지 않는다 (사용자 지시 2026-08-19) — 오른쪽에 그 그림들이 그대로
               늘어서 있어서 세어 줄 이유가 없다 */}
+          {/* ★★줄 추가 — 이 씬에만 넣을 곳이 다른 줄을 하나 더 (사용자 결정 2026-11-10, `SceneLines`) */}
+          <button
+            data-scene-line-add={c.id}
+            onClick={(e) => {
+              e.stopPropagation();
+              const r = addLine(c, p.chars.length);
+              patchCell({ lines: r.lines });
+              setNewLine(r.id);
+              p.onExpand(c.id);
+            }}
+            data-tip={t("scenes.lineAdd")}
+            style={iconBtn}
+          >
+            {Icon.lineAdd}
+          </button>
           <button
             data-scene-lock={c.id}
             onClick={(e) => {
@@ -1954,39 +1929,43 @@ function SceneRow(
                「클릭해서 입력」 글자를 눌러야만 편집이 뜨는데, 보기에는 윗부분 전체가
                입력 공간이다"*). 칩·글 상자를 누른 것은 그쪽이 알아서 처리하므로 비켜 간다. */
             const t = e.target as HTMLElement;
-            if (!t.closest("[data-slot-block]")) p.onExpand(c.id, true);
+            // ★줄의 이름표는 목록을 연다 — 글 상자까지 열면 두 가지가 한꺼번에 뜬다
+            if (!t.closest("[data-slot-block], [data-head-action]")) p.onExpand(c.id, true);
           }}
           /* ★`display: contents` 였다 — 상자가 없으니 **빈 자리가 아예 없었다.**
              자리를 차지해야 그 자리를 누를 수 있다 (`flex: 1` 로 머리의 남은 만큼). */
           style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
         >
-          <BlockList
-            /* ★★블록을 고치는 자리는 앱에 **이것 하나**다 (사용자 지적 2026-08-20:
-               *"동일한 컴포넌트를 쓰는게 아니고 복제해서 만드니까 불일치가 계속 생김"*).
-               씬 칸은 그 목록의 `single` 모드일 뿐이라, 칩 끌기·서랍 드롭·중복 표시가
-               프롬프트 쪽과 **같은 배선**을 지난다. */
-            single
-            /* ★머리 칸을 다 쓴다 — 글자만이 아니라 **그 칸 아무 데나** 눌러 칠 수 있게
-               (사용자 지적 2026-08-28). `BlockBody` 의 `fill` 주석 참조. */
-            fill
-            /* ★접히면 글 상자도 닫힌다 — 초점이 안 빠지는 길이 있어서 필요하다
-               (`BlockBody` 의 `open` ★★주) */
-            open={expanded}
+          {/* ★★블록을 고치는 자리는 앱에 **`BlockList` 하나**다 (사용자 지적 2026-08-20:
+              *"동일한 컴포넌트를 쓰는게 아니고 복제해서 만드니까 불일치가 계속 생김"*). 씬 칸은 그 목록의
+              `single` 모드이고, 줄마다 하나씩 선다 (`SceneLines`, 사용자 결정 2026-11-10). */}
+          <SceneLines
             id={c.id}
-            blocks={[blk]}
-            onChange={(b) => patchCell({ blocks: slotBlocksOf(b[0] ?? blk) })}
-            libZone={`scene-${c.id}`}
-            clamp={!expanded}
-            bg={expanded ? "var(--accent-bg)" : "var(--surface)"}
+            zone={`scene-${c.id}`}
+            cell={c}
+            onChange={patchCell}
+            chars={p.chars}
+            vert={p.vert}
             autoEdit={p.typingId === c.id}
-            /* 칩을 눌러 글 상자가 열렸다 — 그 자리를 내준다 (`clamp` 해제) */
-            onOpen={() => p.onExpand(c.id)}
-            // `+n` 은 치려는 게 아니라 **다 보려는** 것이다 — 펴기만 한다
-            onMore={() => p.onExpand(c.id)}
-            // ★`Enter` 로 끝내면 도로 접는다 · `Shift+Enter`·`Tab` 은 **옆 씬**으로
-            onDone={() => p.onExpand(null)}
-            onNext={() => p.onStepField(c.id, 1, "text")}
-            onTab={(dir) => p.onStepField(c.id, dir, "text")}
+            autoLine={expanded ? newLine : null}
+            list={{
+              /* ★머리 칸을 다 쓴다 — 글자만이 아니라 **그 칸 아무 데나** 눌러 칠 수 있게
+                 (사용자 지적 2026-08-28). `BlockBody` 의 `fill` 주석 참조. */
+              fill: true,
+              /* ★접히면 글 상자도 닫힌다 — 초점이 안 빠지는 길이 있어서 필요하다
+                 (`BlockBody` 의 `open` ★★주) */
+              open: expanded,
+              clamp: !expanded,
+              bg: expanded ? "var(--accent-bg)" : "var(--surface)",
+              /* 칩을 눌러 글 상자가 열렸다 — 그 자리를 내준다 (`clamp` 해제) */
+              onOpen: () => p.onExpand(c.id),
+              // `+n` 은 치려는 게 아니라 **다 보려는** 것이다 — 펴기만 한다
+              onMore: () => p.onExpand(c.id),
+              // ★`Enter` 로 끝내면 도로 접는다 · `Shift+Enter`·`Tab` 은 **옆 씬**으로
+              onDone: () => p.onExpand(null),
+              onNext: () => p.onStepField(c.id, 1, "text"),
+              onTab: (dir) => p.onStepField(c.id, dir, "text"),
+            }}
           />
         </div>
       </div>

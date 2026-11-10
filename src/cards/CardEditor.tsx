@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { uniqueName } from "../lib/uniqueName";
 import { useI18n } from "../i18n";
 import { SectionCard } from "../blocks/SectionCard";
-import { BlockList } from "../blocks/BlockList";
-import { slotBlock, slotBlocksOf } from "../lib/blocks";
+import { SceneLines } from "../panels/SceneLines";
+import { addLine } from "../lib/sceneLines";
 import { SectionBody, useThumbView } from "../panels/PromptSections";
 import { PromptOptsBar } from "../panels/PromptOpts";
 import { useCards, type AnyCard, type CardKind, type CharCard, type PoseCard, type StyleCard } from "../store/cards";
-import { normThumb, type Thumb } from "../store/prompt";
+import { normThumb, usePrompt, type Thumb } from "../store/prompt";
 import { Icon } from "../components/Icon";
 import { kindColor } from "./kindColor";
 
@@ -185,7 +185,7 @@ export function CardEditor({
 
 /** 씬 세트의 몸통 — **씬 줄에서 보던 그대로**다.
  *
- *  ★★칸 하나가 **블록 하나**다 (`SlotBlock`, 사용자 결정 2026-08-20). 줄에서 쓰는 부품을
+ *  ★★칸은 씬 줄과 **같은 부품**이다 (`SceneLines` — 줄마다 넣을 곳과 블록 하나, 사용자 결정 2026-11-10).
  *    그대로 쓰므로 칩 클릭·휠 가중치·자동완성·서랍 드롭이 여기서도 같게 먹는다.
  *    여기만 다르게 그리면 「덱에서 본 것」과 「꺼내 놓은 것」이 조용히 달라진다. */
 function PoseBody({
@@ -197,6 +197,9 @@ function PoseBody({
 }) {
   const t = useI18n((s) => s.t);
   const cells = card.cells ?? [];
+  /** 이름표가 가리키는 차례 — 지금 탭에서 켜진 캐릭터 (씬 줄과 같다) */
+  const chars = usePrompt((s) => s.chars).filter((c) => c.on);
+  const patch = (i: number, p: Partial<PoseCard["cells"][number]>) => onChange(cells.map((x, k) => (k === i ? { ...x, ...p } : x)));
   return (
     <div style={{ display: "flex", flexDirection: "column", padding: "var(--sp-2) 0" }}>
       {cells.map((c, i) => (
@@ -219,6 +222,14 @@ function PoseBody({
                 color: "var(--ink-soft)",
               }}
             />
+            <button
+              data-card-editor-line-add={i}
+              onClick={() => patch(i, { lines: addLine(c, chars.length).lines })}
+              data-tip={t("scenes.lineAdd")}
+              style={{ color: "var(--ink-faint)", display: "grid", padding: "0 2px" }}
+            >
+              {Icon.lineAdd}
+            </button>
             {/* ★마지막 한 칸은 못 뺀다 — 씬이 없는 세트는 이 카드가 할 일이 없다 */}
             {cells.length > 1 && (
               <button
@@ -231,18 +242,12 @@ function PoseBody({
               </button>
             )}
           </span>
-          <BlockList
-            single
+          <SceneLines
             id={`${card.id}:${i}`}
-            blocks={[slotBlock(c.blocks, `${card.id}:${i}`)]}
-            libZone={`cardedit-${card.id}-${i}`}
-            onChange={(b) =>
-              onChange(
-                cells.map((x, k) =>
-                  k === i ? { ...x, blocks: slotBlocksOf(b[0] ?? slotBlock(x.blocks, "b")) } : x,
-                ),
-              )
-            }
+            zone={`cardedit-${card.id}-${i}`}
+            cell={c}
+            onChange={(p) => patch(i, p)}
+            chars={chars}
           />
         </div>
       ))}

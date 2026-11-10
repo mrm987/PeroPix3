@@ -120,6 +120,9 @@ def _scenes(st: dict) -> list[dict]:
                 "card": k.get("name"), "prefix": k.get("prefix", ""),
                 # ★옛 파일의 카드 잠금(`card.locked`)은 그 카드의 씬이 전부 잠긴 것과 같다 (`lib/sceneCards.ts`)
                 "blocks": _view(c.get("blocks")), "locked": bool(c.get("locked")) or bool(k.get("locked")),
+                # ★씬 프롬프트를 넣을 곳 — 줄마다 있다 (`src/lib/sceneLines.ts`). base · #n(그 그림의 n번째 캐릭터) · all
+                "dest": c.get("dest") or "base",
+                **({"lines": [{"dest": x.get("dest"), "blocks": _view(x.get("blocks"))} for x in c["lines"]]} if c.get("lines") else {}),
             })
     return out
 

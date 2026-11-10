@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { api, type TrashEntry } from "../lib/backend";
 import type { Block } from "../lib/blocks";
+import type { SceneLine } from "../lib/sceneLines";
 import type { StyleOpts } from "../lib/styleOpts";
 import { slotBlocks } from "./workspace";
 import { t } from "../i18n";
@@ -37,7 +38,8 @@ export type StyleCard = Common & { base: Block[]; uc: Block[]; opts?: StyleOpts 
 export type CharCard = Common & { prompt: Block[]; uc: Block[] };
 /** 포즈세트 카드 — 칸마다 **블록 목록**을 든다 (슬롯과 같은 자료형, 2026-08-07).
  *  ★옛 카드는 `tags` 문자열을 들고 있다. `load()` 가 읽을 때 한 번 옮긴다. */
-export type PoseCard = Common & { cells: { name: string; blocks: Block[] }[] };
+/** ★칸은 씬과 같은 모양이다 — 첫 줄(`blocks`·`dest`)과 그 뒤의 줄들(`lines`, `lib/sceneLines`) */
+export type PoseCard = Common & { cells: { name: string; blocks: Block[]; dest?: string; lines?: SceneLine[] }[] };
 export type AnyCard = StyleCard | CharCard | PoseCard;
 
 type S = {
@@ -76,7 +78,7 @@ export const useCards = create<S>((set, get) => ({
       // ★옛 포즈세트 카드(문자열 태그)를 블록으로 — 읽을 때 한 번만
       posesets: (r.posesets ?? []).map((c) => {
         const p = hydrate(c, "posesets") as PoseCard;
-        return { ...p, cells: (p.cells ?? []).map((x) => ({ name: x.name, blocks: slotBlocks(x) })) };
+        return { ...p, cells: (p.cells ?? []).map((x) => ({ name: x.name, blocks: slotBlocks(x), dest: x.dest, lines: x.lines })) };
       }) as PoseCard[],
       loaded: true,
     });

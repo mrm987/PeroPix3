@@ -191,7 +191,6 @@ export async function generateCuts(doc: Doc, ids: string[], count: number, extra
       // ★★이 장을 뽑은 화면 구조 — 생성 창구의 `env` 와 같은 모양에 컷 자리를 더한다 (「설정 불러오기」가 그대로 되살린다)
       env: {
         prompt: envPrompt(doc, p),
-        sceneDest: "base",
         cell: { name: nm.name, blocks: g.blocks },
         comic: { doc: doc.id, panel: p.id },
       },

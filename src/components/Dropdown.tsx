@@ -14,7 +14,14 @@ import { useWin } from "../lib/floatWin";
  *  ★열고 닫기는 `<select>` 와 같게: 클릭·Space·Enter·↓ 로 열고, ↑↓ 로 옮기고, Enter 로 고르고,
  *    Esc·밖 클릭·스크롤로 닫는다.
  *  ★처음 쓰는 자리는 씬 프롬프트 목적지 하나다 — 나머지 `<select>` 들은 보고 나서 차례로. */
-export type DropdownOption = { value: string; label: string };
+export type DropdownOption = {
+  value: string;
+  label: string;
+  /** 닫힌 상자에 쓰는 짧은 이름 (없으면 `label`) — 씬 줄의 넣을 곳은 목록에만 캐릭터 이름을 붙인다 */
+  short?: string;
+  /** 이 항목 위에 구분선 — 값이 아니라 동작인 항목(「줄 빼기」)을 떼어 놓는다 */
+  sep?: boolean;
+};
 
 export function Dropdown({
   value,
@@ -23,6 +30,7 @@ export function Dropdown({
   vert = false,
   tip,
   mark,
+  dashed = false,
 }: {
   value: string;
   options: DropdownOption[];
@@ -33,6 +41,8 @@ export function Dropdown({
   tip?: string;
   /** 판정·QA 가 잡는 표식 — `data-dropdown={mark}` */
   mark?: string;
+  /** 고른 것이 지금은 안 먹는다 — 상자 테두리를 점선으로 (씬 줄이 가리킨 캐릭터가 없을 때) */
+  dashed?: boolean;
 }) {
   const win = useWin();
   const [open, setOpen] = useState(false);
@@ -43,7 +53,7 @@ export function Dropdown({
   const box = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const cur = options.find((o) => o.value === value);
-  const label = cur?.label ?? options[0]?.label ?? "";
+  const label = cur?.short ?? cur?.label ?? options[0]?.short ?? options[0]?.label ?? "";
 
   const show = () => {
     const r = box.current?.getBoundingClientRect();
@@ -150,9 +160,9 @@ export function Dropdown({
           alignItems: "center",
           gap: 2,
           background: "var(--bg)",
-          border: `1px solid ${open ? "var(--accent)" : "var(--line)"}`,
+          border: `1px ${dashed ? "dashed" : "solid"} ${open ? "var(--accent)" : "var(--line)"}`,
           borderRadius: "var(--r-2)",
-          color: "var(--ink)",
+          color: dashed ? "var(--ink-faint)" : "var(--ink)",
           /* ★글자 쪽 10px · 화살표 쪽 6px — 화살표 아이콘이 좌우에 빈 여백을 품고 있어 같은 값을
              주면 화살표 쪽만 넓어 보인다 (2026-08-30). 세로 모드는 같은 배분을 위아래에 */
           padding: vert ? "var(--sp-4) var(--sp-1) var(--sp-2)" : "1px var(--sp-2) 1px var(--sp-4)",
@@ -209,6 +219,7 @@ export function Dropdown({
                   onPointerEnter={() => setHi(i)}
                   onClick={() => pick(o.value)}
                   style={{
+                    ...(o.sep ? { borderTop: "1px solid var(--line)", marginTop: "var(--sp-1)" } : null),
                     /* ★항목 여백은 상자와 같은 급 — 좌우 10px, 위아래 6px (사용자 지적 2026-08-30) */
                     padding: "var(--sp-2) var(--sp-4)",
                     fontSize: "var(--text-xs)",

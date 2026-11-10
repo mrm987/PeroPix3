@@ -67,11 +67,16 @@ def build(name: str, recs: list[dict], read_env: Callable[[dict], dict | None], 
             cell = (env or {}).get("cell") or {}
             if not cell.get("blocks"):
                 no_prompt += 1
-            cells.append({
+            one = {
                 "id": last.get("cell_id") or _new_id("c"),
                 "name": last.get("cell") or cell.get("name") or FALLBACK_CELL,
                 "blocks": cell.get("blocks") or [],
-            })
+            }
+            # ★씬의 줄마다의 넣을 곳 (`src/lib/sceneLines.ts`). 옛 그림은 씬 그룹의 `sceneDest` 로 남는다 (아래)
+            for k in ("dest", "lines"):
+                if cell.get(k):
+                    one[k] = cell[k]
+            cells.append(one)
         env = _latest_env(g["recs"], read_env)
         out = {
             "id": g["id"] or _new_id("tab"),

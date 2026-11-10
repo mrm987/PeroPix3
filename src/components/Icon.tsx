@@ -98,6 +98,8 @@ export const Icon = {
     </>,
     13,
   ),
+  /** 줄 추가 — 씬 프롬프트에 넣을 곳이 다른 줄을 하나 더 (`panels/SceneLines`) */
+  lineAdd: s(<path d="M4 6h11M4 12h11M4 18h7M18 14v6M15 17h6" />, 14),
   /** 복제 */
   duplicate: s(
     <>

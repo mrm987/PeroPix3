@@ -56,7 +56,7 @@ export type DelPlan = {
 };
 
 /* ── 최소 구조 타입 — 스토어를 끌어오지 않는다 (`takes.ts` 와 같은 방식) ── */
-type Cell = { id: string; name: string };
+type Cell = { id: string; name: string; lines?: { id: string }[] };
 type Card = { id: string; name: string; cells: Cell[] };
 type Set_ = { id: string; kind: string; name: string; cards?: Card[]; tabId?: string; idOnly?: boolean };
 type Spec_ = { tabs?: { id: string; name: string }[]; sceneGroups: Set_[] };
@@ -86,7 +86,8 @@ export function planDelete(
   const none = (kind: DelTarget["kind"]): DelPlan => ({
     kind, name: "", files: [], inner: 0, hard: true, zones: [], blocked: "not_found",
   });
-  const sceneZones = (cells: Cell[]) => cells.map((c) => `scene-${c.id}`);
+  // ★씬의 줄마다 블록 목록 자리가 따로다 (`lib/sceneLines` 의 `lineZone`) — 첫 줄 뒤의 줄도 함께 뺀다
+  const sceneZones = (cells: Cell[]) => cells.flatMap((c) => [`scene-${c.id}`, ...(c.lines ?? []).map((l) => `scene-${c.id}~${l.id}`)]);
 
   if (target.kind === "tab") {
     const tab = (spec.tabs ?? []).find((c) => c.id === target.id);
@@ -141,5 +142,5 @@ export function planDelete(
   const files = takesOf(records, { id: t.id, name: t.name, idOnly: t.idOnly }, cell)
     .filter((r) => !deleted(r.file))
     .map((r) => r.file);
-  return { kind: "scene", name: cell.name, files, inner: 0, hard: true, zones: [`scene-${cell.id}`] };
+  return { kind: "scene", name: cell.name, files, inner: 0, hard: true, zones: sceneZones([cell]) };
 }

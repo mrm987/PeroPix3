@@ -1136,7 +1136,7 @@ defineAction({
         });
       saved = await saveCardWithThumb("posesets", {
         name: name || card.name, color: kindColor("posesets"),
-        cells: card.cells.map((c) => ({ name: c.name, blocks: c.blocks })), folder: "",
+        cells: card.cells.map((c) => ({ name: c.name, blocks: c.blocks, dest: c.dest, lines: c.lines })), folder: "",
       }, null);
     }
     return {
