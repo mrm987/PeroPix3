@@ -37,6 +37,7 @@ export function BlockRow({
   autoCaret,
   fill,
   open,
+  boxed,
   gripProps,
   tagDrag,
   dragging,
@@ -80,6 +81,8 @@ export function BlockRow({
   fill?: boolean;
   /** 품이 아는 「펼쳐져 있나」 (`BlockBody` 의 `open`) */
   open?: boolean;
+  /** 칩 줄에도 테두리를 그린다 (`BlockBody` 의 같은 이름) */
+  boxed?: boolean;
   gripProps?: React.HTMLAttributes<HTMLSpanElement>;
   /** 칩 끌기 (`useTagDrag`) — 목록이 들고 있는 것을 이 블록 몫만 받는다 */
   tagDrag?: TagDrag;
@@ -115,6 +118,7 @@ export function BlockRow({
       zone={zone}
       fill={fill}
       open={open}
+      boxed={boxed}
     />
   );
   // ★머리가 없는 자리는 **몸통 그대로**다 — 테두리도 접기도 없다 (칸이 곧 블록이다)

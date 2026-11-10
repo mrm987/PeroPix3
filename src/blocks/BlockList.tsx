@@ -41,6 +41,7 @@ export function BlockList({
   single,
   fill,
   open,
+  boxed,
   id,
   clamp,
   bg,
@@ -72,6 +73,8 @@ export function BlockList({
   fill?: boolean;
   /** `fill` 인 자리에서 **펼쳐져 있나** — `false` 면 글 상자도 닫는다 (`BlockBody` 의 `open`) */
   open?: boolean;
+  /** 칩 줄에도 테두리를 그린다 (`BlockBody` 의 같은 이름) */
+  boxed?: boolean;
   /** `single` 일 때 이 자리를 가리키는 이름 — `data-slot-block` 으로 나간다 */
   id?: string;
   /** 자리가 좁아 **잘라 보여 주는** 상태인가. 넘치는 칩 수를 `+n` 으로 낸다 */
@@ -366,6 +369,7 @@ export function BlockList({
               bare={single}
               fill={fill}
               open={open}
+              boxed={boxed}
               noToggle={noToggle}
               tag={tagOf?.(b)}
               zone={libZone}

@@ -54,8 +54,12 @@ export function BlockBody({
   zone,
   fill,
   open,
+  boxed,
 }: {
   block: Block;
+  /** ★칩 줄에도 **테두리를 그린다** (사용자 지적 2026-11-10: 씬의 입력칸 안에 넣을 곳 드롭다운이 든 것처럼 보여 클릭이 빗나갔다).
+   *  입력칸이 어디까지인지 보이게 한다. 자리는 원래 투명 테두리로 잡혀 있어 폭이 안 바뀐다 */
+  boxed?: boolean;
   /** ★★**품이 준 자리를 다 쓴다** (사용자 지적 2026-08-28: *"입력 영역이 머리 영역 전체만큼
    *  커져야 하는데 텍스트 라인만큼만 생긴다"*). 평소에는 글이 늘어난 만큼만 커지는데,
    *  씬 머리처럼 **칸이 먼저 정해진 자리**에서는 그 칸을 채워야 눌러서 칠 수 있다. */
@@ -560,7 +564,7 @@ export function BlockBody({
           style={{
             ...box,
             // ★테두리는 **투명으로 자리만** 잡는다 — 글 상자와 폭이 어긋나지 않게
-            borderColor: "transparent",
+            borderColor: boxed ? "var(--line)" : "transparent",
             display: "flex",
             flexWrap: "wrap",
             alignContent: "flex-start",

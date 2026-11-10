@@ -8,17 +8,20 @@ import { useI18n } from "../i18n";
 /** 넣을 곳 목록의 「줄 빼기」 — 값이 아니라 동작이다 */
 const REMOVE = "__remove";
 
-/** 접힌 줄에서 줄 하나가 칩 한 줄을 다 보이는 높이 — 칩 상자 위 여백·테두리 4 + 칩 23 (`BlockBody` 의 `box`).
+/** 접힌 줄에서 줄 하나가 칩 한 줄을 다 보이는 높이 — 입력칸(칩 상자)의 테두리·안여백 8 + 칩 23 (`BlockBody` 의 `box`).
+ *  ★입력칸 테두리가 보이므로(`boxed`) 아래 여백까지 다 들어가야 한다. 예전에는 27 이라 칩 아래가 테두리에 붙었다.
  *  세로 모드는 이름표가 줄 위에 서므로 이름표 21 + 틈 4 가 더 든다 */
-const LINE_H = 27;
-const LINE_H_VERT = 52;
+const LINE_H = 31;
+const LINE_H_VERT = 57;
+/** 줄 사이 틈 — 접혀 있어도 둔다. 없으면 입력칸 테두리끼리 붙어 한 칸처럼 보인다 */
+const LINE_GAP = 3;
 
 /** ★★줄이 둘 이상인 씬의 **머리가 적어도 가져야 할 높이** (접힌 줄). 줄마다 칩 한 줄은 다 보여야 한다 —
  *  모자라면 칩이 아래가 잘린 채 `+n` 으로 세어져, 다 보이는데도 숨은 것처럼 뜬다 (게스트 실측 2026-11-10: 줄 셋에 줄마다 22px).
  *  줄이 하나면 0 이다 (지금까지처럼 줄 두께는 썸네일이 정한다). 머리 위아래 여백 12 · 이름 줄 20 (세로 모드는 접혀 40) · 틈 4 */
 export function linesMinHead(n: number, vert: boolean): number {
   if (n <= 1) return 0;
-  return vert ? 56 + n * LINE_H_VERT : 36 + n * LINE_H;
+  return (vert ? 56 + n * LINE_H_VERT : 36 + n * LINE_H) + (n - 1) * LINE_GAP;
 }
 
 /** 줄마다 같은 것을 넘기는 블록 목록 설정 (씬 줄이 펴졌나·잘라 보이나·키 이동) */
@@ -81,7 +84,8 @@ export function SceneLines(p: {
     const pill = (
       /* ★★클릭을 여기서 멈춘다 — 목록은 body 에 뜨지만(portal) React 이벤트는 그 위로 올라온다. 안 멈추면 항목을 고른
            클릭이 씬 머리의 「누르면 펴고 친다」에 닿아 줄이 펴지고 글 상자가 열린다 (게스트 실측 2026-11-10) */
-      <span data-head-action onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignSelf: "flex-start", fontSize: "var(--text-2xs)" }}>
+      /* ★가로 모드는 이름표를 입력칸 첫 줄의 칩과 같은 높이에 세운다 (입력칸 테두리·안여백 4 + 칩 23 의 가운데) */
+      <span data-head-action onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignSelf: "flex-start", fontSize: "var(--text-2xs)", ...(p.vert ? null : { marginTop: 5 }) }}>
         <Dropdown
           mark="scene-line-dest"
           value={dest}
@@ -125,13 +129,13 @@ export function SceneLines(p: {
   const count = 1 + lines.length;
   /* ★★접힌 줄에서는 줄들이 머리를 **나눠 갖고** 넘치는 칩은 잘린다 (`clamp`). 줄마다 칩 한 줄은 다 보이고(`LINE_H`),
      줄이 하나면 지금까지처럼 그 줄이 머리를 다 쓴다 (머리 아무 데나 눌러 칠 수 있게).
-     ★접힌 줄에서는 줄 사이 틈을 두지 않는다 — 칩 상자의 여백이 틈이 된다 (`linesMinHead` 의 셈) */
+     ★줄 사이 틈(`LINE_GAP`)은 접혀 있어도 둔다 (`linesMinHead` 의 셈) */
   const grid: React.CSSProperties = {
     display: "grid",
     gridTemplateColumns: "max-content minmax(0, 1fr)",
     gridTemplateRows: count === 1 ? "minmax(0, 1fr)" : clamp ? `repeat(${count}, minmax(${LINE_H}px, 1fr))` : `repeat(${count}, auto)`,
     columnGap: 4,
-    rowGap: count > 1 && !clamp ? 3 : 0,
+    rowGap: count > 1 ? LINE_GAP : 0,
   };
   const main = slotBlock(p.cell.blocks, p.id);
   return (
@@ -140,7 +144,7 @@ export function SceneLines(p: {
       style={{
         flex: "1 1 auto",
         minHeight: 0,
-        ...(p.vert ? { display: "flex", flexDirection: "column", gap: lines.length && !clamp ? 3 : 0 } : grid),
+        ...(p.vert ? { display: "flex", flexDirection: "column", gap: lines.length ? LINE_GAP : 0 } : grid),
       }}
     >
       {row(
@@ -151,6 +155,7 @@ export function SceneLines(p: {
           single
           {...p.list}
           id={p.id}
+          boxed
           blocks={[main]}
           onChange={(b) => p.onChange({ blocks: slotBlocksOf(b[0] ?? main) })}
           libZone={p.zone}
@@ -168,6 +173,7 @@ export function SceneLines(p: {
             single
             {...p.list}
             id={lid}
+            boxed
             blocks={[blk]}
             onChange={(b) => p.onChange({ lines: lines.map((x) => (x.id === l.id ? { ...x, blocks: slotBlocksOf(b[0] ?? blk) } : x)) })}
             libZone={lineZone(p.zone, l.id)}

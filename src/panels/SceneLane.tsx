@@ -1967,7 +1967,9 @@ function SceneRow(
                입력 공간이다"*). 칩·글 상자를 누른 것은 그쪽이 알아서 처리하므로 비켜 간다. */
             const t = e.target as HTMLElement;
             // ★줄의 이름표는 목록을 연다 — 글 상자까지 열면 두 가지가 한꺼번에 뜬다
-            if (!t.closest("[data-slot-block], [data-head-action]")) p.onExpand(c.id, true);
+            /* ★★줄들 안에서는 **입력칸(테두리 상자)만** 친다 (사용자 지적 2026-11-10: 입력칸 안에 드롭다운이 든 구조라 클릭이 자주 빗나갔다).
+               이름표 옆·줄 사이를 눌러도 글 상자가 안 열린다. 줄들 밖(이름 줄의 빈 자리)은 전처럼 첫 줄을 연다 */
+            if (!t.closest("[data-slot-block], [data-head-action], [data-scene-lines]")) p.onExpand(c.id, true);
           }}
           /* ★`display: contents` 였다 — 상자가 없으니 **빈 자리가 아예 없었다.**
              자리를 차지해야 그 자리를 누를 수 있다 (`flex: 1` 로 머리의 남은 만큼). */
