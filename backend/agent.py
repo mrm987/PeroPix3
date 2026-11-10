@@ -81,6 +81,35 @@ def _blocks(items: list[dict] | None) -> list[dict]:
     return out
 
 
+_DEST = re.compile(r"^(base|all|#[1-9]\d*)$")
+
+
+def _cell_body(c: dict) -> dict:
+    """씬 칸 하나 — 첫 줄과 그 뒤의 줄들 (`src/lib/sceneLines.ts`). ★모르는 넣을 곳은 base 로 둔다 (첫 줄) · 그 줄을 버린다 (나머지)"""
+    out: dict[str, Any] = {"name": str(c.get("name", "포즈")), "blocks": _blocks(c.get("blocks"))}
+    d = str(c.get("dest") or "")
+    if _DEST.match(d) and d != "base":
+        out["dest"] = d
+    lines = []
+    for i, x in enumerate(c.get("lines") or []):
+        ld = str((x or {}).get("dest") or "")
+        if _DEST.match(ld):
+            # ★블록 id 가 첫 줄의 것과 겹치지 않게 줄 번호를 붙인다 (`_blocks` 는 목록 안의 차례로만 짓는다)
+            blocks = [{**b, "id": f"{b['id']}l{i}"} for b in _blocks(x.get("blocks"))]
+            lines.append({"id": f"ln{int(datetime.now().timestamp() * 1000):x}{i}", "dest": ld, "blocks": blocks})
+    if lines:
+        out["lines"] = lines
+    return out
+
+
+def _cell_view(c: dict) -> dict:
+    """씬 칸을 읽기 쉬운 모양으로 — 넣을 곳과 줄까지"""
+    out = {"name": c.get("name"), "blocks": _view(c.get("blocks")), "dest": c.get("dest") or "base"}
+    if c.get("lines"):
+        out["lines"] = [{"dest": x.get("dest"), "blocks": _view(x.get("blocks"))} for x in c["lines"]]
+    return out
+
+
 def _view(blocks: list[dict] | None) -> list[dict]:
     """블록 목록을 읽기 쉬운 줄로 (LLM 이 다루기 쉬운 모양)."""
     out = []
@@ -121,8 +150,7 @@ def _scenes(st: dict) -> list[dict]:
                 # ★옛 파일의 카드 잠금(`card.locked`)은 그 카드의 씬이 전부 잠긴 것과 같다 (`lib/sceneCards.ts`)
                 "blocks": _view(c.get("blocks")), "locked": bool(c.get("locked")) or bool(k.get("locked")),
                 # ★씬 프롬프트를 넣을 곳 — 줄마다 있다 (`src/lib/sceneLines.ts`). base · #n(그 그림의 n번째 캐릭터) · all
-                "dest": c.get("dest") or "base",
-                **({"lines": [{"dest": x.get("dest"), "blocks": _view(x.get("blocks"))} for x in c["lines"]]} if c.get("lines") else {}),
+                **{k: v for k, v in _cell_view(c).items() if k in ("dest", "lines")},
             })
     return out
 
@@ -579,6 +607,10 @@ class Tools:
         n = lambda d: {"type": "number", "description": d}
         arr = lambda d, it: {"type": "array", "description": d, "items": it}
         blk = obj({"label": s("블록 이름"), "tags": s("태그들 — 쉼표로 구분")}, ["label", "tags"])
+        # ★씬 칸 — 첫 줄(`blocks`·`dest`)과 넣을 곳이 다른 줄들(`lines`, `src/lib/sceneLines.ts`)
+        dest_s = s("넣을 곳 — base(베이스 프롬프트 뒤) · #1·#2…(그 그림에 실린 n번째 켜진 캐릭터의 프롬프트 뒤) · all(켜진 캐릭터 모두의 뒤)")
+        cell_obj = obj({"name": s("포즈 이름"), "blocks": arr("첫 줄의 블록", blk), "dest": dest_s,
+                         "lines": arr("첫 줄 뒤의 줄 — 줄마다 넣을 곳과 블록", obj({"dest": dest_s, "blocks": arr("블록", blk)}, ["dest"]))}, ["name"])
 
         return [
             (
@@ -623,7 +655,7 @@ class Tools:
                         "name": s("카드 이름"),
                         "blocks": arr("그림체·캐릭터의 프롬프트 블록", blk),
                         "uc": arr("Undesired Content 블록", blk),
-                        "cells": arr("씬 카드의 칸들", obj({"name": s("포즈 이름"), "blocks": arr("블록", blk)}, ["name"])),
+                        "cells": arr("씬 카드의 칸들", cell_obj),
                     },
                     ["kind", "name"],
                 ),
@@ -640,7 +672,7 @@ class Tools:
                         "name": s("새 이름 (비우면 그대로)"),
                         "blocks": arr("갈아 끼울 프롬프트 블록", blk),
                         "uc": arr("갈아 끼울 UC 블록", blk),
-                        "cells": arr("갈아 끼울 포즈 칸", obj({"name": s("포즈 이름"), "blocks": arr("블록", blk)}, ["name"])),
+                        "cells": arr("갈아 끼울 포즈 칸", cell_obj),
                     },
                     ["kind", "id"],
                 ),
@@ -959,7 +991,7 @@ class Tools:
         if "uc" in c:
             out["uc"] = _view(c.get("uc"))
         if "cells" in c:
-            out["cells"] = [{"name": x.get("name"), "blocks": _view(x.get("blocks"))} for x in c.get("cells", [])]
+            out["cells"] = [_cell_view(x) for x in c.get("cells", [])]
         return out
 
     def _card_body(self, kind: str, a: dict, base: dict | None = None) -> dict:
@@ -968,10 +1000,7 @@ class Tools:
             card["name"] = str(a["name"])
         if kind == "posesets":
             if a.get("cells") is not None:
-                card["cells"] = [
-                    {"name": str(c.get("name", "포즈")), "blocks": _blocks(c.get("blocks"))}
-                    for c in a["cells"]
-                ]
+                card["cells"] = [_cell_body(c) for c in a["cells"]]
         else:
             key = "base" if kind == "styles" else "prompt"
             if a.get("blocks") is not None:

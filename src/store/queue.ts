@@ -657,7 +657,17 @@ async function legacyAction(action: string, args: Record<string, any>): Promise<
         useWs.getState().patchSceneGroup(hit.id, {
           cards: cards.map((k) => ({
             ...k,
-            cells: k.cells.map((c) => (c.id === args.scene ? { ...c, blocks } : c)),
+            // ★줄까지 그때 모양으로 — 옛 이력(`dest`·`lines` 가 없는 것)은 줄을 건드리지 않는다. null 은 「없었다」다
+            cells: k.cells.map((c) =>
+              c.id === args.scene
+                ? {
+                    ...c,
+                    blocks,
+                    ...("dest" in args ? { dest: (args.dest as string | null) ?? undefined } : null),
+                    ...("lines" in args ? { lines: (args.lines as unknown[] | null) ?? undefined } : null),
+                  }
+                : c,
+            ),
           })),
         } as never);
         return { ok: true };

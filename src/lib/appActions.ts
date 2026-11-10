@@ -1043,11 +1043,18 @@ defineAction({
 defineAction({
   id: "edit_scene",
   title: "씬을 고칩니다",
-  desc: "★**씬 칸 하나의 태그를 갈아 끼운다** (칸에는 블록이 하나뿐이라 태그만 준다). "
-    + "«미소 씬을 윙크로» 가 이것이다. 씬을 더하는 것은 `create_scene`, 이름·잠금은 `apply` 다.",
+  desc: "★**씬 하나를 고친다** — 첫 줄의 태그(`tags`)와 넣을 곳(`dest`), 그 뒤의 줄들(`lines`). "
+    + "«미소 씬을 윙크로» 는 `tags` 만 준다. "
+    + "★넣을 곳: `base`(베이스 프롬프트 뒤) · `#1`·`#2`…(그 그림에 실린 n번째 켜진 캐릭터의 프롬프트 뒤) · `all`(켜진 캐릭터 모두의 뒤). "
+    + "«씬마다 캐릭터 1(여성)과 캐릭터 2(남성)의 행동을 따로» 면 첫 줄은 장면 전체를 base 로, "
+    + "`lines: [{dest: \"#1\", tags: \"…\"}, {dest: \"#2\", tags: \"…\"}]` 로 사람마다 준다. "
+    + "가리킨 캐릭터가 그 그림에 없으면 첫 줄은 base 로 떨어지고 나머지 줄은 안 들어간다. "
+    + "주지 않은 것은 그대로다. 씬을 더하는 것은 `create_scene`, 이름·잠금은 `apply` 다.",
   args: {
     scene: { type: "string", desc: "씬 이름 또는 id", required: true },
-    tags: { type: "string", desc: "태그들 — 쉼표로 구분 (통째로 갈아 끼운다)", required: true },
+    tags: { type: "string", desc: "첫 줄의 태그들 — 쉼표로 구분 (통째로 갈아 끼운다). 비우면 그대로" },
+    dest: { type: "string", desc: "첫 줄을 넣을 곳 — base · #1 · #2 … · all. 비우면 그대로" },
+    lines: { type: "array", items: { type: "object" }, desc: "첫 줄 뒤의 줄 전부 — {dest, tags} 의 목록 (통째로 갈아 끼운다. [] 면 다 뺀다). 비우면 그대로" },
     workspace: { type: "string", desc: "어느 워크스페이스 — 비우면 지금 열린 것 (다르면 거절한다)" },
     tab: { type: "string", desc: "어느 탭 — id 가 정확하다 (이름도 받는다). 비우면 말을 건 때의 탭" },
     sceneGroup: { type: "string", desc: "어느 씬 그룹 — **id 로** 줘라 (이름은 탭마다 겹친다). 비우면 말을 건 때의 씬 그룹" },
@@ -1056,31 +1063,53 @@ defineAction({
   run: async (a) => {
     const { openAddress } = await import("./promptEdit.ts");
     const { slotBlocksOf, makeBlock, parseSegs } = await import("./blocks.ts");
+    const { lineZone, newLineId } = await import("./sceneLines.ts");
     const { dropUndoZone } = await import("./undo");
     const o = openAddress(a);
     if ("error" in o) return o;
     const set = useWs.getState().activeSceneGroup();
     if (set?.kind !== "sceneGroup") return err("no_workspace", "열려 있는 씬 그룹이 없습니다.", { retry: "never" });
     const key = String(a.scene ?? "").trim();
-    const tags = parseSegs(String(a.tags ?? ""));
     const cells = set.cards.flatMap((k) => k.cells);
     const hit = cells.find((c) => c.id === key) ?? cells.find((c) => c.name === key);
     if (!hit)
       return err("not_found", `그런 씬이 없습니다: ${key}`, { what: "scene", given: key, candidates: nearBy(key, cells.map((c) => c.name)) });
+    // ★넣을 곳은 셋뿐이다 (`lib/sceneLines`) — 모르는 값은 고르지 않고 돌려보낸다
+    const DESTS = ["base", "#1", "#2", "all"];
+    const okDest = (d: string) => /^(base|all|#[1-9]\d*)$/.test(d);
+    const dest = a.dest == null || a.dest === "" ? null : String(a.dest).trim();
+    if (dest !== null && !okDest(dest)) return err("unknown_field", `넣을 곳이 아닙니다: ${dest}`, { what: "dest", given: dest, candidates: DESTS });
+    let lines: { dest: string; tags: string }[] | null = null;
+    if (a.lines != null) {
+      if (!Array.isArray(a.lines)) return err("unknown_field", "lines 는 {dest, tags} 의 목록이어야 합니다.", { what: "lines" });
+      lines = (a.lines as Record<string, unknown>[]).map((l) => ({ dest: String(l?.dest ?? "").trim(), tags: String(l?.tags ?? "") }));
+      const bad = lines.find((l) => !okDest(l.dest));
+      if (bad) return err("unknown_field", `줄의 넣을 곳이 아닙니다: ${bad.dest || "(비었음)"}`, { what: "lines[].dest", given: bad.dest, candidates: DESTS });
+    }
+    if (a.tags == null && dest === null && lines === null)
+      return err("unknown_field", "고칠 것이 없습니다 — tags · dest · lines 중 하나는 주세요.", { what: "edit_scene" });
     const was = hit.blocks ?? [];
     const cur = was[0] ?? makeBlock("", [], { open: true, tags: [] });
+    const lineBlocks = (tags: string) => slotBlocksOf(makeBlock("", [], { open: true, tags: parseSegs(tags) }));
+    const next = {
+      ...hit,
+      ...(a.tags != null ? { blocks: slotBlocksOf({ ...cur, tags: parseSegs(String(a.tags)) }) } : null),
+      ...(dest !== null ? { dest: dest === "base" ? undefined : dest } : null),
+      // ★같은 자리의 줄은 id 를 이어 받는다 — 줄의 블록 목록 자리(`lineZone`)가 그대로 남는다
+      ...(lines !== null
+        ? { lines: lines.length ? lines.map((l, i) => ({ id: hit.lines?.[i]?.id ?? newLineId(), dest: l.dest, blocks: lineBlocks(l.tags) })) : undefined }
+        : null),
+    };
     useWs.getState().patchSceneGroup(set.id, {
-      cards: set.cards.map((k) => ({
-        ...k,
-        cells: k.cells.map((c) => (c.id === hit.id ? { ...c, blocks: slotBlocksOf({ ...cur, tags }) } : c)),
-      })),
+      cards: set.cards.map((k) => ({ ...k, cells: k.cells.map((c) => (c.id === hit.id ? next : c)) })),
     } as never);
-    dropUndoZone(`scene-${hit.id}`);
+    for (const z of [`scene-${hit.id}`, ...[...(hit.lines ?? []), ...(next.lines ?? [])].map((l) => lineZone(`scene-${hit.id}`, l.id))]) dropUndoZone(z);
     return {
       ok: true, scene: hit.name, did: `${o.where}의 씬 「${hit.name}」 을 고침`,
       at: { ...promptAt(set, "scene", hit.name), scene: hit.id },
-      before: { sceneGroup: set.id, scene: hit.id, blocks: was },
-      after: { sceneGroup: set.id, scene: hit.id },
+      // ★되돌리기는 줄까지 그때 모양으로 (`restore_prompt` 의 씬 갈래). 없던 값은 null 로 적는다 — JSON 은 undefined 를 버린다
+      before: { sceneGroup: set.id, scene: hit.id, blocks: was, dest: hit.dest ?? null, lines: hit.lines ?? null },
+      after: { sceneGroup: set.id, scene: hit.id, dest: next.dest ?? "base", lines: (next.lines ?? []).map((l) => l.dest) },
     };
   },
 });
