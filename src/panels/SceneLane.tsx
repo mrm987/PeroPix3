@@ -74,11 +74,14 @@ export function SceneLane() {
    *
    *  ★세로용 컴포넌트를 따로 만들지 않는다 — 같은 것에 **축만 넘긴다**(`vert`). 두 벌이면
    *    고칠 때마다 맞춰야 하고, 한쪽만 고쳐진 채로 남는다.
-   *  ★머리 크기는 **모드마다 따로 기억한다** (`laneHeadW` 폭 · `laneHeadH` 높이) — 한 값을
-   *    나눠 쓰면 한쪽에서 끈 것이 다른 쪽을 엉뚱하게 두껍게 만든다. */
+   *  ★머리 크기는 **모드마다 따로 기억한다** (`laneHeadW` 머리 폭 · `laneColW` 세로 모드의 기둥 폭) — 한 값을
+   *    나눠 쓰면 한쪽에서 끈 것이 다른 쪽을 엉뚱하게 두껍게 만든다.
+   *  ★세로 모드의 머리 높이는 고정이다 (`VERT_HEAD_H`). 끄는 것은 폭이다 (사용자 지시 2026-11-10: 아래가 아니라 옆으로) */
   const vert = laneSide === "right";
   /** 씬 머리의 **그 축 크기** — 아래 모드면 폭, 세로 모드면 높이 */
-  const headw = useUi((u) => (vert ? u.laneHeadH : u.laneHeadW));
+  const headw = useUi((u) => (vert ? VERT_HEAD_H : u.laneHeadW));
+  /** 세로 모드의 씬 기둥 폭 — 머리 오른쪽 가장자리를 끌어 넓힌다 (`useUi.laneColW`). 썸네일보다 좁아지지 않는다 */
+  const colw = useUi((u) => u.laneColW);
   /** 전역 키 임자는 한 번만 매다므로(`window`) 축은 ref 로 읽는다 */
   const vertRef = useRef(vert);
   vertRef.current = vert;
@@ -171,8 +174,6 @@ export function SceneLane() {
   /** ★보이는 자리만 그리려고 재 두는 값 (사용자 지시 2026-08-14).
    *  칸이 560px 까지 커지고 한 줄에 수십 장이 붙으므로, 다 그리면 화면이 무거워진다. */
   const [view, setView] = useState({ x: 0, w: 0 });   // x = 그 축의 스크롤, w = 그 축의 보이는 길이
-  /** 머리 폭 손잡이를 잡은 자리 */
-  const grip = useRef<{ x: number; w: number } | null>(null);
 
   /** ★씬·카드를 **줄 전체에서** 끈다 (v2 `index.html:11860-12002`, `docs/v2-port-audit.md` D2).
    *  예전에는 카드 안에서만 순서가 바뀌어, 씬을 다른 카드로 옮기거나 카드끼리 자리를 바꿀
@@ -235,7 +236,8 @@ export function SceneLane() {
       //   여기서 잡으면 그림을 끄는 동안 줄이 함께 밀린다 (사용자 지적 2026-08-18).
       //   ★이 리스너는 **네이티브**라 React 핸들러의 `stopPropagation` 으로는 못 막는다
       //     (네이티브 전파가 React 의 합성 이벤트보다 먼저 지나간다). 여기서 걸러야 한다.
-      if (t.closest("[data-scene-head], [data-card-grip], [data-take], input, textarea, select, [contenteditable='true']")) return;
+      // ★세로 모드의 기둥 폭 손잡이도 줄 안에 있다 — 여기서 잡으면 폭 끌기가 줄 스크롤로 샌다
+      if (t.closest("[data-scene-head], [data-card-grip], [data-take], [data-head-grip], input, textarea, select, [contenteditable='true']")) return;
       from = { x: e.clientX, y: e.clientY, sx: el.scrollLeft, sy: el.scrollTop };
       moved = false;
     };
@@ -870,21 +872,15 @@ export function SceneLane() {
             배너는 같이 굴러가므로, 줄 상자 기준의 고정 좌표로는 절대 안 맞는다.
             대신 **머리의 아래 모서리 안쪽**에 둔다 (`SceneRow`) — 붙어 다니니 어긋날 수 없다. */}
       {!vert && (
-      <div
-        data-head-grip="col"
-        onPointerDown={(e) => {
-          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-          grip.current = { x: e.clientX, w: headw };
-        }}
-        onPointerMove={(e) => {
-          const g = grip.current;
-          if (!g) return;
-          useUi.getState().setLaneHeadW(g.w + (e.clientX - g.x));
-        }}
-        onPointerUp={() => { grip.current = null; useUi.getState().commitLayout(); }}
-        onPointerCancel={() => { grip.current = null; }}
-        style={{ position: "absolute", left: headw - 3, top: 0, bottom: 0, width: 7, zIndex: 6, cursor: "col-resize" }}
-      />
+        <SizeGrip
+          mark="col"
+          /* ★★**경계선 위에** 선다 (사용자 지적 2026-11-10: 정확히 경계선이 아니라 약간 왼쪽). 머리는 카드 안쪽
+             (`LANE_LEAD` + 카드 테두리 1)에서 시작하고 가로로 굴리면 왼쪽 벽에 붙는다(sticky) — 그 자리를 따라간다.
+             예전에는 머리 폭만 보고 섰다 (굴리지 않은 상태에서 9px 왼쪽) */
+          left={Math.max(0, LANE_LEAD + 1 - view.x) + headw - 1}
+          from={() => headw}
+          onSize={(n) => useUi.getState().setLaneHeadW(n)}
+        />
       )}
       {/* ★★씬 세트 카드는 **이 줄이 받는다** (사용자 지시 2026-08-19).
           예전에는 캔버스에 고정 크기 판을 띄웠는데, 씬이 사는 자리와 다른 데다 받는 넓이가
@@ -930,7 +926,7 @@ export function SceneLane() {
                     /* ★카드가 왼쪽 벽에 붙지 않게 한 뼘 (사용자 지시 2026-08-28).
                        ★`box-sizing: border-box` 라 `minWidth: 100%` 와 겹쳐도 가로줄이
                          새로 생기지 않는다 (`styles/globals.css` 의 전역 규칙). */
-                    paddingLeft: 8,
+                    paddingLeft: LANE_LEAD,
                   }
             }
           >
@@ -943,6 +939,7 @@ export function SceneLane() {
               <DropLine on={lane.drop?.kind === "card" && lane.drop.index === ci} vert={vert} />
               <CardGroup
                 vert={vert}
+                colw={colw}
                 chars={chars}
                 card={card}
                 groupId={tab.id}
@@ -1234,6 +1231,8 @@ type GroupProps = {
   vert: boolean;
   /** 켜진 캐릭터 — 씬 줄의 이름표가 가리키는 차례 (`SceneLines`) */
   chars: { name: string }[];
+  /** 세로 모드의 기둥 폭 (`useUi.laneColW`) — 썸네일 폭보다 좁으면 썸네일 폭이다 */
+  colw: number;
   card: SceneCard;
   /** 이 카드가 든 탭 — 머리에 건 그림을 어디에 적을지 (`askThumb`) */
   groupId: string;
@@ -1296,6 +1295,56 @@ type GroupProps = {
 
 /** 씬 세트 머리의 높이 — ★절반으로 줄였다 (사용자 지적 2026-08-16: 56 은 너무 두꺼웠다) */
 const HEAD_H = 28;
+/** 카드 줄 앞의 여백 — 카드가 왼쪽 벽에 붙지 않게 (가로 모드). 머리 폭 손잡이가 이 값으로 경계선을 찾는다 */
+const LANE_LEAD = 8;
+/** 세로 모드의 씬 머리 높이 — 끄는 것은 폭이다 (`useUi.laneColW`). 예전 `laneHeadH` 의 기본값 */
+const VERT_HEAD_H = 132;
+
+/** ★★크기 손잡이 (사용자 지시 2026-11-10: 커서를 올리면 선 강조). 잡히는 넓이는 7px 이고, 커서를 올리거나 끄는 동안
+ *  **경계선 자리**에 강조색 선이 선다. 화면 기준 `left` 는 경계선 픽셀이다 (손잡이는 그 좌우 3px 씩 더 잡는다).
+ *  `from` 은 끌기 시작할 때의 크기, `onSize` 는 끄는 동안 새 크기 — 손을 떼면 화면 배치를 저장한다 */
+function SizeGrip(p: { mark: string; left?: number; right?: number; from: () => number; onSize: (n: number) => void; z?: number }) {
+  const [hot, setHot] = useState(false);
+  const drag = useRef<{ x: number; w: number } | null>(null);
+  const end = (e: React.PointerEvent) => {
+    drag.current = null;
+    useUi.getState().commitLayout();
+    if (!(e.currentTarget as HTMLElement).matches(":hover")) setHot(false);
+  };
+  return (
+    <div
+      data-head-grip={p.mark}
+      onPointerEnter={() => setHot(true)}
+      onPointerLeave={() => { if (!drag.current) setHot(false); }}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        drag.current = { x: e.clientX, w: p.from() };
+      }}
+      onPointerMove={(e) => {
+        const g = drag.current;
+        if (g) p.onSize(g.w + (e.clientX - g.x));
+      }}
+      onPointerUp={end}
+      onPointerCancel={end}
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: "absolute",
+        top: 0,
+        bottom: 0,
+        width: 7,
+        zIndex: p.z ?? 6,
+        cursor: "col-resize",
+        ...(p.left !== undefined ? { left: p.left - 3 } : { right: (p.right ?? 0) - 3 }),
+      }}
+    >
+      <span
+        data-head-grip-line={hot ? "on" : undefined}
+        style={{ position: "absolute", top: 0, bottom: 0, left: 2, width: 3, borderRadius: 2, background: hot ? "var(--accent)" : "transparent", transition: "background 0.12s", pointerEvents: "none" }}
+      />
+    </div>
+  );
+}
 /** 재기 전에도 썸네일을 부르는 줄 수 — 맨 위가 한 박자 비어 보이지 않게 (`SceneRow` 의 ★★주) */
 const EAGER_ROWS = 4;
 /** ★자르지 않고 **끝만 부드럽게 뺀다** — 잘라 두면 줄 가운데서 뚝 끊긴 것처럼 보인다 */
@@ -1662,7 +1711,6 @@ function SceneRow(
     if (!expanded) setNewLine(null);
   }, [expanded]);
   /** 세로 모드의 머리 높이 손잡이를 잡은 자리 */
-  const headGrip = useRef<{ y: number; h: number } | null>(null);
   /** ★줄은 **최신이 왼쪽**이다 (사용자 지시 2026-08-14, 싱글 히스토리 줄과 같은 규칙).
    *  방금 나온 것을 찾아 눈이 끝까지 갈 이유가 없다. 대기 칸도 같은 규칙이라
    *  **새로 넣은 큐가 맨 왼쪽**이고, 지금 만드는 중인 것은 결과 바로 옆에 선다.
@@ -1732,8 +1780,10 @@ function SceneRow(
                  늘어난다"*). 가로 모드에서 펼치면 **아래로** 자라는데(`minHeight`),
                  세로에서 같은 규칙을 쓰면 **옆으로** 자라 옆 기둥들을 밀어낸다.
                  기둥은 이미 세로로 꽉 차 있으므로 편집기는 그 안에서 아래로 흐르면 된다. */
-              width: p.w + 12,
+              // ★기둥 폭은 끌어서 넓힌다 (`laneColW`) — 썸네일보다 좁아지지는 않는다
+              width: Math.max(p.w + 12, p.colw),
               borderRight: "1px solid var(--line-soft)",
+              position: "relative" as const,
             }
           : {
               ...(expanded ? { minHeight: Math.max(p.h + 12, minHead) } : { height: Math.max(p.h + 12, minHead) }),
@@ -1743,6 +1793,13 @@ function SceneRow(
         opacity: p.dragId === c.id ? 0.4 : c.locked ? 0.62 : 1,
       }}
     >
+      {/* ★★세로 모드의 크기 손잡이는 **기둥 오른쪽 경계선**이다 (사용자 지시 2026-11-10: 아래로가 아니라 옆으로 늘린다).
+          예전에는 머리 아래 모서리에서 머리 높이를 끌었다. 기둥에 붙어 있으므로 카드 배너와 함께 굴러가도 어긋나지 않는다.
+          경계선은 기둥의 마지막 픽셀이다 (`borderRight`). ★절대 배치의 `right` 는 테두리 **안쪽**에서 재므로 -1 이다.
+          머리(sticky)보다 위에 선다 */}
+      {p.vert && (
+        <SizeGrip mark="row" right={-1} z={4} from={() => Math.max(p.w + 12, p.colw)} onSize={(n) => useUi.getState().setLaneColW(n)} />
+      )}
       <div
         data-scene-head
         /* ★머리를 누르면 펴진다. 단추·입력칸은 비켜 간다 — 안 비키면 잠금·삭제가 죽는다.
@@ -1780,27 +1837,7 @@ function SceneRow(
           overflow: "hidden",
         }}
       >
-        {/* ★★세로 모드의 머리 크기 손잡이는 **여기**다 (사용자 지적 2026-08-22).
-            줄 상자 기준의 고정 좌표로 두면 카드 배너 높이만큼 어긋나고, 배너는 같이
-            굴러가므로 어떤 값으로도 안 맞는다. 머리에 붙여 두면 어긋날 수가 없다. */}
-        {p.vert && (
-          <div
-            data-head-grip="row"
-            onPointerDown={(e) => {
-              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-              headGrip.current = { y: e.clientY, h: p.headw };
-            }}
-            onPointerMove={(e) => {
-              const g = headGrip.current;
-              if (!g) return;
-              useUi.getState().setLaneHeadH(g.h + (e.clientY - g.y));
-            }}
-            onPointerUp={() => { headGrip.current = null; useUi.getState().commitLayout(); }}
-            onPointerCancel={() => { headGrip.current = null; }}
-            onClick={(e) => e.stopPropagation()}
-            style={{ position: "absolute", left: 0, right: 0, bottom: -3, height: 7, zIndex: 3, cursor: "row-resize" }}
-          />
-        )}
+
         {/* ★★세로 모드에서는 머리가 좁다 — **줄바꿈을 허용**하고 이름은 줄여서 넣는다
             (사용자 지적 2026-08-22: 글자가 머리 밖으로 튀어나갔다). */}
         <span

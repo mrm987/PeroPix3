@@ -222,10 +222,11 @@ type Persisted = {
    *  `right` 는 **세로 모드** — 큰 그림과 씬을 가운데에서 좌우로 양분한다. 세로로 긴 그림을
    *  뽑을 때 아래에 줄이 누우면 그림이 그만큼 작아지는데, 옆으로 보내면 높이를 다 쓴다. */
   laneSide: "bottom" | "right";
-  /** 세로 모드에서 **씬 머리의 높이** — 아래 모드의 `laneHeadW`(폭)에 해당한다.
-   *  ★값을 같이 쓰지 않는다: 폭과 높이는 다른 것이라, 한 모드에서 끌면 다른 모드가
-   *    엉뚱하게 두꺼워진다 (한 창구가 두 가지를 뜻하게 된다). */
-  laneHeadH: number;
+  /** 세로 모드에서 **씬 기둥의 폭** — 머리 오른쪽 가장자리를 끌어 넓힌다 (사용자 지시 2026-11-10: 아래가 아니라 옆으로).
+   *  기둥은 썸네일보다 좁아지지 않는다 (0 이면 썸네일 폭 그대로). ★아래 모드의 `laneHeadW` 와 값을 같이 쓰지 않는다 —
+   *    아래 모드의 머리 폭(기본 286)을 그대로 쓰면 세로 모드의 기둥이 엉뚱하게 넓어진다.
+   *  ★예전에는 세로 모드의 머리 **높이**(`laneHeadH`)를 끌었다. 그 값은 이제 읽지 않는다 (높이는 `SceneLane` 의 `VERT_HEAD_H`) */
+  laneColW: number;
   /** ★★**작업 상태** — 화면을 어떻게 펴 두었나 (사용자 지시 2026-08-22).
    *
    *  새로고침해도, 탭을 옮겨도 **그대로 남는다.** 예전에는 카테고리 접힘이 모듈 변수에만
@@ -305,7 +306,7 @@ const DEFAULTS: Persisted = {
   editorBg: "dark",
   laneSide: "bottom",
   laneWidth: 420,
-  laneHeadH: 132,
+  laneColW: 0,
   view: { cat: {}, fold: {}, tab: {}, hide: {}, frame: {}, pan: {} },
 };
 
@@ -395,7 +396,7 @@ type S = Persisted & {
   /** 그 방향에서 마지막에 고른 크기를 적어 둔다 */
   setSizeLast: (dir: "landscape" | "portrait" | "square", wh: [number, number]) => void;
   setLaneSide: (v: "bottom" | "right") => void;
-  setLaneHeadH: (n: number) => void;
+  setLaneColW: (n: number) => void;
   /** 작업 상태 한 칸을 적어 둔다 (`view` 주석) */
   setView: <K extends keyof S["view"]>(kind: K, id: string, v: S["view"][K][string]) => void;
   setLaneWidth: (n: number) => void;
@@ -494,8 +495,8 @@ export const useUi = create<S>((set, get) => ({
    *  머리가 좁아지면 글이 줄바꿈으로 접히고, 그래도 모자라면 잘린다 — 큰 그림을 넓게 쓰려고
    *  줄이는 것이라 여기서 막지 않는다. */
   setLaneWidth: (n) => set({ laneWidth: Math.max(96, Math.round(n)) }),
-  // 세로 모드의 머리 높이 — 프롬프트 칩 한두 줄이 들어갈 만큼은 있어야 한다
-  setLaneHeadH: (n) => set({ laneHeadH: Math.min(420, Math.max(72, Math.round(n))) }),
+  // 세로 모드의 씬 기둥 폭 — 머리 폭(`laneHeadW`)과 같은 상한까지
+  setLaneColW: (n) => set({ laneColW: Math.min(HEAD_MAX, Math.max(0, Math.round(n))) }),
   setView: (kind, id, v) => {
     const cur = get().view;
     if (cur[kind][id] === v) return;   // 같은 값이면 저장을 안 부른다
@@ -688,7 +689,7 @@ export const useUi = create<S>((set, get) => ({
       laneHeight, artistH, artistOpen, artistColor, artistAlways, font, textScale, importPick, aiWidth, aiCollapsed,
       notifyDone, notifySound, notifyVolume, perSlot, curated, agentAuto, agentAskHard,
       tagSuggest, artistPrefix, weightHl, fmView, streamPreview, focusNewPending, enhanceLast, maskBrush, convertLast, editLast, editorBrush, editorText,
-      editorBubble, editorSfx, editorBg, sizeLast, laneSide, laneWidth, laneHeadH, view } = get();
+      editorBubble, editorSfx, editorBg, sizeLast, laneSide, laneWidth, laneColW, view } = get();
     try {
       localStorage.setItem(
         KEY,
@@ -735,7 +736,7 @@ export const useUi = create<S>((set, get) => ({
           sizeLast,
           laneSide,
           laneWidth,
-          laneHeadH,
+          laneColW,
           view,
         }),
       );
