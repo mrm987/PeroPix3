@@ -68,5 +68,6 @@ export function TagDragLayer({ tag }: { tag: ReturnType<typeof useTagDrag> }) {
     </>
   );
   // ★커서가 다른 창에 있으면 표시도 그 창에 그린다 (좌표가 그 창 기준이다)
-  return tag.win && tag.win !== here ? createPortal(marks, tag.win.document.body) : marks;
+  const win = tag.win();
+  return win && win !== here ? createPortal(marks, win.document.body) : marks;
 }

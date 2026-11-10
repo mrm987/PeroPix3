@@ -178,7 +178,11 @@ export function useTagDrag(onMove: (from: Spot, to: Spot) => void) {
     bar,
     box,
     ghost,
-    win,
+    /** ★★창은 **값이 아니라 함수로** 내준다 (사용자 지적 2026-11-10: 칩을 끌자 화면이 통째로 멈췄다).
+     *  이 객체는 `TagDragLayer` 의 props 로 가는데, React 개발 빌드는 바뀐 props 를 세 단계까지 훑는다
+     *  (`logComponentRender`). 창을 값으로 두면 그 창의 프레임까지 읽다가 다른 출처 iframe(플러그인 페이지)에서
+     *  SecurityError 가 나고, 그 뒤로 React 가 아예 그리지 못한다. 함수는 이름만 적고 안을 훑지 않는다. */
+    win: () => win,
     /** 끌고 난 직후의 클릭인가 (텍스트 편집이 딸려 열리는 것을 막는다) */
     justDragged: () => performance.now() - endedAt.current < 250,
   };
