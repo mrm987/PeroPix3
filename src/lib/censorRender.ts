@@ -100,11 +100,15 @@ function rankAlpha(
   const n = Math.max(W, H);
   const tmp = new Uint8Array(n + 2 * R), f = new Uint8Array(n + 2 * R), b = new Uint8Array(n + 2 * R);
   /* ★★닫힌 고리로 쓴다 — 픽셀마다 `get`·`put` 닫힘을 부르던 판은 30만 픽셀에 30~60ms 였다 (2026-09-05 하네스).
-     `pos` 는 줄(가로 훑기)이면 stride, 열(세로 훑기)이면 W*stride 만큼 뛴다. 양 끝은 밖을 「0」으로 본다 —
-     그림 끝에서도 깎이고(침식), 넓혀도 그림 밖으로는 안 나간다(팽창). */
+     `pos` 는 줄(가로 훑기)이면 stride, 열(세로 훑기)이면 W*stride 만큼 뛴다.
+     ★★양 끝은 밖을 **「끝과 같은 값」**으로 본다 (유저 제보 2026-11-10: 브러시로 칠하면 그림 경계선이 안 칠해진다).
+       밖을 0 으로 보면 음수 「범위」가 그림 끝에서도 깎아, 끝까지 칠한 자리에 그 폭만큼 원본이 남았다
+       (게스트 실측: 범위 -3 에서 저장본의 네 변 끝 3줄이 원본 그대로). 그림 끝은 칠한 자리의 경계가 아니다.
+       넓히기는 그대로다 — 끝과 같은 값은 창 안에 이미 있으므로 최대값이 바뀌지 않는다. */
   const pass = (len: number, start: number, step: number) => {
     const m = len + 2 * R;
-    tmp.fill(0, 0, m);
+    tmp.fill(a[start], 0, R);
+    tmp.fill(a[start + (len - 1) * step], R + len, m);
     for (let i = 0, p = start; i < len; i++, p += step) tmp[R + i] = a[p];
     if (max) {
       for (let i = 0, c = 0; i < m; i++, c++) { if (c === k) c = 0; const t = tmp[i]; f[i] = c === 0 ? t : (f[i - 1] > t ? f[i - 1] : t); }
