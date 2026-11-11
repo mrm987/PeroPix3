@@ -1571,7 +1571,12 @@ function CardGroup(p: GroupProps) {
         style={{
           cursor: "grab",
           // ★세로 모드에서는 카드가 세로 기둥이라 배너가 그 **폭**을 다 쓴다
-          ...(p.vert ? { width: "100%", flexShrink: 0 } : { minWidth: "100%" }),
+          /* ★★접힌 카드는 배너만 남아 폭을 정할 것이 없다 — 안의 그림·이름·버튼이 전부 `absolute` 라 `100%` 가 0 으로 접혀
+               다시 누를 곳이 사라졌다 (사용자 지적 2026-11-12). 접히면 펼친 가로 모드 배너의 최소 폭을 준다 */
+          ...(p.vert ? { width: p.folded ? 260 : "100%", flexShrink: 0 } : { minWidth: "100%" }),
+          /* ★★세로 모드에서는 위에 붙는다 (사용자 지적 2026-11-12: 그림 목록을 아래로 굴리면 배너가 위로 사라졌다).
+               씬 머리 · 적용 대상 이름 칸은 그 아래(`HEAD_H`)에 붙는다 */
+          ...(p.vert ? { position: "sticky" as const, top: 0, zIndex: 5 } : null),
           // ★높이를 절반으로 (사용자 지적 2026-08-16: 56 은 너무 두꺼웠다)
           height: HEAD_H,
           background: BANNER_BG,
@@ -1825,7 +1830,7 @@ function CardGroup(p: GroupProps) {
             펼친 씬이 글만큼 자라면 그 높이를 받아 함께 자란다 (`vhs`). 씬 머리처럼 위에 붙는다(sticky) */}
         {showHeads && p.vert && (
           <div data-line-heads={p.card.id} style={{ flexShrink: 0, width: SCENE_W, borderRight: "1px solid var(--line)", background: "var(--panel)" }}>
-            <div style={{ position: "sticky", top: 0, zIndex: 3, background: "var(--panel)", borderBottom: "1px solid var(--line)" }}>
+            <div style={{ position: "sticky", top: HEAD_H, zIndex: 3, background: "var(--panel)", borderBottom: "1px solid var(--line)" }}>
               <div style={{ height: VERT_NAME_H, display: "flex", alignItems: "center", padding: "0 var(--sp-3)", fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>
                 {t("scenes.lineCol")}
               </div>
@@ -2041,7 +2046,7 @@ function SceneRow(
           flexDirection: p.vert ? "column" : "row",
           alignItems: "stretch",
           // ★머리는 시작 쪽에 붙는다 — 아래 모드면 왼쪽, 세로 모드면 위
-          ...(p.vert ? { top: 0, borderBottom: "1px solid var(--line)" } : { left: 0, borderRight: "1px solid var(--line)" }),
+          ...(p.vert ? { top: HEAD_H, borderBottom: "1px solid var(--line)" } : { left: 0, borderRight: "1px solid var(--line)" }),
           /* ★★**강조는 「고른 씬」이 아니라 「지금 치고 있는 칸」이다** (사용자 지시 2026-08-28) —
              그림을 고르면 초점이 그 씬으로 오는데, 그것까지 강조하면 「입력칸이 열렸다」와 「그 씬을 보고 있다」가 같은 모습이 된다. */
           background: expanded ? "var(--accent-bg)" : "var(--surface)",
