@@ -47,9 +47,6 @@ export function lineTarget(dest: string | undefined, n: number, main: boolean): 
 /** 카드의 줄 전부 — 첫 줄(id `""`)이 맨 앞이다 */
 export const columnsOf = (set: LineSet): LineDef[] => [{ id: "", dest: set.dest ?? "base" }, ...(set.lines ?? [])];
 
-/** 줄을 나눈 카드인가 — 줄이 둘 이상이거나 첫 줄이 베이스가 아니면 표 머리가 선다 */
-export const hasLines = (set: LineSet): boolean => !!set.lines?.length || (set.dest ?? "base") !== "base";
-
 /** 그 씬의 그 줄 블록 — 첫 줄은 `blocks` */
 export const blocksAt = (cell: CellBlocks, id: string): Block[] => (id ? (cell.lineBlocks?.[id] ?? []) : (cell.blocks ?? []));
 

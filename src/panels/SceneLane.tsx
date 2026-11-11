@@ -18,7 +18,7 @@ import { Icon } from "../components/Icon";
 import { Ratio, RATIO_LANDSCAPE, RATIO_PORTRAIT } from "../components/Ratio";
 import { kindColor } from "../cards/kindColor";
 import { LineChecklist, LineHead, LINE_H, LINE_HEAD_H, SceneCells, SCENE_W, VERT_NAME_H } from "./SceneCells";
-import { addLineDef, columnsOf, dropLineDef, hasLines, type LineDef } from "../lib/sceneLines";
+import { addLineDef, columnsOf, dropLineDef, type LineDef } from "../lib/sceneLines";
 import { pushUndo } from "../lib/undo";
 import { DropVeil } from "../cards/DropVeil";
 import { useDragSource, useDropZone } from "../cards/dragStore";
@@ -1447,8 +1447,9 @@ function CardGroup(p: GroupProps) {
   const headThumb = useThumbView(p.card.thumb ?? null);
   /* ★★줄 구성은 **카드가 정한다** (사용자 결정 2026-11-11, `lib/sceneLines`) — 더하고 · 넣을 곳을 바꾸고 · 빼는 것이 전부 카드를 고친다 */
   const cols = columnsOf(p.card);
-  /** 표 머리(가로 모드의 열 머리 · 세로 모드의 줄 이름 칸)를 세우나 — 줄을 나눈 카드만 */
-  const showHeads = !p.fold && hasLines(p.card);
+  /** 표 머리(가로 모드의 열 머리 · 세로 모드의 줄 이름 칸)를 세우나 — 프롬프트를 펼쳐 둔 동안은 **언제나**.
+   *  ★한 칸뿐인 카드도 세운다 (사용자 지적 2026-11-11): 첫 칸을 베이스에서 캐릭터로 바꾸는 곳이 머리뿐이다 */
+  const showHeads = !p.fold;
   const addLine = (dest: string) => p.onPatch({ lines: addLineDef(p.card, dest) });
   const retarget = (col: LineDef, dest: string) =>
     col.id
@@ -1771,7 +1772,7 @@ function CardGroup(p: GroupProps) {
       {/* ★공통 접두는 **걷었다** (사용자 지시 2026-08-21). 프롬프트에 실려 나가는 값이
           카드 머리에 한 줄로만 보여서, 어느 씬에 무엇이 붙는지 화면에서 따라가기 어려웠다.
           같은 것을 붙이려면 **베이스 프롬프트의 블록**을 쓴다 (창구가 하나가 된다). */}
-      {/* ★★가로 모드의 **열 머리** — 줄을 나눈 카드만 선다 (사용자 결정 2026-11-11, 시안 3). 넣을 곳을 바꾸고 줄을 빼는 자리이고,
+      {/* ★★가로 모드의 **열 머리** — 프롬프트를 펼쳐 둔 동안 언제나 선다 (사용자 결정 2026-11-11, 시안 3). 넣을 곳을 바꾸고 줄을 빼는 자리이고,
           오른쪽 경계를 끌어 그 줄의 폭을 바꾼다 (넣을 곳마다 하나라 카드가 달라도 같은 줄은 같은 폭이다).
           ★씬 줄의 머리와 같이 왼쪽에 붙는다(sticky) — 그림 쪽만 옆으로 굴러간다 */}
       {showHeads && !p.vert && (
@@ -1800,7 +1801,7 @@ function CardGroup(p: GroupProps) {
             : undefined
         }
       >
-        {/* ★★세로 모드의 **줄 이름 칸** — 줄을 나눈 카드만, 카드 왼쪽에 한 번 선다 (시안 3). 높이는 씬 칸 · 줄 칸과 같다 —
+        {/* ★★세로 모드의 **줄 이름 칸** — 프롬프트를 펼쳐 둔 동안 언제나, 카드 왼쪽에 한 번 선다 (시안 3). 높이는 씬 칸 · 줄 칸과 같다 —
             펼친 씬이 글만큼 자라면 그 높이를 받아 함께 자란다 (`vhs`). 씬 머리처럼 위에 붙는다(sticky) */}
         {showHeads && p.vert && (
           <div data-line-heads={p.card.id} style={{ flexShrink: 0, width: SCENE_W, borderRight: "1px solid var(--line)", background: "var(--panel)" }}>
