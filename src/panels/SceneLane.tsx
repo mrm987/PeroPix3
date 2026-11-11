@@ -188,7 +188,7 @@ export function SceneLane() {
   const boxRef = useRef<HTMLDivElement>(null);
   /** ★보이는 자리만 그리려고 재 두는 값 (사용자 지시 2026-08-14).
    *  칸이 560px 까지 커지고 한 줄에 수십 장이 붙으므로, 다 그리면 화면이 무거워진다. */
-  const [view, setView] = useState({ x: 0, w: 0 });   // x = 그 축의 스크롤, w = 그 축의 보이는 길이
+  const [view, setView] = useState({ x: 0, w: 0, cw: 0 });   // x = 그 축의 스크롤, w = 그 축의 보이는 길이, cw = 가로로 보이는 폭 (카드 배너가 화면 안에 머무는 폭)
 
   /** ★씬·카드를 **줄 전체에서** 끈다 (v2 `index.html:11860-12002`, `docs/v2-port-audit.md` D2).
    *  예전에는 카드 안에서만 순서가 바뀌어, 씬을 다른 카드로 옮기거나 카드끼리 자리를 바꿀
@@ -214,7 +214,8 @@ export function SceneLane() {
       raf = 0;
       const x = vert ? el.scrollTop : el.scrollLeft;
       const w = vert ? el.clientHeight : el.clientWidth;
-      setView((v) => (v.x === x && v.w === w ? v : { x, w }));
+      const cw = el.clientWidth;
+      setView((v) => (v.x === x && v.w === w && v.cw === cw ? v : { x, w, cw }));
     };
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(measure); };
     measure();
@@ -1332,7 +1333,7 @@ type GroupProps = {
   queuedOf: (cellId: string) => { id: string }[];
   firstWaiting: string | null;
   /** 스크롤 컨테이너의 보이는 구간 (가로). 이 밖의 칸은 안 그린다 */
-  view: { x: number; w: number };
+  view: { x: number; w: number; cw: number };
   /** 씬 머리의 그 축 크기 — 가로 모드면 폭, 세로 모드면 높이 (`SceneLane` 의 `headOf`) */
   headw: number;
   base: string;
@@ -1572,14 +1573,17 @@ function CardGroup(p: GroupProps) {
             /* ★★폭은 **줄 머리와 같은 값**이어야 한다 (사용자 지적 2026-08-19).
                상수 302 로 박혀 있었는데 줄 머리는 사용자가 끄는 값이라(지금은 줄마다의 폭 `laneLineW`),
                그림이 끝나는 자리와 아래 줄들의 경계가 어긋나 **가운데서 잘린 것처럼** 보였다.
-               ★세로 모드에서는 카드가 가로로 안 굴러가므로 붙들 필요가 없다 — 폭을 다 쓴다.
-               ★★다만 **`position` 을 없애면 안 된다** (사용자 지적 2026-08-22: 배너가 화면
-                 오른쪽을 통째로 덮었다). 안쪽 그림이 `position:absolute; inset:0` 이라
-                 **여기가 그 기준**인데, `static` 이 되면 기준을 저 위 상자(`boxRef`,
-                 `position:relative`)에서 찾아 줄 전체로 퍼진다. 붙들지 않되 기준은 남긴다. */
+               ★★**보이는 폭을 넘지 않는다** (사용자 지적 2026-11-11: 앱을 좁히거나 세로 모드에서 카드가 넓어지면
+                 오른쪽 끝의 버튼이 화면 밖으로 나갔다). 두 모드 다 왼쪽에 붙들고(`sticky`) 폭을 `view.cw` 로 자른다 —
+                 이름은 보이는 자리 왼쪽 끝, 버튼은 오른쪽 끝에 남는다. 빼는 값은 카드 앞 여백과 카드 테두리다.
+               ★세로 모드에서는 카드 폭을 다 쓰되(`100%`) 보이는 폭에서 멈춘다.
+               ★★`position` 을 `static` 으로 두면 안 된다 (사용자 지적 2026-08-22: 배너가 화면
+                 오른쪽을 통째로 덮었다). 안쪽 그림이 `position:absolute; inset:0` 이라 **여기가 그 기준**이다. */
+            position: "sticky" as const,
+            left: 0,
             ...(p.vert
-              ? { position: "relative" as const, width: "100%" }
-              : { position: "sticky" as const, left: 0, width: bannerW }),
+              ? { width: p.view.cw ? `min(100%, ${p.view.cw - GAP - 2}px)` : "100%" }
+              : { width: p.view.cw ? Math.min(bannerW, p.view.cw - LANE_LEAD - 2) : bannerW }),
             height: HEAD_H,
             overflow: "hidden",
             // ★세로 모드에서는 배너가 카드 **위**에 눕는다 — 둥근 모서리도 위 두 곳이다
@@ -1626,11 +1630,15 @@ function CardGroup(p: GroupProps) {
             style={{
               position: "absolute",
               left: 11,
+              /* ★배너가 보이는 폭으로 좁아지면 이름이 버튼 밑으로 들어가지 않고 잘린다 (버튼 넷 자리를 비워 둔다) */
+              right: 92,
               top: "50%",
               transform: "translateY(-50%)",
               display: "flex",
               alignItems: "baseline",
               gap: "var(--sp-3)",
+              minWidth: 0,
+              overflow: "hidden",
               color: "#fff",
               textShadow: "0 1px 2px rgba(0,0,0,0.75)",
             }}
@@ -1648,7 +1656,7 @@ function CardGroup(p: GroupProps) {
                 같은 방식이다. ★여는 것은 **연필 단추 하나**다 (사용자 지시 2026-08-30: 편집 단추가
                 있는 이름은 더블클릭으로 안 바꾼다 — 블록 이름과 같은 규칙). */}
             {!rename.editing ? (
-              <b style={{ ...TYPE.cardName, whiteSpace: "nowrap" }}>
+              <b style={{ ...TYPE.cardName, whiteSpace: "nowrap", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
                 {p.card.name}
               </b>
             ) : (
