@@ -1614,7 +1614,17 @@ function CardGroup(p: GroupProps) {
                  오른쪽을 통째로 덮었다). 안쪽 그림이 `position:absolute; inset:0` 이라 **여기가 그 기준**이다. */
             position: "sticky" as const,
             ...(p.vert
-              ? { top: 0, width: "100%", height: p.view.w ? `min(100%, ${p.view.w - 2 * GAP - 2}px)` : "100%" }
+              ? {
+                  top: 0,
+                  width: "100%",
+                  height: p.view.w ? `min(100%, ${p.view.w - 2 * GAP - 2}px)` : "100%",
+                  /* ★★띠 안은 위에서부터 **손잡이 · 이름 · 버튼**이 이어진다 (사용자 지적 2026-11-12: 가로 모드처럼 버튼이 이름 곁에).
+                       이름이 길면 이름이 먼저 줄어든다 */
+                  display: "flex",
+                  flexDirection: "column" as const,
+                  alignItems: "center",
+                  padding: "8px 0",
+                }
               : { left: 0, width: p.view.cw ? Math.min(bannerW, p.view.cw - LANE_LEAD - 2) : bannerW, height: HEAD_H }),
             overflow: "hidden",
             borderRadius: p.vert
@@ -1635,7 +1645,7 @@ function CardGroup(p: GroupProps) {
               maskImage: p.vert ? HEAD_FADE_V : HEAD_FADE,
               WebkitMaskImage: p.vert ? HEAD_FADE_V : HEAD_FADE,
               // 그림이 있으면 그림이, 없으면 지금까지처럼 카드 색이 깔린다. ★세로 띠는 그림 모양(가로로 긴 배너)과 맞지 않아 카드 색만 깐다
-              background: headThumb && !p.vert ? undefined : bannerEmptyFill(grad),
+              background: headThumb && !p.vert ? undefined : bannerEmptyFill(grad, p.vert ? 208 : 118),
               outline: headDrop.over ? "2px solid var(--accent)" : undefined,
               outlineOffset: -2,
             }}
@@ -1658,12 +1668,11 @@ function CardGroup(p: GroupProps) {
           />
           <div
             style={{
-              position: "absolute",
               /* ★배너가 보이는 폭으로 좁아지면 이름이 버튼 밑으로 들어가지 않고 잘린다 (버튼 묶음 자리를 비워 둔다).
-                 ★세로 띠에서는 위에서 아래로 — 손잡이 · 이름 차례이고 버튼 묶음은 띠 아래쪽에 선다 */
+                 ★세로 띠에서는 흐름을 따른다 — 손잡이 · 이름 다음에 버튼 묶음이 곧바로 온다 */
               ...(p.vert
-                ? { left: 0, right: 0, top: 8, bottom: btnsW + 12, flexDirection: "column" as const, alignItems: "center" }
-                : { left: 11, right: btnsW + 10, top: "50%", transform: "translateY(-50%)", alignItems: "baseline" }),
+                ? { position: "relative" as const, flex: "0 1 auto", minHeight: 0, flexDirection: "column" as const, alignItems: "center" }
+                : { position: "absolute" as const, left: 11, right: btnsW + 10, top: "50%", transform: "translateY(-50%)", alignItems: "baseline" }),
               display: "flex",
               gap: "var(--sp-3)",
               minWidth: 0,
@@ -1710,10 +1719,11 @@ function CardGroup(p: GroupProps) {
           <div
             ref={btnsRef}
             style={{
-              position: "absolute",
               ...(p.vert
-                ? { bottom: 6, left: "50%", transform: "translateX(-50%)", flexDirection: "column" as const }
-                : { right: 5, top: "50%", transform: "translateY(-50%)" }),
+                /* ★이름과의 간격은 가로 모드 배너와 비슷하게 (사용자 지적 2026-11-12: 이름에 딱 붙어 있었다).
+                     가로 모드의 한 칸 카드에서 이름 끝부터 첫 버튼까지 55px 이다 (게스트 측정). 자리가 모자라면 이름이 먼저 줄어든다 */
+                ? { position: "relative" as const, flexShrink: 0, marginTop: 55, flexDirection: "column" as const }
+                : { position: "absolute" as const, right: 5, top: "50%", transform: "translateY(-50%)" }),
               display: "flex",
               alignItems: "center",
               gap: 2,

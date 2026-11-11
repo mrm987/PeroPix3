@@ -48,9 +48,10 @@ export const BANNER_STEP =
 /** 그림이 없을 때 — 같은 실루엣에 카드 색만. 두 상태가 이어져 보이게 한다.
  *
  *  ★진하기는 `--banner-a1`(밝은 쪽) · `--banner-a2`(어두운 쪽)가 정한다 — **테마마다 다르다.**
- *    예전에는 `59`·`33` 이 박혀 있어 어두운 바탕에서 색 겹이 도드라졌다. */
-export const bannerEmptyFill = (gradient: [string, string]) =>
-  `linear-gradient(118deg,` +
+ *    예전에는 `59`·`33` 이 박혀 있어 어두운 바탕에서 색 겹이 도드라졌다.
+ *  ★각도는 배너가 눕는 방향을 따른다 — 세로 모드의 세로 띠는 90도 돌린 208도다 (`SceneLane`) */
+export const bannerEmptyFill = (gradient: [string, string], angle = 118) =>
+  `linear-gradient(${angle}deg,` +
   ` color-mix(in srgb, ${gradient[1]} var(--banner-a1), transparent),` +
   ` color-mix(in srgb, ${gradient[0]} var(--banner-a2), transparent) 78%)`;
 
