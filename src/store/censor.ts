@@ -293,6 +293,8 @@ type S = Saved & {
   addImages: (items: Dropped[]) => Promise<void>;
   toggleRel: (rel: string, name: string) => void;
   removeImage: (i: number) => void;
+  /** 파일 트리 격자의 Shift 범위 빼기 — 그 경로들을 한꺼번에 뺀다 */
+  removeRels: (rels: string[]) => void;
   clearImages: () => void;
   clearAfter: () => void;
   select: (i: number) => void;
@@ -502,6 +504,20 @@ export const useCensor = create<S>((set, get) => ({
     set({ images, idx: -1 });
     // ★인덱스를 한 번 -1 로 떨어뜨린 뒤 다시 고른다. 같은 번호에 다른 그림이 오면
     //   select 가 "이미 그 자리"라고 보고 아무것도 안 한다
+    if (idx >= 0) get().select(idx);
+    else set({ src: null, renderer: null, idx: -1 });
+  },
+
+  removeRels(rels) {
+    const s = get();
+    if (s.tab === "after") return;
+    const drop = new Set(rels);
+    const images = s.images.filter((x) => !(x.rel && drop.has(x.rel)));
+    if (images.length === s.images.length) return;
+    // ★보던 장이 남아 있으면 그 장에 머문다. 빠졌으면 같은 번호 근처로 (`removeImage` 와 같은 규칙)
+    const was = s.images[s.idx];
+    const idx = images.length ? (was && images.includes(was) ? images.indexOf(was) : Math.min(s.idx, images.length - 1)) : -1;
+    set({ images, idx: -1 });
     if (idx >= 0) get().select(idx);
     else set({ src: null, renderer: null, idx: -1 });
   },

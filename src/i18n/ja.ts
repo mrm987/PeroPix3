@@ -1257,6 +1257,8 @@ export const ja: Dict = {
     add: "画像を追加",
     clear: "空にする",
     removeOne: "一覧から外す",
+    addFolders: "フォルダ{n}個を追加",
+    clearFolders: "フォルダの選択を解除",
     emptyList: "ここに置かれた画像はありません",
     dropHere: "検閲する画像をここにドロップしてください",
     dropHint: "クリックでファイルを選ぶこともできます。",

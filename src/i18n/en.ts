@@ -1259,6 +1259,8 @@ export const en = {
     add: "Add images",
     clear: "Clear",
     removeOne: "Remove from the list",
+    addFolders: "Add {n} folders",
+    clearFolders: "Clear folder selection",
     emptyList: "Nothing here yet",
     dropHere: "Drop the images you want censored here",
     dropHint: "You can also click to pick files.",

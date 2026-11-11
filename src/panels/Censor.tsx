@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { BRUSH_MAX, dirOf, isAbsPath, savePathOf, useCensor, type Tab } from "../store/censor";
 import { bumpZoom } from "../store/censorView";
 import { useFiles, type FileNode } from "../store/files";
+import { api } from "../lib/backend";
 import { useGen } from "../store/gen";
 import { fileMgrThumb } from "../lib/imgUrl";
 import { useImageDrop } from "../lib/dropImages";
@@ -35,6 +36,85 @@ export function Censor() {
   const list = c.tab === "after" ? c.after : c.images;
   const at = c.tab === "after" ? c.afterIdx : c.idx;
   const picked = new Set(c.images.map((x) => x.rel).filter(Boolean) as string[]);
+
+  /* ★★한꺼번에 담기 (디스코드 제보 2026-11-08: 폴더나 그림을 여러 개 한 번에).
+     그림 격자는 Shift+클릭으로 범위, 빈 곳이든 그림 위든 끌면 사각형에 걸린 것을 담는다.
+     폴더는 Ctrl·Shift+클릭으로 여럿 골라 「폴더 N개 담기」로 그 폴더에 직접 든 그림을 전부 담는다 (트리의 숫자와 같은 범위).
+     ★파일 관리의 고르기(`useFiles.picked`)를 쓰지 않는다 — 같은 스토어라 두 화면의 선택이 섞인다 */
+  /** Shift 범위의 기준 — 마지막으로 누른 장과 그 누르기가 담기였나 빼기였나 */
+  const anchor = useRef<{ i: number; add: boolean } | null>(null);
+  useEffect(() => {
+    anchor.current = null;
+  }, [folder]);
+  const pickAt = (i: number, shift: boolean) => {
+    const it = items[i];
+    const a = anchor.current;
+    if (shift && a && a.i < items.length) {
+      const range = items.slice(Math.min(a.i, i), Math.max(a.i, i) + 1);
+      if (a.add) void c.addImages(range.filter((x) => !picked.has(x.file)).map((x) => ({ name: x.name, rel: x.file })));
+      else c.removeRels(range.map((x) => x.file));
+      return;
+    }
+    anchor.current = { i, add: !picked.has(it.file) };
+    c.toggleRel(it.file, it.name);
+  };
+  const box = useBoxPick((files) => {
+    const add = items.filter((x) => files.has(x.file) && !picked.has(x.file));
+    void c.addImages(add.map((x) => ({ name: x.name, rel: x.file })));
+  });
+
+  /** 고른 폴더 — 펼친 트리의 차례로 범위를 잡는다 */
+  const [fpick, setFpick] = useState<Set<string>>(() => new Set());
+  const fanchor = useRef<string | null>(null);
+  const [fbusy, setFbusy] = useState(false);
+  const flat = (() => {
+    const out: string[] = [];
+    const walk = (ns: FileNode[]) => ns.forEach((n) => { out.push(n.path); if (opened.has(n.path)) walk(n.children); });
+    walk(tree);
+    return out;
+  })();
+  const clickFolder = (node: FileNode, e: React.MouseEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      const next = new Set(fpick);
+      if (next.has(node.path)) next.delete(node.path);
+      else next.add(node.path);
+      fanchor.current = node.path;
+      return setFpick(next);
+    }
+    if (e.shiftKey && fanchor.current) {
+      const a = flat.indexOf(fanchor.current), b = flat.indexOf(node.path);
+      if (a >= 0 && b >= 0) return setFpick(new Set(flat.slice(Math.min(a, b), Math.max(a, b) + 1)));
+    }
+    setFpick(new Set());
+    fanchor.current = node.path;
+    void go(node.path);
+    if (node.children.length) toggleOpen(node.path);
+  };
+  const addFolders = async () => {
+    setFbusy(true);
+    try {
+      const dirs = flat.filter((x) => fpick.has(x));
+      const all: { name: string; rel: string }[] = [];
+      for (const dir of dirs) {
+        const r = await api<{ items: { file: string; name: string }[] }>(`/api/files/list?limit=0&folder=${encodeURIComponent(dir)}`);
+        all.push(...r.items.map((x) => ({ name: x.name, rel: x.file })));
+      }
+      await c.addImages(all);
+      setFpick(new Set());
+    } catch (e) {
+      toast(String(e), "warn");
+    } finally {
+      setFbusy(false);
+    }
+  };
+  useEffect(() => {
+    if (!fpick.size) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFpick(new Set());
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fpick.size]);
 
   // ★떨군 그림은 **검열 전 탭에서만** 받는다 (v2 `canAcceptDrop`).
   //   결과를 보는 탭에 떨군 것이 조용히 다른 목록으로 들어가면 어디로 갔는지 알 수 없다
@@ -152,9 +232,11 @@ export function Censor() {
            정확히 겨눠야만 펼쳐지던 자리다. 자식이 없으면 펼칠 것이 없으니 고르기만 한다.
            ★화살표 단추는 그대로 둔다 — **고르지 않고 펼치기만** 하려면 이것뿐이다 (딴 폴더를
              보면서 트리만 넓히고 싶을 때). */
-        onClick={() => {
-          void go(node.path);
-          if (node.children.length) toggleOpen(node.path);
+        data-folder-picked={fpick.has(node.path) ? "" : undefined}
+        onClick={(e) => clickFolder(node, e)}
+        // ★Shift+클릭이 글자를 끌어 고르지 않게
+        onMouseDown={(e) => {
+          if (e.shiftKey) e.preventDefault();
         }}
         style={{
           display: "flex",
@@ -164,8 +246,10 @@ export function Censor() {
           borderRadius: "var(--r-1)",
           fontSize: "var(--text-2xs)",
           cursor: "pointer",
-          color: folder === node.path ? "var(--ink)" : "var(--ink-soft)",
-          background: folder === node.path ? "var(--accent-bg)" : undefined,
+          userSelect: "none",
+          color: folder === node.path || fpick.has(node.path) ? "var(--ink)" : "var(--ink-soft)",
+          background: folder === node.path || fpick.has(node.path) ? "var(--accent-bg)" : undefined,
+          boxShadow: fpick.has(node.path) ? "inset 0 0 0 1px var(--accent)" : undefined,
         }}
       >
         <button
@@ -367,11 +451,25 @@ export function Censor() {
                 <Row key={n.path} node={n} depth={0} />
               ))}
             </div>
+            {!!fpick.size && (
+              <div style={{ display: "flex", gap: "var(--sp-1)" }}>
+                <button data-censor-add-folders onClick={() => void addFolders()} disabled={fbusy} style={addFoldersBtn}>
+                  {t("censor.addFolders", { n: fpick.size })}
+                </button>
+                <button data-censor-clear-folders onClick={() => setFpick(new Set())} data-tip={t("censor.clearFolders")} style={clearFoldersBtn}>
+                  {Icon.close12}
+                </button>
+              </div>
+            )}
             <div
               data-censor-picker
+              ref={box.ref}
               onScroll={onScroll}
+              {...box.handlers}
               style={{
                 ...card,
+                position: "relative",
+                userSelect: "none",
                 flex: 1,
                 minHeight: 0,
                 overflowY: "auto",
@@ -389,14 +487,14 @@ export function Censor() {
                   <button
                     key={it.file}
                     data-censor-pick={it.file}
-                    onClick={() => c.toggleRel(it.file, it.name)}
+                    onClick={(e) => pickAt(items.indexOf(it), e.shiftKey)}
                     data-tip={it.name}
                     style={{
                       position: "relative",
                       aspectRatio: "1 / 1",
                       borderRadius: "var(--r-2)",
                       overflow: "hidden",
-                      border: `2px solid ${inList ? "var(--accent)" : "transparent"}`,
+                      border: `2px ${box.hits.has(it.file) && !inList ? "dashed" : "solid"} ${inList || box.hits.has(it.file) ? "var(--accent)" : "transparent"}`,
                       padding: 0,
                       background: "var(--bg)",
                     }}
@@ -429,6 +527,22 @@ export function Censor() {
                   </button>
                 );
               })}
+              {box.rect && (
+                <span
+                  data-censor-box
+                  style={{
+                    position: "absolute",
+                    left: box.rect.x,
+                    top: box.rect.y,
+                    width: box.rect.w,
+                    height: box.rect.h,
+                    border: "1px solid var(--accent)",
+                    background: "color-mix(in srgb, var(--accent) 14%, transparent)",
+                    pointerEvents: "none",
+                    zIndex: 2,
+                  }}
+                />
+              )}
               {hasMore && (
                 <span style={{ gridColumn: "1/-1", textAlign: "center", fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>
                   …
@@ -527,6 +641,121 @@ export function Censor() {
       </div>
     </div>
   );
+}
+
+const addFoldersBtn: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  padding: "var(--sp-2)",
+  borderRadius: "var(--r-2)",
+  background: "var(--accent)",
+  color: "var(--accent-on)",
+  fontSize: "var(--text-xs)",
+  fontWeight: "var(--w-semi)",
+};
+
+const clearFoldersBtn: React.CSSProperties = {
+  flexShrink: 0,
+  width: 28,
+  display: "grid",
+  placeItems: "center",
+  borderRadius: "var(--r-2)",
+  border: "1px solid var(--line)",
+  background: "var(--panel)",
+  color: "var(--ink-dim)",
+};
+
+/** 그림 격자에서 **끌어 고르기** — 4px 넘게 끌면 사각형을 그리고, 놓을 때 걸린 그림을 넘긴다.
+ *  ★그림 위에서 시작해도 된다 (격자가 빽빽해 빈 곳이 거의 없다). 끌기로 넘어간 뒤의 클릭은 삼킨다 — 안 삼키면 시작한 그림이 토글된다.
+ *  ★포인터는 **끌기로 넘어간 뒤에만** 붙든다 — 처음부터 붙들면 클릭이 그림이 아니라 격자로 가서 한 장 담기가 죽는다.
+ *  ★가장자리에 닿으면 굴린다 — 쪽을 넘겨 받은 그림까지 한 번에 고를 수 있게 */
+function useBoxPick(onPick: (files: Set<string>) => void) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const st = useRef<{ id: number; sx: number; sy: number; cx: number; cy: number; on: boolean; timer: number } | null>(null);
+  const swallow = useRef(false);
+  const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [hits, setHits] = useState<Set<string>>(() => new Set());
+  const at = (cx: number, cy: number) => {
+    const el = ref.current!;
+    const b = el.getBoundingClientRect();
+    return { x: cx - b.left - el.clientLeft + el.scrollLeft, y: cy - b.top - el.clientTop + el.scrollTop };
+  };
+  const measure = () => {
+    const s = st.current, el = ref.current;
+    if (!s || !el) return new Set<string>();
+    const p = at(s.cx, s.cy);
+    const r = { x: Math.min(s.sx, p.x), y: Math.min(s.sy, p.y), w: Math.abs(p.x - s.sx), h: Math.abs(p.y - s.sy) };
+    const out = new Set<string>();
+    el.querySelectorAll<HTMLElement>("[data-censor-pick]").forEach((n) => {
+      const q = n.getBoundingClientRect();
+      const t = at(q.left, q.top);
+      if (t.x < r.x + r.w && t.x + q.width > r.x && t.y < r.y + r.h && t.y + q.height > r.y) out.add(n.dataset.censorPick!);
+    });
+    setRect(r);
+    setHits(out);
+    return out;
+  };
+  const end = () => {
+    const s = st.current;
+    if (s) window.clearInterval(s.timer);
+    st.current = null;
+    setRect(null);
+    setHits(new Set());
+  };
+  useEffect(() => () => {
+    const s = st.current;
+    if (s) window.clearInterval(s.timer);
+  }, []);
+  const handlers = {
+    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey) return;
+      const p = at(e.clientX, e.clientY);
+      st.current = { id: e.pointerId, sx: p.x, sy: p.y, cx: e.clientX, cy: e.clientY, on: false, timer: 0 };
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => {
+      const s = st.current, el = ref.current;
+      if (!s || !el || e.pointerId !== s.id) return;
+      s.cx = e.clientX;
+      s.cy = e.clientY;
+      if (!s.on) {
+        const p = at(e.clientX, e.clientY);
+        if (Math.hypot(p.x - s.sx, p.y - s.sy) < 4) return;
+        s.on = true;
+        el.setPointerCapture(e.pointerId);
+        s.timer = window.setInterval(() => {
+          const c = st.current, g = ref.current;
+          if (!c || !g) return;
+          const b = g.getBoundingClientRect();
+          const dy = c.cy < b.top + 16 ? -14 : c.cy > b.bottom - 16 ? 14 : 0;
+          if (!dy) return;
+          g.scrollTop += dy;
+          measure();
+        }, 30);
+      }
+      measure();
+    },
+    onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => {
+      const s = st.current;
+      if (!s || e.pointerId !== s.id) return;
+      if (s.on) {
+        const got = measure();
+        swallow.current = true;
+        window.setTimeout(() => (swallow.current = false), 0);
+        if (got.size) onPick(got);
+      }
+      end();
+    },
+    onPointerCancel: () => end(),
+    // ★그림 위에서 끌면 브라우저가 그 그림을 HTML5 로 끌어 가 포인터가 끊긴다 (pointercancel)
+    onDragStart: (e: React.DragEvent) => e.preventDefault(),
+    onClickCapture: (e: React.MouseEvent) => {
+      if (!swallow.current) return;
+      swallow.current = false;
+      e.stopPropagation();
+      e.preventDefault();
+    },
+  };
+  return { ref, handlers, rect, hits };
 }
 
 const TABS: [Tab, "censor.tabBefore" | "censor.tabDuring" | "censor.tabAfter"][] = [

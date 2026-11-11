@@ -1285,6 +1285,8 @@ export const ko: Dict = {
     add: "그림 더하기",
     clear: "비우기",
     removeOne: "목록에서 빼기",
+    addFolders: "폴더 {n}개 담기",
+    clearFolders: "폴더 선택 해제",
     emptyList: "여기 놓인 그림이 없습니다",
     dropHere: "검열할 그림을 여기에 떨구세요",
     dropHint: "누르면 파일을 고를 수도 있습니다.",
