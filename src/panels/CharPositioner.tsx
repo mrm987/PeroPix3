@@ -474,7 +474,7 @@ export function CharNo(p: { n: number; size: number; ring: number; state?: "sele
         background: p.state === "selected" ? "var(--accent)" : "rgba(12,12,16,0.88)",
         boxShadow: `inset 0 0 0 ${p.ring}px ${ring}`,
         color: p.state === "warning" ? "var(--warn)" : "#fff",
-        fontSize: p.size >= 24 ? 12 : 11,
+        fontSize: p.size >= 24 ? 12 : p.size <= 14 ? 9 : 11,
         fontWeight: "var(--w-semi)",
         fontVariantNumeric: "tabular-nums",
         lineHeight: 1,

@@ -28,9 +28,11 @@ export function DestName(p: { dest: string }) {
   if (p.dest === "base") return <>{t("scenes.destBase")}</>;
   if (p.dest === "all") return <>{t("scenes.destAll")}</>;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, verticalAlign: "middle" }}>
+    /* ★글줄 높이 안에서 가운데 — 원을 글자 크기에 맞춘다 (사용자 지적 2026-11-11: 원이 크고 글과 줄이 안 맞았다).
+       `inline-flex` + `vertical-align` 은 글의 기준선을 따라가 원이 아래로 처졌다 */
+    <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
       {t("scenes.destChar")}
-      <CharNo n={Number(p.dest.slice(1))} size={16} ring={1.2} />
+      <CharNo n={Number(p.dest.slice(1))} size={13} ring={1} />
     </span>
   );
 }
