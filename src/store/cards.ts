@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { api, type TrashEntry } from "../lib/backend";
 import type { Block } from "../lib/blocks";
-import type { SceneLine } from "../lib/sceneLines";
+import { splitCells, type LinedCell, type LineDef } from "../lib/sceneLines";
 import type { StyleOpts } from "../lib/styleOpts";
 import { slotBlocks } from "./workspace";
 import { t } from "../i18n";
@@ -38,8 +38,12 @@ export type StyleCard = Common & { base: Block[]; uc: Block[]; opts?: StyleOpts 
 export type CharCard = Common & { prompt: Block[]; uc: Block[] };
 /** 포즈세트 카드 — 칸마다 **블록 목록**을 든다 (슬롯과 같은 자료형, 2026-08-07).
  *  ★옛 카드는 `tags` 문자열을 들고 있다. `load()` 가 읽을 때 한 번 옮긴다. */
-/** ★칸은 씬과 같은 모양이다 — 첫 줄(`blocks`·`dest`)과 그 뒤의 줄들(`lines`, `lib/sceneLines`) */
-export type PoseCard = Common & { cells: { name: string; blocks: Block[]; dest?: string; lines?: SceneLine[] }[] };
+/** ★씬 카드와 같은 모양이다 — 줄 구성(`dest`·`lines`)은 카드가, 줄마다의 블록은 칸이 든다 (`lib/sceneLines`) */
+export type PoseCard = Common & {
+  dest?: string;
+  lines?: LineDef[];
+  cells: { name: string; blocks: Block[]; lineBlocks?: Record<string, Block[]> }[];
+};
 export type AnyCard = StyleCard | CharCard | PoseCard;
 
 type S = {
@@ -76,9 +80,13 @@ export const useCards = create<S>((set, get) => ({
       styles: (r.styles ?? []).map((c) => hydrate(c, "styles")) as StyleCard[],
       characters: (r.characters ?? []).map((c) => hydrate(c, "characters")) as CharCard[],
       // ★옛 포즈세트 카드(문자열 태그)를 블록으로 — 읽을 때 한 번만
+      // ★칸마다 줄을 들던 카드(2026-11-10 개발본)는 줄 구성을 카드로 올린다 (`splitCells`)
       posesets: (r.posesets ?? []).map((c) => {
         const p = hydrate(c, "posesets") as PoseCard;
-        return { ...p, cells: (p.cells ?? []).map((x) => ({ name: x.name, blocks: slotBlocks(x), dest: x.dest, lines: x.lines })) };
+        const cells = (p.cells ?? []).map((x) => ({ ...(x as LinedCell), name: x.name, blocks: slotBlocks(x) }));
+        if (!cells.some((x) => "dest" in x || Array.isArray(x.lines))) return { ...p, cells: cells.map((x) => ({ name: x.name, blocks: x.blocks, lineBlocks: (x as { lineBlocks?: Record<string, Block[]> }).lineBlocks })) };
+        const sp = splitCells(cells);
+        return { ...p, ...sp.set, cells: sp.cells.map((x) => ({ name: x.name, blocks: x.blocks ?? [], lineBlocks: x.lineBlocks })) };
       }) as PoseCard[],
       loaded: true,
     });

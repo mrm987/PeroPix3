@@ -27,6 +27,8 @@ import json
 import uuid
 import re
 from datetime import datetime
+
+from scenelines import join_cell, split_cells
 from pathlib import Path
 from typing import Any, Callable
 
@@ -85,7 +87,8 @@ _DEST = re.compile(r"^(base|all|#[1-9]\d*)$")
 
 
 def _cell_body(c: dict) -> dict:
-    """씬 칸 하나 — 첫 줄과 그 뒤의 줄들 (`src/lib/sceneLines.ts`). ★모르는 넣을 곳은 base 로 둔다 (첫 줄) · 그 줄을 버린다 (나머지)"""
+    """씬 칸 하나를 **합친 모양**으로 — 첫 줄과 그 뒤의 줄들 (`backend/scenelines.py`). 카드에 넣을 때 `split_cells` 가 줄 구성을 카드로 올린다.
+    ★모르는 넣을 곳은 base 로 둔다 (첫 줄) · 그 줄을 버린다 (나머지)"""
     out: dict[str, Any] = {"name": str(c.get("name", "포즈")), "blocks": _blocks(c.get("blocks"))}
     d = str(c.get("dest") or "")
     if _DEST.match(d) and d != "base":
@@ -103,7 +106,7 @@ def _cell_body(c: dict) -> dict:
 
 
 def _cell_view(c: dict) -> dict:
-    """씬 칸을 읽기 쉬운 모양으로 — 넣을 곳과 줄까지"""
+    """씬 칸을 읽기 쉬운 모양으로 — 넣을 곳과 줄까지. ★`c` 는 합친 모양이다 (`join_cell`)"""
     out = {"name": c.get("name"), "blocks": _view(c.get("blocks")), "dest": c.get("dest") or "base"}
     if c.get("lines"):
         out["lines"] = [{"dest": x.get("dest"), "blocks": _view(x.get("blocks"))} for x in c["lines"]]
@@ -149,8 +152,8 @@ def _scenes(st: dict) -> list[dict]:
                 "card": k.get("name"), "prefix": k.get("prefix", ""),
                 # ★옛 파일의 카드 잠금(`card.locked`)은 그 카드의 씬이 전부 잠긴 것과 같다 (`lib/sceneCards.ts`)
                 "blocks": _view(c.get("blocks")), "locked": bool(c.get("locked")) or bool(k.get("locked")),
-                # ★씬 프롬프트를 넣을 곳 — 줄마다 있다 (`src/lib/sceneLines.ts`). base · #n(그 그림의 n번째 캐릭터) · all
-                **{k: v for k, v in _cell_view(c).items() if k in ("dest", "lines")},
+                # ★씬 프롬프트를 넣을 곳 — 줄 구성은 카드가 정한다 (`src/lib/sceneLines.ts`). base · #n(그 그림의 n번째 캐릭터) · all
+                **{k: v for k, v in _cell_view({"name": c.get("name"), **join_cell(k, c)}).items() if k in ("dest", "lines")},
             })
     return out
 
@@ -991,7 +994,8 @@ class Tools:
         if "uc" in c:
             out["uc"] = _view(c.get("uc"))
         if "cells" in c:
-            out["cells"] = [_cell_view(x) for x in c.get("cells", [])]
+            # ★줄 구성은 카드가 든다 — 씬마다 합쳐서 보인다 (`join_cell`)
+            out["cells"] = [_cell_view({"name": x.get("name"), **join_cell(c, x)}) for x in c.get("cells", [])]
         return out
 
     def _card_body(self, kind: str, a: dict, base: dict | None = None) -> dict:
@@ -1000,7 +1004,12 @@ class Tools:
             card["name"] = str(a["name"])
         if kind == "posesets":
             if a.get("cells") is not None:
-                card["cells"] = [_cell_body(c) for c in a["cells"]]
+                # ★줄 구성은 **카드가 정한다** (`src/lib/sceneLines.ts`) — 칸마다 받은 줄을 넣을 곳으로 모아 카드에 올린다
+                lines, cells = split_cells([_cell_body(c) for c in a["cells"]])
+                card.pop("dest", None)
+                card.pop("lines", None)
+                card.update(lines)
+                card["cells"] = cells
         else:
             key = "base" if kind == "styles" else "prompt"
             if a.get("blocks") is not None:

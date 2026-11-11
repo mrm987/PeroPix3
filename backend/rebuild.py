@@ -14,6 +14,8 @@ from __future__ import annotations
 import uuid
 from typing import Callable
 
+from scenelines import split_cells
+
 #: 경로에서 탭 이름을 못 읽는 그림(옛 배치)이 드는 탭
 FALLBACK_TAB = "복구"
 #: 기록에 이름이 없는 씬
@@ -72,18 +74,20 @@ def build(name: str, recs: list[dict], read_env: Callable[[dict], dict | None], 
                 "name": last.get("cell") or cell.get("name") or FALLBACK_CELL,
                 "blocks": cell.get("blocks") or [],
             }
-            # ★씬의 줄마다의 넣을 곳 (`src/lib/sceneLines.ts`). 옛 그림은 씬 그룹의 `sceneDest` 로 남는다 (아래)
+            # ★씬은 합친 모양으로 남는다 (줄까지, `src/lib/sceneLines.ts`). 옛 그림은 씬 그룹의 `sceneDest` 로 남는다 (아래)
             for k in ("dest", "lines"):
                 if cell.get(k):
                     one[k] = cell[k]
             cells.append(one)
+        # ★줄 구성은 카드가 정한다 — 씬마다 남은 줄을 넣을 곳으로 모아 카드에 올린다
+        line_set, cells = split_cells(cells)
         env = _latest_env(g["recs"], read_env)
         out = {
             "id": g["id"] or _new_id("tab"),
             "kind": "sceneGroup",
             "name": gname,
             "tabId": tab["id"],
-            "cards": [{"id": "k1", "name": gname, "cells": cells}],
+            "cards": [{"id": "k1", "name": gname, **line_set, "cells": cells}],
             "cardSeq": 1,
             # ★`cellSeq` 는 안 적는다 — 없으면 화면이 지금 씬의 최대 번호 + 1 로 본다 (`Store.addCard`)
             # ★id 가 없는 옛 줄이 하나라도 있으면 이름으로 묶어야 그 그림이 붙는다 (`takesOf`)

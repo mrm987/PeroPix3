@@ -12,7 +12,7 @@ import { clearUndo, dropUndoZone, pushUndo } from "../lib/undo";
 import { uniqueName } from "../lib/uniqueName";
 import { makeBlock, parseSegs, type Block } from "../lib/blocks";
 import { liftCardLock, lockCard, wrapSetTabInCard } from "../lib/sceneCards";
-import { legacyDest, type SceneLine } from "../lib/sceneLines";
+import { adoptCell, joinCell, legacyDest, splitCells, type LinedCell, type LineDef } from "../lib/sceneLines";
 export { takesOf, takesOfScene, dedupeByFile, type Rec } from "../lib/takes";
 import { dedupeByFile, takesOf } from "../lib/takes";
 import type { Rec } from "../lib/takes";
@@ -41,9 +41,10 @@ import type { GenParams } from "./gen";
  *  ★목록에는 안 실린다 (`server.py` 의 `_light`). 복제할 때 한 장씩 가져간다. */
 export type ShotEnv = {
   prompt: TabPrompt;
-  /** ★옛 그림만 갖는다 — 씬 그룹 하나에 하나였던 넣을 곳 (캐릭터 id). 지금은 씬의 줄마다 있다 (`cell.dest`·`cell.lines`) */
+  /** ★옛 그림만 갖는다 — 씬 그룹 하나에 하나였던 넣을 곳 (캐릭터 id). 지금은 카드의 줄이 든다 (`cell.dest`·`cell.lines`) */
   sceneDest?: string;
-  cell: { name: string; blocks: Block[]; dest?: string; lines?: SceneLine[] };
+  /** ★카드의 줄과 그 씬의 블록을 **합친 모양**이다 (`lib/sceneLines` 의 `joinCell`) — 그림 한 장이 뽑힌 씬 하나만 남는다 */
+  cell: { name: string } & LinedCell;
 };
 
 export type TabPrompt = {
@@ -75,11 +76,10 @@ export type TabPrompt = {
 export type Slot = {
   id: string;
   name: string;
+  /** 첫 줄의 블록. 넣을 곳은 카드가 정한다 (`SceneCard.dest`) */
   blocks: Block[];
-  /** 첫 줄(`blocks`)을 넣을 곳 — `"base"` · `"#n"`(그 장의 n번째 캐릭터) · `"all"`. 없으면 베이스 (`lib/sceneLines`) */
-  dest?: string;
-  /** 첫 줄 뒤의 줄들 — 줄마다 넣을 곳과 블록 하나 (사용자 결정 2026-11-10, `lib/sceneLines` 머리 주석) */
-  lines?: SceneLine[];
+  /** 첫 줄 뒤의 줄마다의 블록 — 열쇠는 카드의 줄 id (`SceneCard.lines`, `lib/sceneLines` 머리 주석) */
+  lineBlocks?: Record<string, Block[]>;
   /** 접어 두면 머리만 남는다 (블록과 같은 규칙) */
   open?: boolean;
   locked?: boolean;
@@ -121,6 +121,11 @@ export type SceneCard = {
    *  볼지」뿐이다 (schema.md 1-1절). ★덱의 씬 세트 카드와는 다른 자리다 — 저장할 때
    *  카드가 자기 것으로 한 벌 갖는다. */
   thumb?: Thumb;
+  /** ★★씬 프롬프트의 **줄 구성** — 카드의 씬 전부가 같은 줄을 갖는다 (사용자 결정 2026-11-11, `lib/sceneLines`).
+   *  첫 줄(씬의 `blocks`)을 넣을 곳 — `"base"` · `"#n"`(그 장의 n번째 캐릭터) · `"all"`. 없으면 베이스 */
+  dest?: string;
+  /** 첫 줄 뒤의 줄들 — 넣을 곳만 든다. 블록은 씬의 `lineBlocks[줄 id]` */
+  lines?: LineDef[];
   /** 카드째 접혔나 — ★머리를 누르면 바뀐다. 화면 상태지만 탭에 남겨 껐다 켜도 유지된다 */
   folded?: boolean;
   /* ★카드는 잠금을 따로 들지 않는다 (2026-10-28) — 카드 버튼은 씬을 한꺼번에 잠그고 켠다 (`setCard` 의 `locked`,
@@ -151,8 +156,8 @@ export type SceneGroup =
       idOnly?: boolean;
       /** 어느 캐릭터의 포즈세트인가. 옛 세트 탭에는 없다 (`migrate` 가 채운다) */
       tabId?: string;
-      /* ★씬 프롬프트를 넣을 곳은 **씬의 줄마다** 있다 (`Slot.dest`·`Slot.lines`, 사용자 결정 2026-11-10).
-         예전에는 씬 그룹 하나에 하나(`sceneDest`)였다 — 옛 파일의 그 값은 열 때 씬으로 옮긴다 (`migrate`) */
+      /* ★씬 프롬프트를 넣을 곳은 **카드의 줄마다** 있다 (`SceneCard.dest`·`SceneCard.lines`, 사용자 결정 2026-11-11).
+         예전에는 씬 그룹 하나에 하나(`sceneDest`)였다 — 옛 파일의 그 값은 열 때 카드로 옮긴다 (`migrate`) */
     };
 
 /** ★워크스페이스의 묶음 층 — 프롬프트(생김새·그림체)를 든다 (사용자 결정 2026-08-04).
@@ -384,7 +389,7 @@ type S = {
   /** 카드를 얹는다. `cells` 를 주면 덱에서 떨군 것, 없으면 씬 하나짜리 새 카드 */
   addCard: (
     tabId: string,
-    card?: { name?: string; srcId?: string; color?: [string, string]; cells?: Slot[] },
+    card?: { name?: string; srcId?: string; color?: [string, string]; dest?: string; lines?: LineDef[]; cells?: Slot[] },
   ) => void;
   /** 카드를 뺀다. ★확인을 받지 않는다 — `Ctrl+Z` 로 되돌린다 (사용자 결정 2026-08-11) */
   removeCard: (groupId: string, cardId: string) => void;
@@ -936,18 +941,27 @@ function migrate(spec: Spec): Spec {
     ? spec.activeSceneGroup
     : (mine[0]?.id ?? sets2[0]?.id ?? spec.activeSceneGroup);
   if (activeSceneGroup !== spec.activeSceneGroup) changed = true;
-  /* ★씬 그룹 하나에 하나였던 넣을 곳(`sceneDest`)을 **씬마다**로 (2026-11-10, `lib/sceneLines`).
-     캐릭터 id 는 그 탭에서 켜진 캐릭터 중 차례로 옮긴다. 이미 넣을 곳이 있는 씬은 건드리지 않는다 */
+  /* ★씬 프롬프트의 줄은 **카드가 정한다** (2026-11-11, `lib/sceneLines`). 옛 모양 둘을 카드로 옮긴다:
+       · 씬 그룹 하나에 하나였던 넣을 곳(`sceneDest`, 캐릭터 id) → 카드마다 첫 줄의 넣을 곳 (그 탭에서 켜진 캐릭터 중 차례)
+       · 씬마다 줄을 들던 모양(`cell.dest`·`cell.lines`, 2026-11-10 개발본에만 있었다) → `splitCells` */
   sets2 = sets2.map((g) => {
+    if (g.kind !== "sceneGroup") return g;
     const old = (g as { sceneDest?: string }).sceneDest;
-    if (g.kind !== "sceneGroup" || old === undefined) return g;
+    const perCell = g.cards.some((k) => k.cells.some((c) => "dest" in c || Array.isArray((c as { lines?: unknown }).lines)));
+    if (old === undefined && !perCell) return g;
     changed = true;
     const chars = (tabList.find((c) => c.id === g.tabId)?.prompt ?? g.prompt)?.chars ?? [];
-    const dest = legacyDest(old, chars);
+    const dest = old === undefined ? "base" : legacyDest(old, chars);
     const { sceneDest: _drop, ...rest } = g as SceneGroup & { sceneDest?: string };
     return {
       ...rest,
-      cards: g.cards.map((k) => ({ ...k, cells: k.cells.map((c) => (c.dest === undefined && dest !== "base" ? { ...c, dest } : c)) })),
+      cards: g.cards.map((k) => {
+        const cells = k.cells as (Slot & LinedCell)[];
+        if (!cells.some((c) => "dest" in c || Array.isArray(c.lines)))
+          return dest === "base" || k.dest !== undefined ? k : { ...k, dest };
+        const sp = splitCells(cells.map((c) => ({ ...c, dest: c.dest ?? (dest === "base" ? undefined : dest) })));
+        return { ...k, ...sp.set, cells: sp.cells as Slot[] };
+      }),
     } as SceneGroup;
   });
   /* ★지운 그림의 목록은 걷었다 (2026-08-28, `Spec.selection` 의 ★★주). 옛 파일에 남은 것은 여기서
@@ -1451,20 +1465,21 @@ export const useWs = create<S>((set, get) => ({
     /** 남겨 둔 스냅샷이 있으면 그것이, 없으면 그 탭의 씬이 정본이다.
      *  ★둘 다 없는 보관함 그림은 **메타데이터의 씬**을 쓴다 (v2 가 PNG 에 남긴 `slot_prompt`) —
      *    사용자 지적 2026-08-19: 갤러리에서 복제하면 슬롯 프롬프트가 통째로 사라졌다. */
-    const srcScene = saved.env
+    /* ★씬은 **카드의 줄과 합친 모양**으로 읽는다 (`lib/sceneLines` 의 `joinCell`) — 스냅샷이 그 모양이다.
+       ★옛 그림의 스냅샷은 넣을 곳을 씬 그룹에 들고 있다 (`sceneDest`, 캐릭터 id) — 그 그림의 캐릭터 차례로 옮긴다.
+       ★메타데이터에서 세운 씬(`o.scene`)에는 줄이 없다 */
+    const srcScene: { color?: [string, string]; cell: { name?: string } & LinedCell } | undefined = saved.env
       ? { color: fallbackScene?.card.color, cell: saved.env.cell }
       : fallbackScene
-        ? { color: fallbackScene.card.color, cell: fallbackScene.cell }
+        ? { color: fallbackScene.card.color, cell: { name: fallbackScene.cell.name, ...joinCell(fallbackScene.card, fallbackScene.cell) } }
         : o.scene
           ? { color: undefined, cell: o.scene }
           : undefined;
-    /* ★옛 그림의 스냅샷은 넣을 곳을 씬 그룹에 들고 있다 (`sceneDest`, 캐릭터 id) — 그 그림의 캐릭터 차례로 옮긴다.
-       지금 것은 씬이 든다 (`cell.dest`·`cell.lines`) */
-    // ★메타데이터에서 세운 씬(`o.scene`)에는 줄이 없다 — 줄을 아는 모양으로 읽는다
-    const srcLined = srcScene?.cell as { dest?: string; lines?: SceneLine[] } | undefined;
-    const srcDest = srcLined?.dest ?? (saved.env?.sceneDest !== undefined
+    const srcDest = srcScene?.cell.dest ?? (saved.env?.sceneDest !== undefined
       ? legacyDest(saved.env.sceneDest, saved.env.prompt?.chars ?? [])
       : undefined);
+    /** 그 씬 하나로 세운 카드의 줄과 씬의 블록 */
+    const srcSplit = srcScene ? splitCells([{ ...srcScene.cell, dest: srcDest }]) : null;
 
     set({ spec: cur });
     get().addTab(t("tab.cloneName"));
@@ -1491,23 +1506,20 @@ export const useWs = create<S>((set, get) => ({
     //    ★구조를 못 찾았으면 **안 건드린다** — 그때는 `apply` 가 메타데이터로 세운다
     if (srcPrompt) usePrompt.getState().load(srcPrompt);
     // 2) 슬롯 구조 — 그 씬을 그대로 옮긴다.
-    //    ★줄마다의 넣을 곳(`dest`·`lines`)도 함께 옮긴다 — 넣을 곳이 다르면 같은 씬이라도 다른 프롬프트가 나간다.
-    if (srcScene) {
+    //    ★줄 구성(카드의 `dest`·`lines`)도 함께 옮긴다 — 넣을 곳이 다르면 같은 씬이라도 다른 프롬프트가 나간다.
+    if (srcScene && srcSplit) {
+      const sc = structuredClone(srcSplit.cells[0]);
       get().patchSceneGroup(tab.id, {
         cards: tab.cards.map((k) =>
           k.id === tab.cards[0]?.id
             ? {
                 ...k,
                 color: srcScene.color ?? k.color,
+                dest: srcSplit.set.dest,
+                lines: srcSplit.set.lines,
                 cells: k.cells.map((c) =>
                   c.id === cell.id
-                    ? {
-                        ...c,
-                        name: srcScene.cell.name ?? c.name,
-                        blocks: structuredClone(srcScene.cell.blocks ?? []),
-                        dest: srcDest,
-                        lines: srcLined?.lines?.length ? structuredClone(srcLined.lines) : undefined,
-                      }
+                    ? { ...c, name: srcScene.cell.name ?? c.name, blocks: sc.blocks ?? [], lineBlocks: sc.lineBlocks }
                     : c,
                 ),
               }
@@ -2114,6 +2126,9 @@ export const useWs = create<S>((set, get) => ({
           name: card.name ?? uniqueName(t("sceneGroup.newCard"), tab.cards.map((k) => k.name)),
           srcId: card.srcId,
           color: card.color,
+          // ★줄 구성도 카드와 함께 온다 (덱의 씬 카드 · `lib/sceneLines`)
+          ...(card.dest && card.dest !== "base" ? { dest: card.dest } : null),
+          ...(card.lines?.length ? { lines: card.lines } : null),
           cells,
         },
       ],
@@ -2227,11 +2242,15 @@ export const useWs = create<S>((set, get) => ({
     }
 
     const put = toIndex < 0 ? to.cells.length : Math.max(0, Math.min(to.cells.length, toIndex));
+    /* ★줄 구성은 카드가 정한다 (`lib/sceneLines`) — 옮긴 씬의 줄을 **넣을 곳으로** 받는 카드의 줄에 맞춘다.
+       받는 카드에 없는 넣을 곳에 블록이 있으면 그 줄을 카드에 더한다 (`adoptCell`) */
+    const got = adoptCell(to, joinCell(from, cell));
+    const moved: Slot = { ...cell, blocks: got.cell.blocks ?? [], lineBlocks: got.cell.lineBlocks };
     get().patchSceneGroup(groupId, {
       cards: tab.cards.map((k) => {
         if (k.id === from.id) return { ...k, cells: k.cells.filter((c) => c.id !== cellId) };
         if (k.id === to.id)
-          return { ...k, cells: [...k.cells.slice(0, put), cell, ...k.cells.slice(put)] };
+          return { ...k, lines: got.set.lines, cells: [...k.cells.slice(0, put), moved, ...k.cells.slice(put)] };
         return k;
       }),
     });

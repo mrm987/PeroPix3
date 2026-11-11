@@ -27,6 +27,9 @@ type AnyCardLike = {
   uc?: unknown;
   opts?: unknown;
   cells?: unknown[];
+  /** 씬 카드의 줄 구성 (`lib/sceneLines`) */
+  dest?: string;
+  lines?: unknown[];
 };
 
 /** 꽂는다. 못 하면 까닭을 돌려준다 (조수가 사용자에게 말할 수 있게).
@@ -88,6 +91,9 @@ export function applyCard(
   useWs.getState().addCard(cur.id, {
     name: c.name,
     color: c.color,
+    // ★줄 구성도 함께 얹는다 (`lib/sceneLines`)
+    dest: c.dest,
+    lines: c.lines as never,
     cells: c.cells as never,
   });
   return { did: `포즈세트 「${c.name}」 을 「${cur.name}」 에 얹었습니다` };

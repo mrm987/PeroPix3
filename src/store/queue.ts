@@ -653,18 +653,20 @@ async function legacyAction(action: string, args: Record<string, any>): Promise<
         return { ok: true };
       }
       if (args.scene) {
-        const cards = (hit as { cards?: { cells: { id: string }[] }[] }).cards ?? [];
+        const cards = (hit as { cards?: { id: string; cells: { id: string }[] }[] }).cards ?? [];
+        /* ★줄까지 그때 모양으로 — 씬의 줄마다 블록(`lineBlocks`)과 카드의 줄 구성(`cardLines`, `lib/sceneLines`).
+           옛 이력(그 값이 없는 것)은 줄을 건드리지 않는다. null 은 「없었다」다 */
+        const cl = args.cardLines as { card: string; lines: unknown[] | null } | undefined;
         useWs.getState().patchSceneGroup(hit.id, {
           cards: cards.map((k) => ({
             ...k,
-            // ★줄까지 그때 모양으로 — 옛 이력(`dest`·`lines` 가 없는 것)은 줄을 건드리지 않는다. null 은 「없었다」다
+            ...(cl && cl.card === k.id ? { lines: cl.lines ?? undefined } : null),
             cells: k.cells.map((c) =>
               c.id === args.scene
                 ? {
                     ...c,
                     blocks,
-                    ...("dest" in args ? { dest: (args.dest as string | null) ?? undefined } : null),
-                    ...("lines" in args ? { lines: (args.lines as unknown[] | null) ?? undefined } : null),
+                    ...("lineBlocks" in args ? { lineBlocks: (args.lineBlocks as Record<string, unknown> | null) ?? undefined } : null),
                   }
                 : c,
             ),

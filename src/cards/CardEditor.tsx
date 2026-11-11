@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { uniqueName } from "../lib/uniqueName";
 import { useI18n } from "../i18n";
 import { SectionCard } from "../blocks/SectionCard";
-import { SceneLines } from "../panels/SceneLines";
-import { addLine } from "../lib/sceneLines";
+import { LineAddButton, LineHead, SceneCells } from "../panels/SceneCells";
+import { addLineDef, columnsOf, dropLineDef, type LineDef } from "../lib/sceneLines";
 import { SectionBody, useThumbView } from "../panels/PromptSections";
 import { PromptOptsBar } from "../panels/PromptOpts";
 import { useCards, type AnyCard, type CardKind, type CharCard, type PoseCard, type StyleCard } from "../store/cards";
@@ -145,7 +145,7 @@ export function CardEditor({
             renameTip={t("cards.rename")}
           >
             {kind === "posesets" ? (
-              <PoseBody card={draft as PoseCard} onChange={(cells) => patch({ cells } as Partial<AnyCard>)} />
+              <PoseBody card={draft as PoseCard} onChange={(p) => patch(p as Partial<AnyCard>)} />
             ) : (
               <SectionBody
                 id={`cardedit:${draft.id}`}
@@ -185,7 +185,7 @@ export function CardEditor({
 
 /** 씬 세트의 몸통 — **씬 줄에서 보던 그대로**다.
  *
- *  ★★칸은 씬 줄과 **같은 부품**이다 (`SceneLines` — 줄마다 넣을 곳과 블록 하나, 사용자 결정 2026-11-10).
+ *  ★★칸은 씬 표와 **같은 부품**이다 (`SceneCells` — 카드의 줄마다 블록 하나, 사용자 결정 2026-11-11).
  *    그대로 쓰므로 칩 클릭·휠 가중치·자동완성·서랍 드롭이 여기서도 같게 먹는다.
  *    여기만 다르게 그리면 「덱에서 본 것」과 「꺼내 놓은 것」이 조용히 달라진다. */
 function PoseBody({
@@ -193,24 +193,53 @@ function PoseBody({
   onChange,
 }: {
   card: PoseCard;
-  onChange: (cells: PoseCard["cells"]) => void;
+  onChange: (patch: Partial<PoseCard>) => void;
 }) {
   const t = useI18n((s) => s.t);
   const cells = card.cells ?? [];
-  /** 이름표가 가리키는 차례 — 지금 탭에서 켜진 캐릭터 (씬 줄과 같다) */
+  /** 줄 머리가 가리키는 차례 — 지금 탭에서 켜진 캐릭터 (씬 표와 같다) */
   const chars = usePrompt((s) => s.chars).filter((c) => c.on);
-  const patch = (i: number, p: Partial<PoseCard["cells"][number]>) => onChange(cells.map((x, k) => (k === i ? { ...x, ...p } : x)));
+  const cols = columnsOf(card);
+  const patch = (i: number, p: Partial<PoseCard["cells"][number]>) => onChange({ cells: cells.map((x, k) => (k === i ? { ...x, ...p } : x)) });
+  const retarget = (col: LineDef, dest: string) =>
+    col.id
+      ? onChange({ lines: (card.lines ?? []).map((l) => (l.id === col.id ? { ...l, dest } : l)) })
+      : onChange({ dest: dest === "base" ? undefined : dest });
+  /** 줄 이름 — 칸 왼쪽에 짧게 (고치는 것은 위의 줄 머리다) */
+  const short = (dest: string) =>
+    dest === "base" ? t("scenes.destBase") : dest === "all" ? t("scenes.destAll") : t("scenes.destCharN", { n: Number(dest.slice(1)) });
   return (
     <div style={{ display: "flex", flexDirection: "column", padding: "var(--sp-2) 0" }}>
+      {/* ★★줄 구성은 **카드가 정한다** (사용자 결정 2026-11-11, `lib/sceneLines`) — 씬 표의 열 머리와 같은 것을 위에 한 줄로 둔다 */}
+      <div data-card-editor-lines style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4, padding: "var(--sp-1) 10px var(--sp-2)" }}>
+        <span style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", marginRight: 2 }}>{t("scenes.lineCol")}</span>
+        {cols.map((col) => (
+          <span key={col.id || "main"} style={{ display: "flex", border: "1px solid var(--line)", borderRadius: "var(--r-1)" }}>
+            <LineHead
+              set={card}
+              col={col}
+              chars={chars}
+              onRetarget={(d) => retarget(col, d)}
+              onRemove={() => onChange(dropLineDef(card, cells, col.id))}
+            />
+          </span>
+        ))}
+        <LineAddButton
+          mark={`cardedit-${card.id}`}
+          set={card}
+          chars={chars}
+          onAdd={(d) => onChange({ lines: addLineDef(card, d) })}
+          icon={Icon.lineAdd}
+          style={{ color: "var(--ink-faint)", display: "grid", padding: "0 2px" }}
+        />
+      </div>
       {cells.map((c, i) => (
         <div key={i} style={{ display: "flex", flexDirection: "column", gap: 3, padding: "var(--sp-2) 10px" }}>
           <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <input
               data-card-editor-cell
               value={c.name}
-              onChange={(e) =>
-                onChange(cells.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))
-              }
+              onChange={(e) => patch(i, { name: e.target.value })}
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -222,19 +251,11 @@ function PoseBody({
                 color: "var(--ink-soft)",
               }}
             />
-            <button
-              data-card-editor-line-add={i}
-              onClick={() => patch(i, { lines: addLine(c, chars.length).lines })}
-              data-tip={t("scenes.lineAdd")}
-              style={{ color: "var(--ink-faint)", display: "grid", padding: "0 2px" }}
-            >
-              {Icon.lineAdd}
-            </button>
             {/* ★마지막 한 칸은 못 뺀다 — 씬이 없는 세트는 이 카드가 할 일이 없다 */}
             {cells.length > 1 && (
               <button
                 data-card-editor-delcell={i}
-                onClick={() => onChange(cells.filter((_, k) => k !== i))}
+                onClick={() => onChange({ cells: cells.filter((_, k) => k !== i) })}
                 data-tip={t("cards.removeScene")}
                 style={{ color: "var(--ink-faint)", display: "grid", padding: "0 2px" }}
               >
@@ -242,13 +263,27 @@ function PoseBody({
               </button>
             )}
           </span>
-          <SceneLines
-            id={`${card.id}:${i}`}
-            zone={`cardedit-${card.id}-${i}`}
-            cell={c}
-            onChange={(p) => patch(i, p)}
-            chars={chars}
-          />
+          {/* ★★칸은 씬 표와 **같은 부품**이다 (`SceneCells`) — 칩 클릭·휠 가중치·자동완성·서랍 드롭이 여기서도 같게 먹는다 */}
+          <div style={{ border: "1px solid var(--line)", borderRadius: "var(--r-1)", overflow: "hidden" }}>
+            <SceneCells
+              id={`${card.id}:${i}`}
+              zone={`cardedit-${card.id}-${i}`}
+              set={card}
+              cell={c}
+              onChange={(p) => patch(i, p)}
+              vert
+              expanded
+              label={
+                cols.length > 1 || cols[0].dest !== "base"
+                  ? (col) => (
+                      <span style={{ width: 62, flexShrink: 0, padding: "5px 4px", fontSize: "var(--text-2xs)", color: "var(--ink-faint)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {short(col.dest)}
+                      </span>
+                    )
+                  : undefined
+              }
+            />
+          </div>
         </div>
       ))}
       {!cells.length && (
@@ -262,7 +297,7 @@ function PoseBody({
             붙으면 같은 카드가 화면마다 달라 보인다. */}
       <button
         data-card-editor-addcell
-        onClick={() => onChange([...cells, { name: uniqueName(t("slots.newName"), cells.map((c) => c.name)), blocks: [] }])}
+        onClick={() => onChange({ cells: [...cells, { name: uniqueName(t("slots.newName"), cells.map((c) => c.name)), blocks: [] }] })}
         style={{
           margin: "var(--sp-2) 10px 0",
           padding: "2px var(--sp-3)",

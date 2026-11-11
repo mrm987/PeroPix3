@@ -31,6 +31,8 @@ export function Dropdown({
   tip,
   mark,
   dashed = false,
+  bare = false,
+  face,
 }: {
   value: string;
   options: DropdownOption[];
@@ -43,6 +45,10 @@ export function Dropdown({
   mark?: string;
   /** 고른 것이 지금은 안 먹는다 — 상자 테두리를 점선으로 (씬 줄이 가리킨 캐릭터가 없을 때) */
   dashed?: boolean;
+  /** 테두리·바탕 없이 글자와 화살표만 — 씬 표의 줄 머리처럼 칸 자체가 상자인 자리 */
+  bare?: boolean;
+  /** 상자 대신 그릴 것 — 고른 값을 보여 주지 않는 **메뉴 버튼**이다 (씬 카드 배너의 「줄 추가」). 모양은 그쪽이 정한다 */
+  face?: { node: React.ReactNode; style: React.CSSProperties };
 }) {
   const win = useWin();
   const [open, setOpen] = useState(false);
@@ -155,12 +161,13 @@ export function Dropdown({
             show();
           }
         }}
-        style={{
+        style={face ? face.style : {
           display: "flex",
           alignItems: "center",
           gap: 2,
-          background: "var(--bg)",
-          border: `1px ${dashed ? "dashed" : "solid"} ${open ? "var(--accent)" : "var(--line)"}`,
+          background: bare ? "transparent" : "var(--bg)",
+          border: `1px ${dashed ? "dashed" : "solid"} ${open ? "var(--accent)" : bare && !dashed ? "transparent" : "var(--line)"}`,
+          ...(bare ? { maxWidth: "100%", minWidth: 0 } : null),
           borderRadius: "var(--r-2)",
           color: dashed ? "var(--ink-faint)" : "var(--ink)",
           /* ★글자 쪽 10px · 화살표 쪽 6px — 화살표 아이콘이 좌우에 빈 여백을 품고 있어 같은 값을
@@ -171,11 +178,15 @@ export function Dropdown({
           textAlign: "left",
         }}
       >
-        <span>{label}</span>
-        {/* ★화살표는 언제나 아래 — 세로쓰기에 딸려 돌지 않게 그 자리만 가로쓰기로 */}
-        <span style={{ display: "grid", color: "var(--ink-faint)", writingMode: "horizontal-tb" }}>
-          {Icon.chevronDown14}
-        </span>
+        {face ? face.node : (
+          <>
+            <span style={bare ? { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } : undefined}>{label}</span>
+            {/* ★화살표는 언제나 아래 — 세로쓰기에 딸려 돌지 않게 그 자리만 가로쓰기로 */}
+            <span style={{ display: "grid", color: "var(--ink-faint)", writingMode: "horizontal-tb" }}>
+              {Icon.chevronDown14}
+            </span>
+          </>
+        )}
       </button>
       {open &&
         anchor &&

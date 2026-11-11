@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { placeScene } from "../lib/sceneLines";
+import { joinCell, placeScene } from "../lib/sceneLines";
 import { backendUrl } from "../lib/backend";
 import { compilePrompt, usePrompt } from "./prompt";
 import { allCells, allScenes, onBeforeWsSwitch, useWs, type SceneGroup } from "./workspace";
@@ -318,12 +318,13 @@ export async function queueGroup(src: GenSource): Promise<{ queued: number } | {
     // ★**바퀴를 여기서 편다** (2026-08-11). 예전에는 씬 목록만 보내고 장 수는 서버가
     //   펼쳤는데(`qb.count`), 그러면 "한 바퀴에 시드 하나"를 표현할 수가 없다.
     //   여기서 펴면 순서와 시드가 둘 다 정확해진다.
-    rounds(Math.max(1, useUi.getState().perSlot), params, live, ({ cell: c }, seed) => {
-      /* ★★씬 프롬프트가 **payload 의 어디로** 들어가나 — 씬의 **줄마다** 정한다 (`lib/sceneLines`, 사용자 결정 2026-11-10).
+    rounds(Math.max(1, useUi.getState().perSlot), params, live, ({ card, cell: c }, seed) => {
+      /* ★★씬 프롬프트가 **payload 의 어디로** 들어가나 — 카드의 **줄마다** 정한다 (`lib/sceneLines`, 사용자 결정 2026-11-11).
          베이스면 top-level prompt 에, 캐릭터 번호면 그 장의 n번째 사람의 `characterPrompts[]` 에, 「전원」이면 켜진 사람 모두에 붙는다.
          ★가리킨 사람이 이 장에 없으면 첫 줄은 베이스로 떨어지고(조용히 사라지지 않게) 나머지 줄은 안 들어간다.
          ★「전원」은 v2 의 `promptTarget === "char"` 다 (`backend.py:2803-2833`). 순차 모드에서는 그 장에 **한 명뿐**이라 그 사람이다. */
-      const placed = placeScene(c, raw.prompt, party, seq);
+      const lined = joinCell(card, c);
+      const placed = placeScene(lined, raw.prompt, party, seq);
       // ★★**이 장의 추첨**이다. 회차마다·씬마다 따로 뽑히며, 이 한 줄이 와일드카드의
       //   존재 이유다 (`docs/v2-feature-catalog.md:477`: 한 번만 풀면 전 이미지가 굳는다).
       //   ★푸는 것은 **이어 붙인 뒤**다. `#이름` 은 나타날 때마다 따로 뽑히므로 결과가 같고,
@@ -348,7 +349,8 @@ export async function queueGroup(src: GenSource): Promise<{ queued: number } | {
         //     그림 바이트는 안 담는다 — 구조뿐이라 작다.
         env: {
           prompt: src.prompt,
-          cell: { name: c.name, blocks: c.blocks, dest: c.dest, lines: c.lines },
+          // ★씬은 카드의 줄과 합친 모양으로 남긴다 (`joinCell`) — 그림 한 장에는 그 씬 하나만 남기 때문이다
+          cell: { name: c.name, ...lined },
         },
       };
     }),

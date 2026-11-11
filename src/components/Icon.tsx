@@ -98,8 +98,11 @@ export const Icon = {
     </>,
     13,
   ),
-  /** 줄 추가 — 씬 프롬프트에 넣을 곳이 다른 줄을 하나 더 (`panels/SceneLines`) */
+  /** 줄 추가 — 씬 카드에 넣을 곳이 다른 줄을 하나 더 (`panels/SceneCells`) */
   lineAdd: s(<path d="M4 6h11M4 12h11M4 18h7M18 14v6M15 17h6" />, 14),
+  /** 씬 프롬프트 접기 · 펴기 — 표의 왼쪽(프롬프트)을 접고 편다 (`SceneLane` 머리줄) */
+  promptFold: s(<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16M15 10l-2 2 2 2" /></>, 12),
+  promptUnfold: s(<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16M13 10l2 2-2 2" /></>, 12),
   /** 복제 */
   duplicate: s(
     <>
