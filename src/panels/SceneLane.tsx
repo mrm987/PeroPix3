@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { DropLine } from "../components/DropLine";
 import { useGen } from "../store/gen";
@@ -1447,9 +1447,21 @@ function CardGroup(p: GroupProps) {
   const headThumb = useThumbView(p.card.thumb ?? null);
   /* ★★줄 구성은 **카드가 정한다** (사용자 결정 2026-11-11, `lib/sceneLines`) — 더하고 · 넣을 곳을 바꾸고 · 빼는 것이 전부 카드를 고친다 */
   const cols = columnsOf(p.card);
-  /** 표 머리(가로 모드의 열 머리 · 세로 모드의 줄 이름 칸)를 세우나 — 프롬프트를 펼쳐 둔 동안은 **언제나**.
-   *  ★한 칸뿐인 카드도 세운다 (사용자 지적 2026-11-11): 첫 칸을 베이스에서 캐릭터로 바꾸는 곳이 머리뿐이다 */
-  const showHeads = !p.fold;
+  /** 표 머리(가로 모드의 열 머리 · 세로 모드의 줄 이름 칸)를 세우나 — 프롬프트를 펼쳐 두고 **칸이 둘 이상**일 때.
+   *  ★한 칸뿐이면 머리 대신 **카드 배너**의 드롭다운에서 넣을 곳을 고른다 (사용자 결정 2026-11-11:
+   *    고를 곳 하나 때문에 표 머리가 한 줄을 통째로 차지했다) */
+  const single = cols.length === 1;
+  const showHeads = !p.fold && !single;
+  /** 배너 오른쪽 버튼 묶음의 폭 — 이름이 그 밑으로 들어가지 않고 잘리게 비워 둔다 (넣을 곳 드롭다운이 있으면 넓어진다) */
+  const btnsRef = useRef<HTMLDivElement>(null);
+  const [btnsW, setBtnsW] = useState(82);
+  useLayoutEffect(() => {
+    const el = btnsRef.current;
+    if (!el) return;
+    setBtnsW(el.offsetWidth);
+    const ro = observeSize(el, () => setBtnsW(el.offsetWidth));
+    return () => ro.disconnect();
+  }, []);
   const addLine = (dest: string) => p.onPatch({ lines: addLineDef(p.card, dest) });
   const retarget = (col: LineDef, dest: string) =>
     col.id
@@ -1631,8 +1643,8 @@ function CardGroup(p: GroupProps) {
             style={{
               position: "absolute",
               left: 11,
-              /* ★배너가 보이는 폭으로 좁아지면 이름이 버튼 밑으로 들어가지 않고 잘린다 (버튼 넷 자리를 비워 둔다) */
-              right: 92,
+              /* ★배너가 보이는 폭으로 좁아지면 이름이 버튼 밑으로 들어가지 않고 잘린다 (버튼 묶음 자리를 비워 둔다) */
+              right: btnsW + 10,
               top: "50%",
               transform: "translateY(-50%)",
               display: "flex",
@@ -1680,6 +1692,7 @@ function CardGroup(p: GroupProps) {
           {/* ★카드 버튼은 그 카드의 **씬을 한꺼번에** 잠그고 켠다 (사용자 지시 2026-10-28: 전부 잠그고 몇 개만 켜기).
               카드가 잠겨 보이는 것은 씬이 전부 잠겼을 때뿐이라, 씬 하나를 켜면 카드 잠금이 저절로 풀린다 (`cardLocked`) */}
           <div
+            ref={btnsRef}
             style={{
               position: "absolute",
               right: 5,
@@ -1690,6 +1703,13 @@ function CardGroup(p: GroupProps) {
               gap: 2,
             }}
           >
+            {/* ★한 칸뿐인 카드의 넣을 곳 — 「적용 대상 추가」 왼쪽 (칸이 둘 이상이면 표 머리로 옮겨 간다) */}
+            {!p.fold && !p.folded && single && (
+              /* ★누르기를 여기서 멈춘다 — 목록 항목은 버튼이 아니라서(body 에 뜨지만 React 이벤트는 이리 올라온다) 배너의 「누르면 접기」에 닿는다 */
+              <span data-banner-dest={p.card.id} onPointerDown={(e) => e.stopPropagation()} style={{ display: "flex", minWidth: 0, marginRight: 2 }}>
+                <LineHead banner set={p.card} col={cols[0]} chars={p.chars} onRetarget={(d) => retarget(cols[0], d)} onRemove={() => removeLine(cols[0])} />
+              </span>
+            )}
             {/* ★줄 추가 — 넣을 곳을 골라 카드에 줄을 더한다 (카드의 씬 전부에 빈 줄이 생긴다, `lib/sceneLines`).
                 접혀 있으면 안 보인다 — 더해도 보이는 것이 없다 */}
             {!p.fold && !p.folded && (
@@ -1772,7 +1792,7 @@ function CardGroup(p: GroupProps) {
       {/* ★공통 접두는 **걷었다** (사용자 지시 2026-08-21). 프롬프트에 실려 나가는 값이
           카드 머리에 한 줄로만 보여서, 어느 씬에 무엇이 붙는지 화면에서 따라가기 어려웠다.
           같은 것을 붙이려면 **베이스 프롬프트의 블록**을 쓴다 (창구가 하나가 된다). */}
-      {/* ★★가로 모드의 **열 머리** — 프롬프트를 펼쳐 둔 동안 언제나 선다 (사용자 결정 2026-11-11, 시안 3). 넣을 곳을 바꾸고 줄을 빼는 자리이고,
+      {/* ★★가로 모드의 **열 머리** — 프롬프트를 펼쳐 두고 칸이 둘 이상일 때 선다 (사용자 결정 2026-11-11, 시안 3. 한 칸이면 배너에서 고른다). 넣을 곳을 바꾸고 줄을 빼는 자리이고,
           오른쪽 경계를 끌어 그 줄의 폭을 바꾼다 (넣을 곳마다 하나라 카드가 달라도 같은 줄은 같은 폭이다).
           ★씬 줄의 머리와 같이 왼쪽에 붙는다(sticky) — 그림 쪽만 옆으로 굴러간다 */}
       {showHeads && !p.vert && (
@@ -1801,7 +1821,7 @@ function CardGroup(p: GroupProps) {
             : undefined
         }
       >
-        {/* ★★세로 모드의 **줄 이름 칸** — 프롬프트를 펼쳐 둔 동안 언제나, 카드 왼쪽에 한 번 선다 (시안 3). 높이는 씬 칸 · 줄 칸과 같다 —
+        {/* ★★세로 모드의 **줄 이름 칸** — 칸이 둘 이상일 때 카드 왼쪽에 한 번 선다 (시안 3). 높이는 씬 칸 · 줄 칸과 같다 —
             펼친 씬이 글만큼 자라면 그 높이를 받아 함께 자란다 (`vhs`). 씬 머리처럼 위에 붙는다(sticky) */}
         {showHeads && p.vert && (
           <div data-line-heads={p.card.id} style={{ flexShrink: 0, width: SCENE_W, borderRight: "1px solid var(--line)", background: "var(--panel)" }}>

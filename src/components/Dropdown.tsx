@@ -33,6 +33,7 @@ export function Dropdown({
   mark,
   dashed = false,
   bare = false,
+  light = false,
 }: {
   value: string;
   options: DropdownOption[];
@@ -47,6 +48,8 @@ export function Dropdown({
   dashed?: boolean;
   /** 테두리·바탕 없이 글자와 화살표만 — 씬 표의 줄 머리처럼 칸 자체가 상자인 자리 */
   bare?: boolean;
+  /** 그림 위에 흰 글자로 — 씬 카드 배너처럼 바탕이 그림인 자리 (`bare` 와 함께 쓴다) */
+  light?: boolean;
 }) {
   const win = useWin();
   const [open, setOpen] = useState(false);
@@ -164,10 +167,11 @@ export function Dropdown({
           alignItems: "center",
           gap: 2,
           background: bare ? "transparent" : "var(--bg)",
-          border: `1px ${dashed ? "dashed" : "solid"} ${open ? "var(--accent)" : bare && !dashed ? "transparent" : "var(--line)"}`,
+          border: `1px ${dashed ? "dashed" : "solid"} ${open ? "var(--accent)" : bare && !dashed ? "transparent" : light ? "rgba(255,255,255,0.5)" : "var(--line)"}`,
           ...(bare ? { maxWidth: "100%", minWidth: 0 } : null),
           borderRadius: "var(--r-2)",
-          color: dashed ? "var(--ink-faint)" : "var(--ink)",
+          color: light ? (dashed ? "rgba(255,255,255,0.55)" : "#fff") : dashed ? "var(--ink-faint)" : "var(--ink)",
+          textShadow: light ? "0 1px 2px rgba(0,0,0,0.75)" : undefined,
           /* ★글자 쪽 10px · 화살표 쪽 6px — 화살표 아이콘이 좌우에 빈 여백을 품고 있어 같은 값을
              주면 화살표 쪽만 넓어 보인다 (2026-08-30). 세로 모드는 같은 배분을 위아래에 */
           padding: vert ? "var(--sp-4) var(--sp-1) var(--sp-2)" : "1px var(--sp-2) 1px var(--sp-4)",
@@ -178,7 +182,7 @@ export function Dropdown({
       >
         <span style={bare ? { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } : undefined}>{label}</span>
         {/* ★화살표는 언제나 아래 — 세로쓰기에 딸려 돌지 않게 그 자리만 가로쓰기로 */}
-        <span style={{ display: "grid", color: "var(--ink-faint)", writingMode: "horizontal-tb" }}>
+        <span style={{ display: "grid", color: light ? "rgba(255,255,255,0.72)" : "var(--ink-faint)", writingMode: "horizontal-tb" }}>
           {Icon.chevronDown14}
         </span>
       </button>

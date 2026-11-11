@@ -44,6 +44,8 @@ export function LineHead(p: {
   chars: { name: string }[];
   onRetarget: (dest: string) => void;
   onRemove: () => void;
+  /** 카드 배너에 놓였나 — 한 칸뿐인 카드는 표 머리 대신 배너에서 고른다 (그림 위라 흰 글자) */
+  banner?: boolean;
 }) {
   const t = useI18n((s) => s.t);
   const main = !p.col.id;
@@ -64,6 +66,7 @@ export function LineHead(p: {
         value={p.col.dest}
         options={options}
         dashed={miss}
+        light={p.banner}
         tip={miss ? t(main ? "scenes.destMissMain" : "scenes.destMissLine") : t("scenes.destHint")}
         onChange={(v) => (v === REMOVE ? p.onRemove() : p.onRetarget(v))}
       />
