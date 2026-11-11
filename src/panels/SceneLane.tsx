@@ -861,20 +861,25 @@ export function SceneLane() {
         <button
           data-star-filter
           data-on={starOnly ? "" : undefined}
+          className="lane-side-btn"
           onClick={() => useUi.getState().setLaneStarOnly(!starOnly)}
           /* ★글자는 **툴팁으로 내렸다** (사용자 지시 2026-08-25: *"별표만 보기는 텍스트 없이
              별모양만"*). 개수도 여기 붙는다 — 0 이면 눌러도 화면이 비므로 누르기 전에 알아야
              하는데, 머리줄은 세로 모드에서 특히 좁다. */
           data-tip={starOnly ? t("canvas.starAll") : `${t("canvas.starOnly")} (${starCount})`}
+          /* ★크기 · 테두리는 가로 · 세로 전환 · 프롬프트 접기와 같은 껍데기다 (사용자 지시 2026-11-11) */
           style={{
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            width: 22,
-            height: 22,
+            width: 26,
+            height: 26,
+            flexShrink: 0,
             borderRadius: "var(--r-1)",
-            border: `1px solid ${starOnly ? "var(--warn)" : "transparent"}`,
-            color: starOnly ? "var(--warn)" : "var(--ink-faint)",
+            border: `1px solid ${starOnly ? "var(--warn)" : "var(--line)"}`,
+            background: "var(--panel)",
+            color: starOnly ? "var(--warn)" : "var(--ink-soft)",
+            writingMode: "horizontal-tb",
           }}
         >
           {starOnly ? Icon.star12On : Icon.star12}
