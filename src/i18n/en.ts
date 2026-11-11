@@ -1392,7 +1392,7 @@ export const en = {
     destCharN: "Character {n}",
     destCharName: "Character {n} · {name}",
     destAll: "All characters",
-    destHint: "Where the scene prompt goes. Base = after the shared prompt for the whole image · Character n = after the prompt of the n-th character in that image · All = after every enabled character",
+    destHint: "Where the scene prompt goes. Base = after the shared prompt for the whole image · Character n = after the prompt of the n-th enabled character (in sequential mode, only on that character's images) · All = after every enabled character",
     destMissMain: "No such enabled character, so it goes into the base",
     destMissLine: "No such enabled character, so it is left out",
     lineAdd: "Add target",

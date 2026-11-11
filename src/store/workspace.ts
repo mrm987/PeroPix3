@@ -122,7 +122,7 @@ export type SceneCard = {
    *  카드가 자기 것으로 한 벌 갖는다. */
   thumb?: Thumb;
   /** ★★씬 프롬프트의 **줄 구성** — 카드의 씬 전부가 같은 줄을 갖는다 (사용자 결정 2026-11-11, `lib/sceneLines`).
-   *  첫 줄(씬의 `blocks`)을 넣을 곳 — `"base"` · `"#n"`(그 장의 n번째 캐릭터) · `"all"`. 없으면 베이스 */
+   *  첫 줄(씬의 `blocks`)을 넣을 곳 — `"base"` · `"#n"`(탭의 켜진 캐릭터 중 n번째) · `"all"`. 없으면 베이스 */
   dest?: string;
   /** 첫 줄 뒤의 줄들 — 넣을 곳만 든다. 블록은 씬의 `lineBlocks[줄 id]` */
   lines?: LineDef[];

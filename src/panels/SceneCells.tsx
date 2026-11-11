@@ -47,7 +47,7 @@ export function LineHead(p: {
   const main = !p.col.id;
   const n = p.chars.length;
   // ★가리킨 캐릭터가 없으면 점선 — 첫 줄은 베이스로 떨어지고 나머지 줄은 안 들어간다 (`lineTarget`)
-  const miss = lineTarget(p.col.dest, n, false, false) === null;
+  const miss = lineTarget(p.col.dest, n, false) === null;
   const options: DropdownOption[] = [
     { value: p.col.dest, label: label(p.col.dest, true), short: label(p.col.dest, false) },
     ...freeDests(p.set, n).map((d) => ({ value: d, label: label(d, true), short: label(d, false) })),

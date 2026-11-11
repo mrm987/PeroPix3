@@ -4,10 +4,10 @@
  *    씬은 줄마다 블록만 든다 (첫 줄은 `Slot.blocks`, 나머지는 `Slot.lineBlocks[줄 id]`). 화면은 표다 (씬 = 행, 줄 = 열).
  *    예: 「캐릭터 1은 여성, 2는 남성」인 씬 세트에서 씬마다 베이스 · 캐릭터 1 · 캐릭터 2 에 따로 지시한다.
  *    처음(2026-11-10)에는 씬마다 줄을 따로 들었는데, 씬마다 넣을 곳을 고르는 UI 가 복잡하고 자리를 많이 쓴다는 지적으로 바꿨다.
- *  ★넣을 곳은 셋이다. 베이스(`"base"`) · 캐릭터 번호(`"#1"` …, **그 장에 실린 캐릭터의 차례**) · 캐릭터 전원(`"all"`).
+ *  ★넣을 곳은 셋이다. 베이스(`"base"`) · 캐릭터 번호(`"#1"` …, **탭의 켜진 캐릭터 차례**, 순차 생성이어도 같다) · 캐릭터 전원(`"all"`).
  *    캐릭터를 id 가 아니라 번호로 가리키는 것은 덱에 저장한 씬 카드를 다른 탭에 얹어도 맞게 하려는 것이다.
  *    옛 씬 그룹의 `sceneDest`(캐릭터 id)는 열 때 카드의 첫 줄로 옮긴다 (`legacyDest`).
- *  ★가리킨 캐릭터가 그 장에 없으면 첫 줄은 **베이스로 떨어지고**(조용히 사라지지 않게, 옛 규칙 그대로) 나머지 줄은 **안 들어간다**.
+ *  ★가리킨 캐릭터가 탭에 없으면 첫 줄은 **베이스로 떨어지고**(조용히 사라지지 않게, 옛 규칙 그대로) 나머지 줄은 **안 들어간다**.
  *  ★씬 하나를 「카드의 줄 + 그 씬의 블록」으로 합친 모양이 `LinedCell` 이다 (`joinCell`). 생성 · 그림의 `env.cell` · 조수의 보기가 이 모양을 쓴다.
  *  ★순수 계산만 둔다 — 생성(`store/gen` 의 `queueGroup`)과 화면(`panels/SceneCells`)이 같은 판정을 쓴다. */
 import { compileBlocks, type Block } from "./blocks.ts";
@@ -30,14 +30,15 @@ export const destIndex = (dest: string | undefined): number => {
   return m ? Number(m[1]) : 0;
 };
 
-/** 그 줄이 이 장의 **어디로** 가나 — 캐릭터 자리 목록(0부터) · `"base"` · `null`(안 들어감).
- *  @param n 그 장에 실린 캐릭터 수
- *  @param seq 순차 생성 — 한 장에 한 명뿐이라 「전원」이 곧 그 사람이다
- *  @param main 첫 줄인가 — 가리킨 곳이 없으면 베이스로 떨어진다 */
-export function lineTarget(dest: string | undefined, n: number, seq: boolean, main: boolean): "base" | number[] | null {
+/** 그 줄이 **누구에게** 가나 — 탭의 켜진 캐릭터 중 자리 목록(0부터) · `"base"` · `null`(안 들어감).
+ *  ★번호는 **탭의 켜진 캐릭터 차례**다. 순차 생성이어도 그 장 안에서 다시 세지 않는다 (사용자 결정 2026-11-11):
+ *    1=여성 · 2=남성으로 나눠 적었으면 남성 그림에는 「캐릭터 2」 줄만 들어가야 한다.
+ *  ★「전원」은 켜진 사람이 한 명이어도 그 사람이다.
+ *  @param n 탭의 켜진 캐릭터 수
+ *  @param main 첫 줄인가 — 가리킨 사람이 탭에 없으면 베이스로 떨어진다 */
+export function lineTarget(dest: string | undefined, n: number, main: boolean): "base" | number[] | null {
   if (!dest || dest === "base") return "base";
-  // ★「전원」은 둘 이상일 때만 뜻이 있다 (한 명이면 그 사람을 고르는 것과 같다). 화면도 그때만 선택지를 낸다
-  if (dest === "all" && (n > 1 || (seq && n > 0))) return Array.from({ length: n }, (_, i) => i);
+  if (dest === "all" && n > 0) return Array.from({ length: n }, (_, i) => i);
   const k = destIndex(dest);
   if (k >= 1 && k <= n) return [k - 1];
   return main ? "base" : null;
@@ -98,18 +99,26 @@ export const linesOf = (c: LinedCell): { dest: string; blocks: Block[]; main: bo
   ...(c.lines ?? []).map((l) => ({ dest: l.dest, blocks: l.blocks, main: false })),
 ];
 
-/** 씬 하나를 그 장의 프롬프트에 나눠 넣는다 — 베이스는 탭의 베이스 뒤에, 캐릭터는 그 사람의 프롬프트 뒤에 줄 차례대로 */
+/** 씬 하나를 그 장의 프롬프트에 나눠 넣는다 — 베이스는 탭의 베이스 뒤에, 캐릭터는 그 사람의 프롬프트 뒤에 줄 차례대로.
+ *  @param chars 그 장에 실리는 캐릭터
+ *  @param all 탭의 켜진 캐릭터 전부 (번호를 세는 기준). 순차 생성은 한 장에 한 명만 실리므로 따로 넘긴다.
+ *    ★자리는 **같은 객체인지**로 찾는다 — `chars` 는 `all` 에서 고른 것이어야 한다.
+ *  ★가리킨 사람이 탭에는 있는데 이 장에 없으면(순차 생성의 다른 사람 그림) 그 줄은 이 장에 안 들어간다. 첫 줄이어도 베이스로 떨어지지 않는다. */
 export function placeScene<C extends { prompt: string }>(
-  cell: LinedCell, prompt: string, chars: C[], seq: boolean,
+  cell: LinedCell, prompt: string, chars: C[], all: C[] = chars,
 ): { prompt: string; chars: C[] } {
   const base: string[] = [prompt];
   const per: string[][] = chars.map((ch) => [ch.prompt]);
   for (const l of linesOf(cell)) {
     const text = compileBlocks(l.blocks);
     if (!text) continue;
-    const to = lineTarget(l.dest, chars.length, seq, l.main);
+    const to = lineTarget(l.dest, all.length, l.main);
     if (to === "base") base.push(text);
-    else if (to) for (const i of to) per[i].push(text);
+    else if (to)
+      for (const k of to) {
+        const i = chars.indexOf(all[k]);
+        if (i >= 0) per[i].push(text);
+      }
   }
   // ★앞 조각이 이미 쉼표로 끝나면 쉼표를 또 붙이지 않는다 — `compileBlocks` 와 같은 규칙 (원문 그대로 내는 블록은 `girl,` 로 끝날 수 있다)
   const join = (xs: string[]) =>
