@@ -32,7 +32,6 @@ export function Dropdown({
   mark,
   dashed = false,
   bare = false,
-  face,
 }: {
   value: string;
   options: DropdownOption[];
@@ -47,8 +46,6 @@ export function Dropdown({
   dashed?: boolean;
   /** 테두리·바탕 없이 글자와 화살표만 — 씬 표의 줄 머리처럼 칸 자체가 상자인 자리 */
   bare?: boolean;
-  /** 상자 대신 그릴 것 — 고른 값을 보여 주지 않는 **메뉴 버튼**이다 (씬 카드 배너의 「줄 추가」). 모양은 그쪽이 정한다 */
-  face?: { node: React.ReactNode; style: React.CSSProperties };
 }) {
   const win = useWin();
   const [open, setOpen] = useState(false);
@@ -161,7 +158,7 @@ export function Dropdown({
             show();
           }
         }}
-        style={face ? face.style : {
+        style={{
           display: "flex",
           alignItems: "center",
           gap: 2,
@@ -178,15 +175,11 @@ export function Dropdown({
           textAlign: "left",
         }}
       >
-        {face ? face.node : (
-          <>
-            <span style={bare ? { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } : undefined}>{label}</span>
-            {/* ★화살표는 언제나 아래 — 세로쓰기에 딸려 돌지 않게 그 자리만 가로쓰기로 */}
-            <span style={{ display: "grid", color: "var(--ink-faint)", writingMode: "horizontal-tb" }}>
-              {Icon.chevronDown14}
-            </span>
-          </>
-        )}
+        <span style={bare ? { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } : undefined}>{label}</span>
+        {/* ★화살표는 언제나 아래 — 세로쓰기에 딸려 돌지 않게 그 자리만 가로쓰기로 */}
+        <span style={{ display: "grid", color: "var(--ink-faint)", writingMode: "horizontal-tb" }}>
+          {Icon.chevronDown14}
+        </span>
       </button>
       {open &&
         anchor &&

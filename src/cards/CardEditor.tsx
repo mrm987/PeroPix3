@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { uniqueName } from "../lib/uniqueName";
 import { useI18n } from "../i18n";
 import { SectionCard } from "../blocks/SectionCard";
-import { LineAddButton, LineHead, SceneCells } from "../panels/SceneCells";
+import { LineChecklist, LineHead, SceneCells } from "../panels/SceneCells";
 import { addLineDef, columnsOf, dropLineDef, type LineDef } from "../lib/sceneLines";
 import { SectionBody, useThumbView } from "../panels/PromptSections";
 import { PromptOptsBar } from "../panels/PromptOpts";
@@ -224,11 +224,12 @@ function PoseBody({
             />
           </span>
         ))}
-        <LineAddButton
+        <LineChecklist
           mark={`cardedit-${card.id}`}
           set={card}
           chars={chars}
           onAdd={(d) => onChange({ lines: addLineDef(card, d) })}
+          onRemove={(col) => onChange(dropLineDef(card, cells, col.id))}
           icon={Icon.lineAdd}
           style={{ color: "var(--ink-faint)", display: "grid", padding: "0 2px" }}
         />

@@ -1,9 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { BlockList } from "../blocks/BlockList";
 import { Dropdown, type DropdownOption } from "../components/Dropdown";
 import { slotBlock, slotBlocksOf } from "../lib/blocks";
 import { blocksAt, columnsOf, freeDests, lineTarget, lineZone, type CellBlocks, type LineDef, type LineSet } from "../lib/sceneLines";
-import { observeSize } from "../lib/floatWin";
+import { observeSize, useWin } from "../lib/floatWin";
+import { Icon } from "../components/Icon";
 import { useI18n } from "../i18n";
 
 /** 가로 모드의 씬 칸 폭 — 번호 · 이름(두 줄까지) · 버튼 (사용자 결정 2026-11-11, 시안 `docs/scene-lines-mockup3.html`) */
@@ -67,25 +69,156 @@ export function LineHead(p: {
   );
 }
 
-/** 넣을 곳 목록의 「줄 빼기」 — 값이 아니라 동작이다 */
+/** 넣을 곳 목록의 「제거」 — 값이 아니라 동작이다 */
 const REMOVE = "__remove";
 
-/** ★★카드 배너의 「줄 추가」 — 넣을 곳을 골라 카드에 줄을 더한다 (카드의 씬 전부에 빈 줄이 생긴다) */
-export function LineAddButton(p: { set: LineSet; chars: { name: string }[]; onAdd: (dest: string) => void; style: React.CSSProperties; icon: React.ReactNode; mark: string }) {
+/** ★★카드 배너의 「적용 대상 추가」 — 체크 상자 목록으로 적용 대상을 켜고 끈다 (사용자 지시 2026-11-11: 시안처럼 체크 상자로).
+ *  켜면 카드의 씬 전부에 빈 줄이 생기고, 끄면 그 줄이 블록과 함께 빠진다 (`Ctrl+Z` 로 되돌린다). 첫 줄은 끌 수 없다.
+ *  ★목록은 고른 뒤에도 열려 있다 — 여럿을 한 번에 켜고 끄는 자리다. 밖을 누르거나 Esc 로 닫는다. */
+export function LineChecklist(p: {
+  set: LineSet;
+  chars: { name: string }[];
+  onAdd: (dest: string) => void;
+  onRemove: (col: LineDef) => void;
+  style: React.CSSProperties;
+  icon: React.ReactNode;
+  mark: string;
+}) {
   const t = useI18n((s) => s.t);
+  const win = useWin();
   const label = useDestLabel(p.chars);
-  const free = freeDests(p.set, p.chars.length);
-  if (!free.length) return null;
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const cols = columnsOf(p.set);
+  const n = p.chars.length;
+  const used = cols.map((c) => c.dest).filter((d) => d !== "base" && d !== "all").map((d) => Number(d.slice(1)));
+  const all = ["base", ...Array.from({ length: Math.max(2, n, ...used) }, (_, i) => `#${i + 1}`), "all"];
+
+  useEffect(() => {
+    if (!at) return;
+    const down = (e: PointerEvent) => {
+      const el = e.target as Node;
+      if (btn.current?.contains(el) || list.current?.contains(el)) return;
+      setAt(null);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAt(null);
+    };
+    const away = () => setAt(null);
+    win.document.addEventListener("pointerdown", down, true);
+    win.document.addEventListener("keydown", key);
+    win.addEventListener("resize", away);
+    win.addEventListener("blur", away);
+    return () => {
+      win.document.removeEventListener("pointerdown", down, true);
+      win.document.removeEventListener("keydown", key);
+      win.removeEventListener("resize", away);
+      win.removeEventListener("blur", away);
+    };
+  }, [at, win]);
+  // 목록을 재고 나서 화면 안으로 민다
+  useLayoutEffect(() => {
+    const el = list.current;
+    if (!at || !el) return;
+    const r = el.getBoundingClientRect();
+    const x = Math.max(8, Math.min(win.innerWidth - 8 - r.width, at.x));
+    const y = at.y + r.height > win.innerHeight - 8 ? Math.max(8, at.y - r.height - 30) : at.y;
+    if (x !== at.x || y !== at.y) setAt({ x, y });
+  }, [at, win]);
+
   return (
-    <span data-line-add={p.mark} onPointerDown={(e) => e.stopPropagation()} style={{ display: "flex" }}>
-      <Dropdown
-        mark="scene-line-add"
-        value=""
-        options={free.map((d) => ({ value: d, label: label(d, true) }))}
-        tip={t("scenes.lineAdd")}
-        onChange={p.onAdd}
-        face={{ node: p.icon, style: p.style }}
-      />
+    <span data-line-add={p.mark} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} style={{ display: "flex" }}>
+      <button
+        ref={btn}
+        type="button"
+        data-line-add-btn
+        data-open={at ? "" : undefined}
+        data-tip={t("scenes.lineAdd")}
+        onClick={() => {
+          if (at) return setAt(null);
+          const r = btn.current?.getBoundingClientRect();
+          if (r) setAt({ x: r.left, y: r.bottom + 4 });
+        }}
+        style={p.style}
+      >
+        {p.icon}
+      </button>
+      {at &&
+        createPortal(
+          <div
+            ref={list}
+            data-line-checklist={p.mark}
+            style={{
+              position: "fixed",
+              left: at.x,
+              top: at.y,
+              zIndex: 8000,
+              display: "flex",
+              flexDirection: "column",
+              minWidth: 190,
+              padding: "var(--sp-1)",
+              background: "var(--panel)",
+              border: "1px solid var(--line)",
+              borderRadius: "var(--r-2)",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+            }}
+          >
+            {all.map((d) => {
+              const col = cols.find((c) => c.dest === d);
+              const on = !!col;
+              // ★첫 줄은 끌 수 없다 — 씬의 블록이 사는 자리다
+              const lock = on && !col!.id;
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  data-line-check={d}
+                  data-on={on ? "" : undefined}
+                  disabled={lock}
+                  onClick={() => (on ? p.onRemove(col!) : p.onAdd(d))}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--sp-3)",
+                    padding: "var(--sp-2) var(--sp-3)",
+                    borderRadius: "var(--r-1)",
+                    fontSize: "var(--text-xs)",
+                    color: "var(--ink)",
+                    textAlign: "left",
+                    whiteSpace: "nowrap",
+                    opacity: lock ? 0.5 : 1,
+                    cursor: lock ? "default" : "pointer",
+                  }}
+                  onPointerEnter={(e) => {
+                    if (!lock) e.currentTarget.style.background = "var(--accent-bg)";
+                  }}
+                  onPointerLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 14,
+                      height: 14,
+                      flexShrink: 0,
+                      display: "grid",
+                      placeItems: "center",
+                      borderRadius: 3,
+                      border: `1px solid ${on ? "var(--accent)" : "var(--line)"}`,
+                      background: on ? "var(--accent)" : "transparent",
+                      color: "#fff",
+                    }}
+                  >
+                    {on && Icon.check}
+                  </span>
+                  {label(d, true)}
+                </button>
+              );
+            })}
+          </div>,
+          win.document.body,
+        )}
     </span>
   );
 }

@@ -17,7 +17,7 @@ import { imgUrl, thumbUrlOf } from "../lib/imgUrl";
 import { Icon } from "../components/Icon";
 import { Ratio, RATIO_LANDSCAPE, RATIO_PORTRAIT } from "../components/Ratio";
 import { kindColor } from "../cards/kindColor";
-import { LineAddButton, LineHead, LINE_H, LINE_HEAD_H, SceneCells, SCENE_W, VERT_NAME_H } from "./SceneCells";
+import { LineChecklist, LineHead, LINE_H, LINE_HEAD_H, SceneCells, SCENE_W, VERT_NAME_H } from "./SceneCells";
 import { addLineDef, columnsOf, dropLineDef, hasLines, type LineDef } from "../lib/sceneLines";
 import { pushUndo } from "../lib/undo";
 import { DropVeil } from "../cards/DropVeil";
@@ -829,23 +829,23 @@ export function SceneLane() {
             expand(null);
             useUi.getState().setLanePromptFold(!fold);
           }}
+          /* ★글자 없이 아이콘만 — 가로 · 세로 전환 버튼과 같은 껍데기다 (사용자 지시 2026-11-11). 이름은 툴팁이 말한다 */
+          data-tip={t(fold ? "scenes.promptUnfold" : "scenes.promptFold")}
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: 5,
-            height: 24,
-            padding: vert ? "8px 0" : "0 8px",
+            justifyContent: "center",
+            width: 26,
+            height: 26,
             flexShrink: 0,
             borderRadius: "var(--r-1)",
             border: `1px solid ${fold ? "var(--accent)" : "var(--line)"}`,
             background: fold ? "var(--accent-bg)" : "var(--panel)",
-            color: fold ? "var(--ink)" : "var(--ink-soft)",
-            fontSize: "var(--text-2xs)",
-            ...(vert ? { height: "auto", width: 24 } : null),
+            color: fold ? "var(--accent-ink)" : "var(--ink-soft)",
+            writingMode: "horizontal-tb",
           }}
         >
-          <span style={{ display: "grid", writingMode: "horizontal-tb" }}>{fold ? Icon.promptUnfold : Icon.promptFold}</span>
-          {t(fold ? "scenes.promptUnfold" : "scenes.promptFold")}
+          {fold ? Icon.promptUnfold : Icon.promptFold}
         </button>
         {/* ★★**별표 단추는 맨 끝**이다 (사용자 지시 2026-08-25: *"별표만 보기를 그냥 우측
             끝으로 옮겨"*). 앞에 붙여 두면 세로 모드의 좁은 머리에서 옆 글자와 겹쳐 읽힌다.
@@ -1679,11 +1679,12 @@ function CardGroup(p: GroupProps) {
             {/* ★줄 추가 — 넣을 곳을 골라 카드에 줄을 더한다 (카드의 씬 전부에 빈 줄이 생긴다, `lib/sceneLines`).
                 접혀 있으면 안 보인다 — 더해도 보이는 것이 없다 */}
             {!p.fold && !p.folded && (
-              <LineAddButton
+              <LineChecklist
                 mark={p.card.id}
                 set={p.card}
                 chars={p.chars}
                 onAdd={addLine}
+                onRemove={removeLine}
                 icon={Icon.lineAdd}
                 style={bannerBtn}
               />
@@ -2452,8 +2453,9 @@ function NameCell({
           {name}
         </span>
       )}
-      {/* ★★단추 차례는 앱 전체에서 하나다: **이름변경 · 온오프(잠금) · 삭제**. 좁은 씬 칸에서는 이름 아래 맨 끝에 선다 */}
-      <span style={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0, ...(wrap ? { marginTop: "auto", marginLeft: -3 } : { marginLeft: "auto" }) }}>
+      {/* ★★단추 차례는 앱 전체에서 하나다: **이름변경 · 온오프(잠금) · 삭제**.
+          ★이름 **바로 아래**에 선다 (사용자 지적 2026-11-11: 칸 맨 아래나 줄 오른쪽 끝에 두니 이름과 멀어 불편했다) */}
+      <span style={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0, marginLeft: -3, ...(wrap ? { marginTop: 1 } : { flexBasis: "100%" }) }}>
         <button data-scene-rename={id} {...rename.btnProps} data-tip={t("cards.rename")} style={iconBtn}>
           {Icon.pencil}
         </button>
