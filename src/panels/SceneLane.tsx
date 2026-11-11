@@ -1422,6 +1422,8 @@ function LineGrip({ dest, w }: { dest: string; w: number }) {
 const EAGER_ROWS = 4;
 /** ★자르지 않고 **끝만 부드럽게 뺀다** — 잘라 두면 줄 가운데서 뚝 끊긴 것처럼 보인다 */
 const HEAD_FADE = "linear-gradient(90deg, #000 0 72%, transparent 100%)";
+/** 세로 띠의 같은 빠짐 — 위에서 아래로 */
+const HEAD_FADE_V = "linear-gradient(180deg, #000 0 72%, transparent 100%)";
 
 /** 씬 세트 카드 하나 — ★스타일·캐릭터 카드와 **같은 생김새**다 (둥근 모서리 + 그라데이션 배너).
  *  ★`overflow: hidden` 을 주지 않는다 — 주면 스크롤 컨테이너가 새로 생겨서 줄 머리의
@@ -1458,10 +1460,12 @@ function CardGroup(p: GroupProps) {
   useLayoutEffect(() => {
     const el = btnsRef.current;
     if (!el) return;
-    setBtnsW(el.offsetWidth);
-    const ro = observeSize(el, () => setBtnsW(el.offsetWidth));
+    // ★세로 띠에서는 묶음이 위아래로 서므로 **높이**가 이름 칸이 비워 둘 길이다
+    const size = () => setBtnsW(p.vert ? el.offsetHeight : el.offsetWidth);
+    size();
+    const ro = observeSize(el, size);
     return () => ro.disconnect();
-  }, []);
+  }, [p.vert]);
   const addLine = (dest: string) => p.onPatch({ lines: addLineDef(p.card, dest) });
   const retarget = (col: LineDef, dest: string) =>
     col.id
@@ -1545,9 +1549,10 @@ function CardGroup(p: GroupProps) {
     <div
       data-scene-card={p.card.id}
       style={{
-        // ★세로 모드에서는 카드가 **세로로 꽉 차고** 폭은 안에 든 기둥만큼이다
+        // ★세로 모드에서는 카드가 **세로로 꽉 차고** 폭은 안에 든 기둥만큼이다.
+        //   ★★배너는 **왼쪽 세로 띠**다 (사용자 결정 2026-11-12, 시안 `docs/vert-fold-mockup.html` B) — 그래서 띠와 몸통이 옆으로 선다
         ...(p.vert
-          ? { minHeight: "100%", display: "flex", flexDirection: "column", flexShrink: 0 }
+          ? { minHeight: "100%", display: "flex", flexDirection: "row", flexShrink: 0 }
           : { minWidth: "100%" }),
         /* ★위아래로 **숨 쉴 자리**를 둔다 (사용자 지시 2026-08-20: 씬 머리줄과 카드가
            딱 붙어 있었다). 카드는 둥근 상자라, 붙어 있으면 머리줄의 선과 모서리가
@@ -1570,20 +1575,30 @@ function CardGroup(p: GroupProps) {
         }}
         style={{
           cursor: "grab",
-          // ★세로 모드에서는 카드가 세로 기둥이라 배너가 그 **폭**을 다 쓴다
-          /* ★★접힌 카드는 배너만 남아 폭을 정할 것이 없다 — 안의 그림·이름·버튼이 전부 `absolute` 라 `100%` 가 0 으로 접혀
-               다시 누를 곳이 사라졌다 (사용자 지적 2026-11-12). 접히면 펼친 가로 모드 배너의 최소 폭을 준다 */
-          ...(p.vert ? { width: p.folded ? 260 : "100%", flexShrink: 0 } : { minWidth: "100%" }),
-          /* ★★세로 모드에서는 위에 붙는다 (사용자 지적 2026-11-12: 그림 목록을 아래로 굴리면 배너가 위로 사라졌다).
-               씬 머리 · 적용 대상 이름 칸은 그 아래(`HEAD_H`)에 붙는다 */
-          ...(p.vert ? { position: "sticky" as const, top: 0, zIndex: 5 } : null),
-          // ★높이를 절반으로 (사용자 지적 2026-08-16: 56 은 너무 두꺼웠다)
-          height: HEAD_H,
           background: BANNER_BG,
-          // ★접히면 머리가 카드의 **마지막 조각**이다 — 아래 모서리도 둥글어야 하고
-          //   아래 테두리는 없어야 한다 (안 그러면 좌우 하단이 각지고 선이 남는다)
-          borderRadius: p.folded ? "11px" : "11px 11px 0 0",
-          borderBottom: p.folded ? undefined : "1px solid var(--line)",
+          ...(p.vert
+            ? {
+                /* ★★세로 모드는 카드 **왼쪽의 세로 띠**다 (사용자 결정 2026-11-12: 위에 눕힌 배너는 접어도 얻는 자리가 없었다 —
+                     카드가 옆으로 늘어서는 모드라 접으면 **폭**이 줄어야 한다). 접으면 띠만 남는다.
+                   ★왼쪽에 붙는다(sticky) — 넓은 카드를 옆으로 굴려도 띠가 보인다. 안쪽은 위에 붙는다 */
+                position: "sticky" as const,
+                left: 0,
+                zIndex: 5,
+                width: HEAD_H,
+                flexShrink: 0,
+                alignSelf: "stretch",
+                borderRadius: p.folded ? "11px" : "11px 0 0 11px",
+                borderRight: p.folded ? undefined : "1px solid var(--line)",
+              }
+            : {
+                minWidth: "100%",
+                // ★높이를 절반으로 (사용자 지적 2026-08-16: 56 은 너무 두꺼웠다)
+                height: HEAD_H,
+                // ★접히면 머리가 카드의 **마지막 조각**이다 — 아래 모서리도 둥글어야 하고
+                //   아래 테두리는 없어야 한다 (안 그러면 좌우 하단이 각지고 선이 남는다)
+                borderRadius: p.folded ? "11px" : "11px 11px 0 0",
+                borderBottom: p.folded ? undefined : "1px solid var(--line)",
+              }),
         }}
       >
         <div
@@ -1594,19 +1609,16 @@ function CardGroup(p: GroupProps) {
                ★★**보이는 폭을 넘지 않는다** (사용자 지적 2026-11-11: 앱을 좁히거나 세로 모드에서 카드가 넓어지면
                  오른쪽 끝의 버튼이 화면 밖으로 나갔다). 두 모드 다 왼쪽에 붙들고(`sticky`) 폭을 `view.cw` 로 자른다 —
                  이름은 보이는 자리 왼쪽 끝, 버튼은 오른쪽 끝에 남는다. 빼는 값은 카드 앞 여백과 카드 테두리다.
-               ★세로 모드에서는 카드 폭을 다 쓰되(`100%`) 보이는 폭에서 멈춘다.
+               ★세로 모드의 띠는 **위에 붙고** 보이는 높이에서 멈춘다 — 그림 목록을 아래로 굴려도 이름과 버튼이 남는다.
                ★★`position` 을 `static` 으로 두면 안 된다 (사용자 지적 2026-08-22: 배너가 화면
                  오른쪽을 통째로 덮었다). 안쪽 그림이 `position:absolute; inset:0` 이라 **여기가 그 기준**이다. */
             position: "sticky" as const,
-            left: 0,
             ...(p.vert
-              ? { width: p.view.cw ? `min(100%, ${p.view.cw - GAP - 2}px)` : "100%" }
-              : { width: p.view.cw ? Math.min(bannerW, p.view.cw - LANE_LEAD - 2) : bannerW }),
-            height: HEAD_H,
+              ? { top: 0, width: "100%", height: p.view.w ? `min(100%, ${p.view.w - 2 * GAP - 2}px)` : "100%" }
+              : { left: 0, width: p.view.cw ? Math.min(bannerW, p.view.cw - LANE_LEAD - 2) : bannerW, height: HEAD_H }),
             overflow: "hidden",
-            // ★세로 모드에서는 배너가 카드 **위**에 눕는다 — 둥근 모서리도 위 두 곳이다
             borderRadius: p.vert
-              ? (p.folded ? "11px" : "11px 11px 0 0")
+              ? (p.folded ? "11px" : "11px 0 0 11px")
               : (p.folded ? "11px 0 0 11px" : "11px 0 0 0"),
           }}
         >
@@ -1620,15 +1632,15 @@ function CardGroup(p: GroupProps) {
               position: "absolute",
               inset: 0,
               pointerEvents: "none",
-              maskImage: HEAD_FADE,
-              WebkitMaskImage: HEAD_FADE,
-              // 그림이 있으면 그림이, 없으면 지금까지처럼 카드 색이 깔린다
-              background: headThumb ? undefined : bannerEmptyFill(grad),
+              maskImage: p.vert ? HEAD_FADE_V : HEAD_FADE,
+              WebkitMaskImage: p.vert ? HEAD_FADE_V : HEAD_FADE,
+              // 그림이 있으면 그림이, 없으면 지금까지처럼 카드 색이 깔린다. ★세로 띠는 그림 모양(가로로 긴 배너)과 맞지 않아 카드 색만 깐다
+              background: headThumb && !p.vert ? undefined : bannerEmptyFill(grad),
               outline: headDrop.over ? "2px solid var(--accent)" : undefined,
               outlineOffset: -2,
             }}
           >
-            {headThumb && (
+            {headThumb && !p.vert && (
               <FittedImg url={headThumb.url} w={bannerW} h={HEAD_H} view={headThumb} />
             )}
           </div>
@@ -1639,21 +1651,20 @@ function CardGroup(p: GroupProps) {
               position: "absolute",
               inset: 0,
               pointerEvents: "none",
-              maskImage: HEAD_FADE,
-              WebkitMaskImage: HEAD_FADE,
-              background: "linear-gradient(180deg, rgba(0,0,0,0) 20%, rgba(0,0,0,0.5) 100%)",
+              maskImage: p.vert ? HEAD_FADE_V : HEAD_FADE,
+              WebkitMaskImage: p.vert ? HEAD_FADE_V : HEAD_FADE,
+              background: `linear-gradient(${p.vert ? 90 : 180}deg, rgba(0,0,0,0) 20%, rgba(0,0,0,0.5) 100%)`,
             }}
           />
           <div
             style={{
               position: "absolute",
-              left: 11,
-              /* ★배너가 보이는 폭으로 좁아지면 이름이 버튼 밑으로 들어가지 않고 잘린다 (버튼 묶음 자리를 비워 둔다) */
-              right: btnsW + 10,
-              top: "50%",
-              transform: "translateY(-50%)",
+              /* ★배너가 보이는 폭으로 좁아지면 이름이 버튼 밑으로 들어가지 않고 잘린다 (버튼 묶음 자리를 비워 둔다).
+                 ★세로 띠에서는 위에서 아래로 — 손잡이 · 이름 차례이고 버튼 묶음은 띠 아래쪽에 선다 */
+              ...(p.vert
+                ? { left: 0, right: 0, top: 8, bottom: btnsW + 12, flexDirection: "column" as const, alignItems: "center" }
+                : { left: 11, right: btnsW + 10, top: "50%", transform: "translateY(-50%)", alignItems: "baseline" }),
               display: "flex",
-              alignItems: "baseline",
               gap: "var(--sp-3)",
               minWidth: 0,
               overflow: "hidden",
@@ -1674,7 +1685,7 @@ function CardGroup(p: GroupProps) {
                 같은 방식이다. ★여는 것은 **연필 단추 하나**다 (사용자 지시 2026-08-30: 편집 단추가
                 있는 이름은 더블클릭으로 안 바꾼다 — 블록 이름과 같은 규칙). */}
             {!rename.editing ? (
-              <b style={{ ...TYPE.cardName, whiteSpace: "nowrap", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+              <b style={{ ...TYPE.cardName, whiteSpace: "nowrap", minWidth: 0, minHeight: 0, overflow: "hidden", textOverflow: "ellipsis", ...(p.vert ? { writingMode: "vertical-rl" as const } : null) }}>
                 {p.card.name}
               </b>
             ) : (
@@ -1682,11 +1693,11 @@ function CardGroup(p: GroupProps) {
                 data-card-name={p.card.id}
                 {...rename.inputProps}
                 style={{
-                  width: 130,
+                  // ★세로 띠에서는 입력칸도 세로로 선다
+                  ...(p.vert ? { writingMode: "vertical-rl" as const, width: 22, height: 130, padding: "4px 0" } : { width: 130, padding: "0 4px" }),
                   background: "rgba(0,0,0,0.45)",
                   border: "1px solid rgba(255,255,255,0.5)",
                   borderRadius: "var(--r-1)",
-                  padding: "0 4px",
                   color: "#fff",
                   ...TYPE.cardName,
                   fontWeight: "var(--w-bold)",
@@ -1700,9 +1711,9 @@ function CardGroup(p: GroupProps) {
             ref={btnsRef}
             style={{
               position: "absolute",
-              right: 5,
-              top: "50%",
-              transform: "translateY(-50%)",
+              ...(p.vert
+                ? { bottom: 6, left: "50%", transform: "translateX(-50%)", flexDirection: "column" as const }
+                : { right: 5, top: "50%", transform: "translateY(-50%)" }),
               display: "flex",
               alignItems: "center",
               gap: 2,
@@ -1711,8 +1722,8 @@ function CardGroup(p: GroupProps) {
             {/* ★한 칸뿐인 카드의 넣을 곳 — 「적용 대상 추가」 왼쪽 (칸이 둘 이상이면 표 머리로 옮겨 간다) */}
             {!p.fold && !p.folded && single && (
               /* ★누르기를 여기서 멈춘다 — 목록 항목은 버튼이 아니라서(body 에 뜨지만 React 이벤트는 이리 올라온다) 배너의 「누르면 접기」에 닿는다 */
-              <span data-banner-dest={p.card.id} onPointerDown={(e) => e.stopPropagation()} style={{ display: "flex", minWidth: 0, marginRight: 2 }}>
-                <LineHead banner set={p.card} col={cols[0]} chars={p.chars} onRetarget={(d) => retarget(cols[0], d)} onRemove={() => removeLine(cols[0])} />
+              <span data-banner-dest={p.card.id} onPointerDown={(e) => e.stopPropagation()} style={{ display: "flex", minWidth: 0, ...(p.vert ? { marginBottom: 2, writingMode: "vertical-rl" as const } : { marginRight: 2 }) }}>
+                <LineHead banner vert={p.vert} set={p.card} col={cols[0]} chars={p.chars} onRetarget={(d) => retarget(cols[0], d)} onRemove={() => removeLine(cols[0])} />
               </span>
             )}
             {/* ★줄 추가 — 넣을 곳을 골라 카드에 줄을 더한다 (카드의 씬 전부에 빈 줄이 생긴다, `lib/sceneLines`).
@@ -1830,7 +1841,7 @@ function CardGroup(p: GroupProps) {
             펼친 씬이 글만큼 자라면 그 높이를 받아 함께 자란다 (`vhs`). 씬 머리처럼 위에 붙는다(sticky) */}
         {showHeads && p.vert && (
           <div data-line-heads={p.card.id} style={{ flexShrink: 0, width: SCENE_W, borderRight: "1px solid var(--line)", background: "var(--panel)" }}>
-            <div style={{ position: "sticky", top: HEAD_H, zIndex: 3, background: "var(--panel)", borderBottom: "1px solid var(--line)" }}>
+            <div style={{ position: "sticky", top: 0, zIndex: 3, background: "var(--panel)", borderBottom: "1px solid var(--line)" }}>
               <div style={{ height: VERT_NAME_H, display: "flex", alignItems: "center", padding: "0 var(--sp-3)", fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>
                 {t("scenes.lineCol")}
               </div>
@@ -2046,7 +2057,7 @@ function SceneRow(
           flexDirection: p.vert ? "column" : "row",
           alignItems: "stretch",
           // ★머리는 시작 쪽에 붙는다 — 아래 모드면 왼쪽, 세로 모드면 위
-          ...(p.vert ? { top: HEAD_H, borderBottom: "1px solid var(--line)" } : { left: 0, borderRight: "1px solid var(--line)" }),
+          ...(p.vert ? { top: 0, borderBottom: "1px solid var(--line)" } : { left: 0, borderRight: "1px solid var(--line)" }),
           /* ★★**강조는 「고른 씬」이 아니라 「지금 치고 있는 칸」이다** (사용자 지시 2026-08-28) —
              그림을 고르면 초점이 그 씬으로 오는데, 그것까지 강조하면 「입력칸이 열렸다」와 「그 씬을 보고 있다」가 같은 모습이 된다. */
           background: expanded ? "var(--accent-bg)" : "var(--surface)",

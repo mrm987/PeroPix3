@@ -48,6 +48,8 @@ export function LineHead(p: {
   onRemove: () => void;
   /** 카드 배너에 놓였나 — 한 칸뿐인 카드는 표 머리 대신 배너에서 고른다 (그림 위라 흰 글자) */
   banner?: boolean;
+  /** 세로 모드의 배너 띠 — 글이 세로로 선다 */
+  vert?: boolean;
 }) {
   const t = useI18n((s) => s.t);
   const main = !p.col.id;
@@ -69,6 +71,7 @@ export function LineHead(p: {
         options={options}
         dashed={miss}
         light={p.banner}
+        vert={p.vert}
         tip={miss ? t(main ? "scenes.destMissMain" : "scenes.destMissLine") : t("scenes.destHint")}
         onChange={(v) => (v === REMOVE ? p.onRemove() : p.onRetarget(v))}
       />
