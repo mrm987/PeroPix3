@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { uniqueName } from "../lib/uniqueName";
 import { useI18n } from "../i18n";
 import { SectionCard } from "../blocks/SectionCard";
-import { LineChecklist, LineHead, SceneCells } from "../panels/SceneCells";
+import { DestName, LineChecklist, LineHead, SceneCells } from "../panels/SceneCells";
 import { addLineDef, columnsOf, dropLineDef, type LineDef } from "../lib/sceneLines";
 import { SectionBody, useThumbView } from "../panels/PromptSections";
 import { PromptOptsBar } from "../panels/PromptOpts";
@@ -205,9 +205,6 @@ function PoseBody({
     col.id
       ? onChange({ lines: (card.lines ?? []).map((l) => (l.id === col.id ? { ...l, dest } : l)) })
       : onChange({ dest: dest === "base" ? undefined : dest });
-  /** 줄 이름 — 칸 왼쪽에 짧게 (고치는 것은 위의 줄 머리다) */
-  const short = (dest: string) =>
-    dest === "base" ? t("scenes.destBase") : dest === "all" ? t("scenes.destAll") : t("scenes.destCharN", { n: Number(dest.slice(1)) });
   return (
     <div style={{ display: "flex", flexDirection: "column", padding: "var(--sp-2) 0" }}>
       {/* ★★줄 구성은 **카드가 정한다** (사용자 결정 2026-11-11, `lib/sceneLines`) — 씬 표의 열 머리와 같은 것을 위에 한 줄로 둔다 */}
@@ -278,7 +275,7 @@ function PoseBody({
                 cols.length > 1 || cols[0].dest !== "base"
                   ? (col) => (
                       <span style={{ width: 62, flexShrink: 0, padding: "5px 4px", fontSize: "var(--text-2xs)", color: "var(--ink-faint)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {short(col.dest)}
+                        <DestName dest={col.dest} />
                       </span>
                     )
                   : undefined

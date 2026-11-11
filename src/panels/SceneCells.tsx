@@ -6,6 +6,7 @@ import { slotBlock, slotBlocksOf } from "../lib/blocks";
 import { blocksAt, columnsOf, freeDests, lineTarget, lineZone, type CellBlocks, type LineDef, type LineSet } from "../lib/sceneLines";
 import { observeSize, useWin } from "../lib/floatWin";
 import { Icon } from "../components/Icon";
+import { CharNo } from "./CharPositioner";
 import { useI18n } from "../i18n";
 
 /** 가로 모드의 씬 칸 폭 — 번호 · 이름(두 줄까지) · 버튼 (사용자 결정 2026-11-11, 시안 `docs/scene-lines-mockup3.html`) */
@@ -20,16 +21,18 @@ export const LINE_HEAD_H = 26;
 /** 줄마다 같은 것을 넘기는 블록 목록 설정 (펴졌나 · 키 이동) */
 type ListOpts = Pick<Parameters<typeof BlockList>[0], "bg" | "onOpen" | "onMore" | "onDone">;
 
-/** 넣을 곳의 이름 — 목록에는 캐릭터 이름까지, 머리에는 짧게 */
-function useDestLabel(chars: { name: string }[]) {
+/** ★★넣을 곳의 이름 — 캐릭터는 **캐릭터 카드의 번호 원과 같은 원**으로 가리킨다 (사용자 지시 2026-11-11).
+ *  이름으로 가리키면 이름을 바꿀 때 무엇이 몇 번인지 헷갈린다. 캐릭터 카드 배너에도 같은 번호가 늘 붙는다 (`PromptSections` 의 `nameTag`). */
+export function DestName(p: { dest: string }) {
   const t = useI18n((s) => s.t);
-  return (dest: string, long: boolean): string => {
-    if (dest === "base") return t("scenes.destBase");
-    if (dest === "all") return t("scenes.destAll");
-    const n = Number(dest.slice(1));
-    const name = chars[n - 1]?.name;
-    return long && name ? t("scenes.destCharName", { n, name }) : t("scenes.destCharN", { n });
-  };
+  if (p.dest === "base") return <>{t("scenes.destBase")}</>;
+  if (p.dest === "all") return <>{t("scenes.destAll")}</>;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, verticalAlign: "middle" }}>
+      {t("scenes.destChar")}
+      <CharNo n={Number(p.dest.slice(1))} size={16} ring={1.2} />
+    </span>
+  );
 }
 
 /** ★★줄 하나의 머리 — 넣을 곳을 바꾸고 줄을 뺀다 (사용자 결정 2026-11-11). 가로 모드는 열 머리, 세로 모드는 줄 이름 칸이다.
@@ -43,14 +46,13 @@ export function LineHead(p: {
   onRemove: () => void;
 }) {
   const t = useI18n((s) => s.t);
-  const label = useDestLabel(p.chars);
   const main = !p.col.id;
   const n = p.chars.length;
   // ★가리킨 캐릭터가 없으면 점선 — 첫 줄은 베이스로 떨어지고 나머지 줄은 안 들어간다 (`lineTarget`)
   const miss = lineTarget(p.col.dest, n, false) === null;
   const options: DropdownOption[] = [
-    { value: p.col.dest, label: label(p.col.dest, true), short: label(p.col.dest, false) },
-    ...freeDests(p.set, n).map((d) => ({ value: d, label: label(d, true), short: label(d, false) })),
+    { value: p.col.dest, label: <DestName dest={p.col.dest} /> },
+    ...freeDests(p.set, n).map((d) => ({ value: d, label: <DestName dest={d} /> })),
     ...(main ? [] : [{ value: REMOVE, label: t("scenes.lineRemove"), sep: true }]),
   ];
   return (
@@ -86,7 +88,6 @@ export function LineChecklist(p: {
 }) {
   const t = useI18n((s) => s.t);
   const win = useWin();
-  const label = useDestLabel(p.chars);
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -212,7 +213,7 @@ export function LineChecklist(p: {
                   >
                     {on && Icon.check}
                   </span>
-                  {label(d, true)}
+                  <DestName dest={d} />
                 </button>
               );
             })}

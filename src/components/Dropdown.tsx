@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./Icon";
 import { useWin } from "../lib/floatWin";
@@ -16,9 +16,10 @@ import { useWin } from "../lib/floatWin";
  *  ★처음 쓰는 자리는 씬 프롬프트 목적지 하나다 — 나머지 `<select>` 들은 보고 나서 차례로. */
 export type DropdownOption = {
   value: string;
-  label: string;
-  /** 닫힌 상자에 쓰는 짧은 이름 (없으면 `label`) — 씬 줄의 넣을 곳은 목록에만 캐릭터 이름을 붙인다 */
-  short?: string;
+  /** 글이거나 그림이 섞인 것 — 씬 표의 넣을 곳은 캐릭터 번호 원을 그린다 (`SceneCells` 의 `DestName`) */
+  label: ReactNode;
+  /** 닫힌 상자에 쓰는 짧은 이름 (없으면 `label`) */
+  short?: ReactNode;
   /** 이 항목 위에 구분선 — 값이 아니라 동작인 항목(「줄 빼기」)을 떼어 놓는다 */
   sep?: boolean;
 };
@@ -56,7 +57,7 @@ export function Dropdown({
   const box = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const cur = options.find((o) => o.value === value);
-  const label = cur?.short ?? cur?.label ?? options[0]?.short ?? options[0]?.label ?? "";
+  const label: ReactNode = cur?.short ?? cur?.label ?? options[0]?.short ?? options[0]?.label ?? "";
 
   const show = () => {
     const r = box.current?.getBoundingClientRect();
