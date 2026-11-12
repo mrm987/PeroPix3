@@ -13,6 +13,12 @@ export const ko: Dict = {
     retrying: "다시 시도하는 중…",
   },
 
+  crash: {
+    title: "화면을 그리다 오류가 났습니다",
+    kept: "저장하지 않은 그림 {n}장은 그대로 남아 있습니다",
+    redraw: "화면 다시 그리기",
+  },
+
   window: {
     minimize: "최소화",
     maximize: "최대화",

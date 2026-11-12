@@ -13,6 +13,12 @@ export const en = {
     retrying: "Trying again…",
   },
 
+  crash: {
+    title: "Something went wrong while drawing the screen",
+    kept: "{n} unsaved images are still here",
+    redraw: "Redraw screen",
+  },
+
   window: {
     minimize: "Minimize",
     maximize: "Maximize",

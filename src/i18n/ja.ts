@@ -13,6 +13,12 @@ export const ja: Dict = {
     retrying: "再試行中…",
   },
 
+  crash: {
+    title: "画面の描画中にエラーが発生しました",
+    kept: "未保存の画像 {n} 枚はそのまま残っています",
+    redraw: "画面を再描画",
+  },
+
   window: {
     minimize: "最小化",
     maximize: "最大化",
