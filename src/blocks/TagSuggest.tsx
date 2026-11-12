@@ -228,12 +228,16 @@ export function useTagSuggest(
   }, [value]);
 
   // ★목록 폭은 내용이 정하므로 그려 본 뒤에야 안다. 창 오른쪽을 넘으면 그만큼 왼쪽으로 민다
+  // ★★목록이 새로 찾아질 때 **한 번만** 민다. 민 결과(`pos.left`)로 다시 돌면 밀어도 오른쪽 끝이 그만큼
+  //   안 따라오는 경우에 50번 넘게 이어져 React 가 화면 전체를 내린다 (제보 2026-11-12, React #185 ·
+  //   창이 바탕색만 남음). 위치는 찾을 때마다 `setItems` 와 함께 새로 잡히므로 `items` 로 충분하다.
   useLayoutEffect(() => {
     const el = list.current;
     if (!open || !el) return;
     const over = el.getBoundingClientRect().right - (win.innerWidth - 10);
-    if (over > 0) setPos((p) => ({ ...p, left: Math.max(10, p.left - over) }));
-  }, [open, items, pos.left, win]);
+    if (over > 0.5) setPos((p) => ({ ...p, left: Math.max(10, p.left - Math.ceil(over)) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, items, win]);
 
   useEffect(() => {
     if (!open) return;
