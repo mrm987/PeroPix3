@@ -9,8 +9,10 @@ import type { Dropped } from "../lib/dropImages";
  *    들어가고, 파일명 자리가 「미저장」이 되며 「파일로 저장」 단추가 뜰 뿐이다
  *    (`index.html:12140-12185`). 3.0 도 같다 — 씬 줄의 **같은 칸**에 들어간다.
  *  ★★**디스크에 기록을 남기지 않는다.** `Rec` 는 파일 경로를 전제로 하고 그 목록은
- *    `records.jsonl` 에 쌓이는데, 미저장 그림에는 파일이 없다. 그래서 여기(메모리)에만 두고
- *    새로고침하면 사라진다 — v2 도 같다.
+ *    `records.jsonl` 에 쌓이는데, 미저장 그림에는 파일이 없다. 그래서 메모리에만 둔다.
+ *  ★★**F5 로 새로고침해도 남는다** (사용자 결정 2026-11-12). 백엔드 프로세스의 메모리에 같은 목록의
+ *    사본을 두고(`/api/previews`) 부팅 때 돌려받는다. 백엔드는 화면을 새로 읽어도 살아 있고, 앱을 끄면
+ *    함께 내려가므로 재실행에서는 사라진다. 디스크에는 여전히 아무것도 안 쓴다.
  *  ★묶는 창구는 여전히 `takesOf` 하나다. 이 스토어가 하는 일은 **목록에 얹는 것**뿐이고
  *    (`withPreviews`), 어느 씬 것인지 판정하는 것은 `takesOf` 가 한다.
  */
@@ -70,6 +72,8 @@ type S = {
 };
 
 let seq = 1;
+/** ★표식이 이번 화면 실행마다 겹치지 않게 한다 — F5 로 돌려받은 `preview:1` 과 새로 만든 `preview:1` 이 같으면 안 된다 */
+const RUN = Math.random().toString(36).slice(2, 7);
 
 export const usePreviews = create<S>((set, get) => ({
   items: [],
@@ -78,7 +82,7 @@ export const usePreviews = create<S>((set, get) => ({
     const take: PreviewTake = {
       // ★저장된 그림과 **같은 자**로 찍는다 — 줄에서 나란히 서야 한다 (`lib/takes.localTs`)
       ts: (m.ts as string) || localTs(),
-      file: `${PREVIEW_PREFIX}${seq++}`,
+      file: `${PREVIEW_PREFIX}${RUN}-${seq++}`,
       scene_group: String(m.scene_group ?? ""),
       cell: (m.cell as string) ?? null,
       scene_group_id: (m.scene_group_id as string) ?? null,
@@ -150,6 +154,51 @@ export const usePreviews = create<S>((set, get) => ({
     return r.record;
   },
 }));
+
+/* ── 백엔드 사본 (F5 새로고침용, 위 머리 주석) ─────────────────────────────
+   ★스토어가 바뀔 때마다 **달라진 것만** 보낸다. 별표처럼 그림이 그대로면 바이트는 빼고 보낸다.
+   ★보내는 순서를 지킨다 — 넣기와 빼기가 엇갈려 도착하면 지운 그림이 되살아난다. */
+let mirrored = new Map<string, PreviewTake>();
+let chain: Promise<unknown> = Promise.resolve();
+
+usePreviews.subscribe((s) => {
+  const now = new Map(s.items.map((x) => [x.file, x]));
+  const put: Record<string, unknown>[] = [];
+  const drop: string[] = [];
+  for (const [f, x] of now) {
+    const old = mirrored.get(f);
+    if (old === x) continue;
+    if (old && old.preview === x.preview) {
+      const { preview: _bytes, ...meta } = x;
+      put.push(meta);
+    } else put.push(x);
+  }
+  for (const f of mirrored.keys()) if (!now.has(f)) drop.push(f);
+  mirrored = now;
+  if (!put.length && !drop.length) return;
+  const body = JSON.stringify({ put, drop });
+  chain = chain
+    .then(() => api("/api/previews/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body }))
+    .catch(() => {});
+});
+
+let restored = false;
+/** 부팅 때 한 번 — 백엔드가 들고 있던 미저장 그림을 돌려받는다 (`App.tsx`). 앱을 새로 켰으면 빈 목록이 온다 */
+export async function restorePreviews(): Promise<void> {
+  if (restored) return;
+  restored = true;
+  try {
+    const r = await api<{ items: PreviewTake[] }>("/api/previews");
+    const have = new Set(usePreviews.getState().items.map((x) => x.file));
+    const back = (r.items ?? []).filter((x) => !have.has(x.file));
+    if (!back.length) return;
+    // ★받은 것은 이미 백엔드에 있으므로 다시 보내지 않는다
+    for (const x of back) mirrored.set(x.file, x);
+    usePreviews.setState({ items: [...back, ...usePreviews.getState().items] });
+  } catch {
+    /* 못 받아도 앱은 뜬다 — 그때는 예전처럼 비어 있을 뿐이다 */
+  }
+}
 
 /** 그 미저장 그림 (파일이면 없다) */
 export const previewOf = (file: string): PreviewTake | undefined =>

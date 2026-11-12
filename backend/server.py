@@ -2380,8 +2380,8 @@ async def upscale_image(body: UpscaleBody):
 class SavePreviewBody(BaseModel):
     """미저장 그림(자동 저장 끔)을 **파일로 남긴다** — v2 `/api/save-preview` 이식.
 
-    ★바이트는 화면이 들고 있다가 되돌려 준다 (v2 도 같다). 서버가 붙들고 있으면 안 누른
-      미리보기의 몇 MB 가 계속 쌓인다 — 그리고 그것은 재시작으로 조용히 사라진다."""
+    ★바이트는 화면이 들고 있다가 되돌려 준다 (v2 도 같다). 서버의 사본(`_PREVIEWS`)은 F5 로
+      화면을 새로 읽을 때 돌려주는 용도일 뿐이고, 저장은 언제나 화면이 보낸 바이트로 한다."""
 
     workspace: str
     #: 이미 **최종 포맷으로 인코딩된** 바이트다 (`_generate_one` 이 변환까지 마치고 넘겼다)
@@ -2446,6 +2446,41 @@ async def save_preview(body: SavePreviewBody):
     # ★레코드를 통째로 돌려준다 — 화면이 목록을 다시 읽지 않고 한 줄만 얹으면 된다 (업스케일과 같다).
     #   ★무거운 것은 빼고 준다 (업스케일과 같은 규칙) — 목록은 `env` 를 읽지 않는다.
     return {"ok": True, "file": rel, "record": {k: v for k, v in rec.items() if k not in HEAVY_REC}}
+
+
+# ── 미저장 그림의 사본 (F5 새로고침용) ─────────────────────────────
+#: ★화면 스토어(`src/store/previews.ts`)를 그대로 비춘다 (사용자 결정 2026-11-12). 화면을 새로 읽어도
+#:  이 프로세스는 살아 있어 돌려줄 수 있고, 앱을 끄면 함께 사라진다. **디스크에는 안 쓴다** — 자동 저장을 끈 뜻이다.
+#: ★상한이 없다 — 화면 쪽 목록에도 없고, 사용자가 지우거나 저장하면 양쪽에서 함께 빠진다.
+_PREVIEWS: dict[str, dict] = {}
+
+
+class PreviewSyncBody(BaseModel):
+    #: 새로 생기거나 바뀐 것. 그림이 그대로면 `preview`(바이트)가 빠진 채 온다
+    put: list[dict] = []
+    drop: list[str] = []
+
+
+@app.get("/api/previews")
+async def previews_list():
+    return {"items": list(_PREVIEWS.values())}
+
+
+@app.post("/api/previews/sync")
+async def previews_sync(body: PreviewSyncBody):
+    for f in body.drop:
+        _PREVIEWS.pop(f, None)
+    for it in body.put:
+        f = it.get("file")
+        if not isinstance(f, str):
+            continue
+        if "preview" not in it:
+            old = _PREVIEWS.get(f)
+            if old is None:
+                continue
+            it = {**it, "preview": old["preview"]}
+        _PREVIEWS[f] = it
+    return {"ok": True, "n": len(_PREVIEWS)}
 
 
 # ── 큐 + WebSocket ────────────────────────────────────────────────

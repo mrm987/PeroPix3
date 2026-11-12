@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "./lib/backend";
 import { mark, flushBootTime } from "./lib/bootTime";
 import { watchErrors } from "./lib/report";
+import { restorePreviews } from "./store/previews";
 import { headBtn, Shell } from "./app/Shell";
 import { TitleBar } from "./app/TitleBar";
 import { WindowFrame } from "./app/WindowFrame";
@@ -223,6 +224,8 @@ export function App() {
             return () => {};
           });
           await initWs();
+          // ★F5 로 새로고침했으면 백엔드가 들고 있던 미저장 그림을 돌려받는다 (`store/previews`)
+          await restorePreviews();
           mark("워크스페이스");
           // ★이미지 편집의 남겨 둔 캔버스를 뒤에서 되살린다. 백엔드가 뜬 것을 확인한 뒤라야 한다 (못 읽으면 빈 상태로 덮어쓴다)
           void useEditor.getState().hydrate();
