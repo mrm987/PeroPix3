@@ -2,6 +2,8 @@ mod backend;
 mod window_edge;
 mod update;
 mod winstate;
+#[cfg(windows)]
+mod webview_crash;
 
 #[cfg(windows)]
 use std::path::{Path, PathBuf};
@@ -438,6 +440,11 @@ pub fn run() {
                     }
                     Err(e) => backend::log_line(&format!("[edge] 창 손잡이를 못 얻었다: {e}")),
                 }
+            }
+            // ★렌더러가 죽어 화면이 비면 로그에 남기고 다시 불러온다 (`webview_crash.rs`)
+            #[cfg(windows)]
+            if let Some(w) = app.get_webview_window("main") {
+                webview_crash::watch(&w);
             }
             Ok(())
         })

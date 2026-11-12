@@ -29,6 +29,10 @@ windows-sys = { version = "0.59", features = [
   # ★최대화 창을 커서 아래로 한 번에 복원해 끌기 시작한다 (window_edge.rs 의 drag_restore)
   "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi",
 ] }
+# ★WebView2 의 하위 프로세스가 죽었을 때를 받는다 (webview_crash.rs). tauri(wry) 가 이미 쓰는 크레이트라 새로 받는 것이 없다.
+#   ★tauri 를 올려서 wry 쪽 버전이 바뀌면 같은 버전으로 맞춘다 (안 맞으면 `controller()` 의 형이 달라 컴파일이 실패한다)
+webview2-com = "0.38"
+windows-core = "0.61"
 
 # ★맥 — 같은 폴더 잠금(`flock`)과 백엔드를 프로세스 그룹째 내리기(`kill`). tauri 가 이미 끌어오는 크레이트다
 [target.'cfg(unix)'.dependencies]
