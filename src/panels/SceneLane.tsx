@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { DropLine } from "../components/DropLine";
 import { useGen } from "../store/gen";
@@ -1365,6 +1365,9 @@ type GroupProps = {
 
 /** 씬 세트 머리의 높이 — ★절반으로 줄였다 (사용자 지적 2026-08-16: 56 은 너무 두꺼웠다) */
 const HEAD_H = 28;
+/** 가로 배너에서 이름과 버튼이 차지하는 앞쪽 폭 — 칸이 하나인 카드의 기본 머리 폭(씬 칸 92 + 베이스 칸 200 + 경계 1)이다.
+ *  칸 수를 따라 배너가 늘던 때(2026-11-16 이전) 한 칸 카드의 버튼이 서던 자리를 모든 카드의 자리로 삼았다 */
+const BANNER_ROW_W = 293;
 /** 카드 줄 앞의 여백 — 카드가 왼쪽 벽에 붙지 않게 (가로 모드). 머리 폭 손잡이가 이 값으로 경계선을 찾는다 */
 const LANE_LEAD = 8;
 
@@ -1454,18 +1457,6 @@ function CardGroup(p: GroupProps) {
    *    고를 곳 하나 때문에 표 머리가 한 줄을 통째로 차지했다) */
   const single = cols.length === 1;
   const showHeads = !p.fold && !single;
-  /** 배너 오른쪽 버튼 묶음의 폭 — 이름이 그 밑으로 들어가지 않고 잘리게 비워 둔다 (넣을 곳 드롭다운이 있으면 넓어진다) */
-  const btnsRef = useRef<HTMLDivElement>(null);
-  const [btnsW, setBtnsW] = useState(82);
-  useLayoutEffect(() => {
-    const el = btnsRef.current;
-    if (!el) return;
-    // ★세로 띠에서는 묶음이 위아래로 서므로 **높이**가 이름 칸이 비워 둘 길이다
-    const size = () => setBtnsW(p.vert ? el.offsetHeight : el.offsetWidth);
-    size();
-    const ro = observeSize(el, size);
-    return () => ro.disconnect();
-  }, [p.vert]);
   const addLine = (dest: string) => p.onPatch({ lines: addLineDef(p.card, dest) });
   const retarget = (col: LineDef, dest: string) =>
     col.id
@@ -1477,8 +1468,16 @@ function CardGroup(p: GroupProps) {
     pushUndo(t("scenes.lineRemove"), () => p.onPatch(before), `scene-${p.card.cells[0]?.id ?? p.card.id}`);
     p.onPatch(dropLineDef(p.card, p.card.cells, col.id));
   };
-  /** 가로 모드의 배너 폭 — 머리 폭을 따르되, 프롬프트를 접어 머리가 씬 칸만 남아도 이름과 버튼이 들어갈 만큼은 둔다 */
-  const bannerW = Math.max(p.headw, 260);
+  /** 가로 모드의 배너 폭 — **보이는 씬 영역의 폭**이다. 배경(카드 색·그림)이 그 폭을 다 덮는다.
+   *  ★★카드의 칸 수를 따르지 않는다 (사용자 지적 2026-11-16: 머리 폭을 따르던 때는 칸이 하나인 카드와
+   *    여럿인 카드의 배너 길이·버튼 자리가 서로 달라, 접어 둔 카드들이 들쭉날쭉했다).
+   *  폭을 아직 못 잰 첫 그림에서만 머리 폭으로 떨어진다 */
+  const bannerW = p.view.cw ? p.view.cw - LANE_LEAD - 2 : Math.max(p.headw, 260);
+  /** 이름과 버튼이 차지하는 앞쪽 폭 — 버튼 묶음의 **오른쪽 끝이 모든 카드에서 이 자리**다.
+   *  ★★두 요구를 함께 맞춘다 (사용자 지적 2026-11-16): 버튼이 이름에서 멀리(배너 오른쪽 끝) 가지 않고,
+   *    칸 수·이름 길이와 상관없이 카드마다 같은 자리에 선다. 이름이 길면 버튼 앞에서 「…」로 줄어든다.
+   *  보이는 폭이 이보다 좁으면 보이는 폭을 따른다 */
+  const rowW = Math.min(BANNER_ROW_W, bannerW);
   /** ★세로 모드에서 펼친 씬의 줄 높이 — 줄 이름 칸과 다른 씬의 칸이 이 높이에 맞춘다 (`SceneCells` 의 `onLineHs`) */
   const [vhs, setVhs] = useState<number[] | null>(null);
   const heights = cols.map((_, k) => Math.max(LINE_H, vhs?.[k] ?? 0));
@@ -1603,12 +1602,12 @@ function CardGroup(p: GroupProps) {
       >
         <div
           style={{
-            /* ★★폭은 **줄 머리와 같은 값**이어야 한다 (사용자 지적 2026-08-19).
-               상수 302 로 박혀 있었는데 줄 머리는 사용자가 끄는 값이라(지금은 줄마다의 폭 `laneLineW`),
-               그림이 끝나는 자리와 아래 줄들의 경계가 어긋나 **가운데서 잘린 것처럼** 보였다.
+            /* ★★가로 모드의 폭은 **보이는 씬 영역 폭**이다 (`bannerW`, 사용자 지적 2026-11-16: 머리 폭을 따르던 때는
+                 칸 수에 따라 카드마다 배너 길이와 버튼 자리가 달랐다). 예전에는 줄 머리 폭에 맞췄는데(2026-08-19: 상수 302 가
+                 줄 경계와 어긋나 가운데서 잘린 것처럼 보였다), 보이는 폭 전체를 덮으면 중간에서 끝날 일 자체가 없다.
                ★★**보이는 폭을 넘지 않는다** (사용자 지적 2026-11-11: 앱을 좁히거나 세로 모드에서 카드가 넓어지면
-                 오른쪽 끝의 버튼이 화면 밖으로 나갔다). 두 모드 다 왼쪽에 붙들고(`sticky`) 폭을 `view.cw` 로 자른다 —
-                 이름은 보이는 자리 왼쪽 끝, 버튼은 오른쪽 끝에 남는다. 빼는 값은 카드 앞 여백과 카드 테두리다.
+                 오른쪽 끝의 버튼이 화면 밖으로 나갔다). 왼쪽에 붙들고(`sticky`) 폭을 `view.cw` 에서 잰다 —
+                 이름과 버튼은 보이는 자리 안에 남는다. 빼는 값은 카드 앞 여백과 카드 테두리다.
                ★세로 모드의 띠는 **위에 붙고** 보이는 높이에서 멈춘다 — 그림 목록을 아래로 굴려도 이름과 버튼이 남는다.
                ★★`position` 을 `static` 으로 두면 안 된다 (사용자 지적 2026-08-22: 배너가 화면
                  오른쪽을 통째로 덮었다). 안쪽 그림이 `position:absolute; inset:0` 이라 **여기가 그 기준**이다. */
@@ -1625,7 +1624,16 @@ function CardGroup(p: GroupProps) {
                   alignItems: "center",
                   padding: "8px 0",
                 }
-              : { left: 0, width: p.view.cw ? Math.min(bannerW, p.view.cw - LANE_LEAD - 2) : bannerW, height: HEAD_H }),
+              : {
+                  left: 0,
+                  width: bannerW,
+                  height: HEAD_H,
+                  /* ★★안은 **손잡이 · 이름 · 버튼**이 한 줄이고, 버튼 묶음은 앞쪽 `rowW` 의 오른쪽 끝에 붙는다 (`rowW` 의 ★★주).
+                       배경 겹은 `inset: 0` 이라 오른쪽 여백과 상관없이 배너 끝까지 덮는다 */
+                  display: "flex",
+                  alignItems: "center",
+                  padding: `0 ${bannerW - rowW + 5}px 0 11px`,
+                }),
             overflow: "hidden",
             borderRadius: p.vert
               ? (p.folded ? "11px" : "11px 0 0 11px")
@@ -1668,11 +1676,10 @@ function CardGroup(p: GroupProps) {
           />
           <div
             style={{
-              /* ★배너가 보이는 폭으로 좁아지면 이름이 버튼 밑으로 들어가지 않고 잘린다 (버튼 묶음 자리를 비워 둔다).
-                 ★세로 띠에서는 흐름을 따른다 — 손잡이 · 이름 다음에 버튼 묶음이 곧바로 온다 */
+              /* ★두 모드 다 흐름을 따른다 — 손잡이 · 이름 다음에 버튼 묶음이 온다. 배너가 좁아지면 이름이 먼저 줄어 잘린다 */
               ...(p.vert
                 ? { position: "relative" as const, flex: "0 1 auto", minHeight: 0, flexDirection: "column" as const, alignItems: "center" }
-                : { position: "absolute" as const, left: 11, right: btnsW + 10, top: "50%", transform: "translateY(-50%)", alignItems: "baseline" }),
+                : { position: "relative" as const, flex: "0 1 auto", marginRight: "var(--sp-3)", alignItems: "baseline" }),
               display: "flex",
               gap: "var(--sp-3)",
               minWidth: 0,
@@ -1717,13 +1724,13 @@ function CardGroup(p: GroupProps) {
           {/* ★카드 버튼은 그 카드의 **씬을 한꺼번에** 잠그고 켠다 (사용자 지시 2026-10-28: 전부 잠그고 몇 개만 켜기).
               카드가 잠겨 보이는 것은 씬이 전부 잠겼을 때뿐이라, 씬 하나를 켜면 카드 잠금이 저절로 풀린다 (`cardLocked`) */}
           <div
-            ref={btnsRef}
             style={{
               ...(p.vert
-                /* ★이름과의 간격은 가로 모드 배너와 비슷하게 (사용자 지적 2026-11-12: 이름에 딱 붙어 있었다).
-                     가로 모드의 한 칸 카드에서 이름 끝부터 첫 버튼까지 55px 이다 (게스트 측정). 자리가 모자라면 이름이 먼저 줄어든다 */
+                /* ★세로 띠: 이름과의 간격은 가로 모드 배너와 비슷하게 (사용자 지적 2026-11-12: 이름에 딱 붙어 있었다).
+                     자리가 모자라면 이름이 먼저 줄어든다.
+                   ★가로 배너: 앞쪽 `rowW` 의 오른쪽 끝에 붙는다 (`rowW` 의 ★★주) */
                 ? { position: "relative" as const, flexShrink: 0, marginTop: 55, flexDirection: "column" as const }
-                : { position: "absolute" as const, right: 5, top: "50%", transform: "translateY(-50%)" }),
+                : { position: "relative" as const, flexShrink: 0, marginLeft: "auto" }),
               display: "flex",
               alignItems: "center",
               gap: 2,
