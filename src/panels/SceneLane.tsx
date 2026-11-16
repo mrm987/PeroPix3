@@ -1365,7 +1365,7 @@ type GroupProps = {
 
 /** 씬 세트 머리의 높이 — ★절반으로 줄였다 (사용자 지적 2026-08-16: 56 은 너무 두꺼웠다) */
 const HEAD_H = 28;
-/** 가로 배너에서 이름과 버튼이 차지하는 앞쪽 폭 — 칸이 하나인 카드의 기본 머리 폭(씬 칸 92 + 베이스 칸 200 + 경계 1)이다.
+/** 배너에서 이름과 버튼이 차지하는 앞쪽 길이 (가로 배너는 폭, 세로 띠는 높이) — 칸이 하나인 카드의 기본 머리 폭(씬 칸 92 + 베이스 칸 200 + 경계 1)이다.
  *  칸 수를 따라 배너가 늘던 때(2026-11-16 이전) 한 칸 카드의 버튼이 서던 자리를 모든 카드의 자리로 삼았다 */
 const BANNER_ROW_W = 293;
 /** 카드 줄 앞의 여백 — 카드가 왼쪽 벽에 붙지 않게 (가로 모드). 머리 폭 손잡이가 이 값으로 경계선을 찾는다 */
@@ -1618,7 +1618,7 @@ function CardGroup(p: GroupProps) {
                   width: "100%",
                   height: p.view.w ? `min(100%, ${p.view.w - 2 * GAP - 2}px)` : "100%",
                   /* ★★띠 안은 위에서부터 **손잡이 · 이름 · 버튼**이 이어진다 (사용자 지적 2026-11-12: 가로 모드처럼 버튼이 이름 곁에).
-                       이름이 길면 이름이 먼저 줄어든다 */
+                       버튼 자리는 모든 띠에서 같다 (아래 앞쪽 묶음의 ★주) */
                   display: "flex",
                   flexDirection: "column" as const,
                   alignItems: "center",
@@ -1674,11 +1674,21 @@ function CardGroup(p: GroupProps) {
               background: `linear-gradient(${p.vert ? 90 : 180}deg, rgba(0,0,0,0) 20%, rgba(0,0,0,0.5) 100%)`,
             }}
           />
+          {/* ★세로 띠의 앞쪽 — 손잡이 · 이름 · 버튼을 띠 위쪽 `BANNER_ROW_W` 안에 담는다. 버튼은 그 아래 끝에 붙어
+              **모든 띠에서 같은 높이**에 온다 (가로 배너의 `rowW` 와 같은 규칙, 사용자 지시 2026-11-16).
+              띠가 그보다 짧으면 함께 줄고, 이름이 먼저 줄어든다. 가로 배너에서는 `contents` 라 없는 것과 같다 */}
+          <div
+            style={
+              p.vert
+                ? { position: "relative", flex: `0 1 ${BANNER_ROW_W - 8}px`, minHeight: 0, display: "flex", flexDirection: "column", alignItems: "center" }
+                : { display: "contents" }
+            }
+          >
           <div
             style={{
               /* ★두 모드 다 흐름을 따른다 — 손잡이 · 이름 다음에 버튼 묶음이 온다. 배너가 좁아지면 이름이 먼저 줄어 잘린다 */
               ...(p.vert
-                ? { position: "relative" as const, flex: "0 1 auto", minHeight: 0, flexDirection: "column" as const, alignItems: "center" }
+                ? { position: "relative" as const, flex: "0 1 auto", minHeight: 0, marginBottom: "var(--sp-3)", flexDirection: "column" as const, alignItems: "center" }
                 : { position: "relative" as const, flex: "0 1 auto", marginRight: "var(--sp-3)", alignItems: "baseline" }),
               display: "flex",
               gap: "var(--sp-3)",
@@ -1726,10 +1736,9 @@ function CardGroup(p: GroupProps) {
           <div
             style={{
               ...(p.vert
-                /* ★세로 띠: 이름과의 간격은 가로 모드 배너와 비슷하게 (사용자 지적 2026-11-12: 이름에 딱 붙어 있었다).
-                     자리가 모자라면 이름이 먼저 줄어든다.
-                   ★가로 배너: 앞쪽 `rowW` 의 오른쪽 끝에 붙는다 (`rowW` 의 ★★주) */
-                ? { position: "relative" as const, flexShrink: 0, marginTop: 55, flexDirection: "column" as const }
+                /* ★버튼은 앞쪽 자리의 끝에 붙는다 — 가로 배너는 `rowW` 의 오른쪽 끝, 세로 띠는 `BANNER_ROW_W` 의 아래 끝.
+                     칸 수·이름 길이와 상관없이 카드마다 같은 자리다 (사용자 지시 2026-11-16) */
+                ? { position: "relative" as const, flexShrink: 0, marginTop: "auto", flexDirection: "column" as const }
                 : { position: "relative" as const, flexShrink: 0, marginLeft: "auto" }),
               display: "flex",
               alignItems: "center",
@@ -1815,6 +1824,7 @@ function CardGroup(p: GroupProps) {
             >
               {Icon.close12}
             </button>
+          </div>
           </div>
         </div>
       </div>
