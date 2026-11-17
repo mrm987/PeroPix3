@@ -1185,6 +1185,8 @@ export const en = {
     convertedAll: "Converted {n}",
     converted: "{n} converted · {f} failed",
     noResult: "The server returned no result",
+    convertStopped: "Cancelled after converting {n}. {m} left unconverted",
+    convertStoppedBad: "Cancelled after converting {n} ({f} failed). {m} left unconverted",
     up: "Up",
     down: "Down",
     all: "All",
@@ -1277,6 +1279,7 @@ export const en = {
     scanning: "Scanning {n} / {total}",
     scanningOne: "Scanning",
     saving: "Saving {n} / {total}",
+    saveStopped: "Cancelled after saving {n}. The other {m} are still in the Editing tab",
   },
 
   act: {

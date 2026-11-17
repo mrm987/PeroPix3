@@ -1183,6 +1183,8 @@ export const ja: Dict = {
     convertedAll: "{n}枚を変換しました",
     converted: "{n}枚変換 · {f}枚失敗",
     noResult: "サーバーが結果を返しませんでした",
+    convertStopped: "{n}枚を変換してキャンセルしました。残りの{m}枚は変換していません",
+    convertStoppedBad: "{n}枚を変換・{f}枚失敗してキャンセルしました。残りの{m}枚は変換していません",
     up: "上へ",
     down: "下へ",
     all: "全選択",
@@ -1275,6 +1277,7 @@ export const ja: Dict = {
     scanning: "検出中 {n} / {total}",
     scanningOne: "検出中",
     saving: "保存中 {n} / {total}",
+    saveStopped: "{n}枚を保存してキャンセルしました。残りの{m}枚は検閲中タブにあります",
   },
 
   act: {

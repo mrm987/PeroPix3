@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { t } from "../i18n";
 import { api, backendUrl } from "../lib/backend";
+import { toast } from "./toast";
 import { CensorRenderer, type CoverSettings, type Scene } from "../lib/censorRender.ts";
 import {
   burnBoxes, clearMask, emptyRect, floodErase, isEmpty, makeMask, methodIndex, remap, restore, snapshot, stamp, stroke,
@@ -276,6 +277,8 @@ type S = Saved & {
   busy: boolean;
   /** 여러 장을 도는 동안의 진행 (전체 검열 · 일괄 저장) */
   progress: { done: number; total: number; what: "scan" | "save" } | null;
+  /** 일괄 저장 중에 「취소」를 눌렀나 — 지금 저장하는 한 장은 마치고 다음 장부터 멈춘다 */
+  stopping: boolean;
   /** ★「전체 검열」을 한 번 돌렸나. 안 돌린 채로 검열 중 탭에 들어가면 문턱 미달·꺼 둔 박스가
    *  그대로 편집 대상이 되어 무엇을 가리는지 알 수 없다 (v2 도 그때까지 탭을 숨겼다) */
   staged: boolean;
@@ -303,6 +306,8 @@ type S = Saved & {
   scan: () => Promise<void>;
   scanAll: () => Promise<void>;
   saveAll: () => Promise<void>;
+  /** 일괄 저장을 멈춘다 (`stopping`) */
+  stopSave: () => void;
   saveOne: () => Promise<void>;
   cancelProcessing: () => void;
 
@@ -354,6 +359,7 @@ export const useCensor = create<S>((set, get) => ({
   scanning: false,
   busy: false,
   progress: null,
+  stopping: false,
   staged: false,
   error: null,
 
@@ -642,10 +648,16 @@ export const useCensor = create<S>((set, get) => ({
   async saveAll() {
     const s = get();
     if (s.busy || !s.images.length) return;
-    set({ busy: true, error: null, progress: { done: 0, total: s.images.length, what: "save" } });
+    set({ busy: true, stopping: false, error: null, progress: { done: 0, total: s.images.length, what: "save" } });
     const made: CensorImage[] = [];
     const saved = new Set<string>();
+    /** 「취소」로 멈췄나 — 저장 중인 한 장은 끝까지 쓰고(반쯤 쓴 파일을 남기지 않는다) 다음 장 앞에서 멈춘다 */
+    let stopped = false;
     for (let i = 0; i < s.images.length; i++) {
+      if (get().stopping) {
+        stopped = true;
+        break;
+      }
       const im = s.images[i];
       try {
         /* ★★**화면이 굽는다.** 지금 보고 있지 않은 장도 여기서 원본 크기로 한 장 그린다
@@ -674,6 +686,8 @@ export const useCensor = create<S>((set, get) => ({
     const kept = { ...get().boxes };
     const keptPaint = { ...get().paint };
     for (const im of s.images) {
+      // ★취소로 멈췄으면 저장하지 못한 장의 편집은 남긴다 — 검열 중 탭에서 이어서 저장한다
+      if (stopped && !saved.has(im.id)) continue;
       delete kept[im.id];
       delete keptPaint[im.id];
     }
@@ -682,8 +696,26 @@ export const useCensor = create<S>((set, get) => ({
        누를 때 **지난번 것까지 다시 찾고 다시 저장한다** — 검열 후 탭에 옛 장이 또 뜨고, 폴더에는
        `_censored_2` 가 쌓인다. 저장에 실패한 장만 남겨 다시 돌릴 수 있게 한다. */
     const images = get().images.filter((im) => !saved.has(im.id));
-    set({ after: made, afterIdx: -1, images, idx: images.length ? 0 : -1, busy: false, progress: null, staged: false, boxes: kept, paint: keptPaint, undos: [] });
+    set({
+      after: made,
+      afterIdx: -1,
+      images,
+      idx: images.length ? 0 : -1,
+      busy: false,
+      stopping: false,
+      progress: null,
+      // ★취소로 멈췄으면 남은 장이 검열 중 판으로 남는다 (`staged` 가 그 판이 있다는 표시다, `setTab` 의 ★★주)
+      staged: stopped && images.length > 0,
+      boxes: kept,
+      paint: keptPaint,
+      undos: [],
+    });
+    if (stopped) toast(t("censor.saveStopped", { n: made.length, m: images.length }));
     get().setTab("after");
+  },
+
+  stopSave() {
+    if (get().progress?.what === "save") set({ stopping: true });
   },
 
   /** 검열 후 목록을 비운다 — 파일은 그대로다. 결과를 다 봤으면 다음 판을 깨끗한 화면에서 (사용자 지시 2026-09-06) */

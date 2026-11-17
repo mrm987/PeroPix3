@@ -373,9 +373,29 @@ export function CensorSide() {
               {Icon.check}
               {t("censor.complete")}
             </button>
-            <button data-censor-cancel onClick={() => c.cancelProcessing()} disabled={c.busy} style={{ ...box, padding: "var(--sp-2)" }}>
-              {t("censor.cancel")}
-            </button>
+            {/* ★★저장하는 동안에는 **저장을 멈추는** 취소다 (사용자 지시 2026-11-17). 지금 저장하는 한 장은 마치고
+                다음 장 앞에서 멈춘다 — 생성 큐의 취소와 같은 규칙이다. 그 밖에는 검열 중이던 판을 버리는 취소다 */}
+            {c.progress?.what === "save" ? (
+              <button
+                key="stop"
+                data-censor-stop
+                onClick={() => c.stopSave()}
+                disabled={c.stopping}
+                style={{
+                  ...box,
+                  padding: "var(--sp-2)",
+                  color: c.stopping ? "var(--ink-ghost)" : "var(--err-ink)",
+                  // ★테두리는 통째로 준다 — `borderColor` 만 덮으면 풀릴 때 색이 빠진다 (`censor/ui.tsx` 의 ★★주)
+                  border: `1px solid ${c.stopping ? "var(--line)" : "var(--err)"}`,
+                }}
+              >
+                {c.stopping ? t("queue.cancelling") : t("censor.cancel")}
+              </button>
+            ) : (
+              <button key="cancel" data-censor-cancel onClick={() => c.cancelProcessing()} disabled={c.busy} style={{ ...box, padding: "var(--sp-2)" }}>
+                {t("censor.cancel")}
+              </button>
+            )}
           </>
         )}
         {c.tab === "after" && (

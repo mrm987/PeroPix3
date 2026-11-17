@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { useI18n } from "../../i18n";
 import { api } from "../../lib/backend";
@@ -69,6 +69,10 @@ export function ConvertTool() {
   const [busy, setBusy] = useState(false);
   /** 몇 장까지 끝났나 — 진행바가 이것만 본다 (v2 `convertProgressText` 의 `n / total`) */
   const [done, setDone] = useState(0);
+  /** 「취소」를 눌렀나 — 지금 변환하는 한 장은 마치고 다음 장 앞에서 멈춘다 (생성 큐의 취소와 같은 규칙).
+   *  ★돌고 있는 `run` 이 읽어야 하므로 ref 다. 화면은 `stopping` 을 본다 */
+  const stopRef = useRef(false);
+  const [stopping, setStopping] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
   const [probes, setProbes] = useState<Probe[]>([]);
   /* ★★「끝나면 폴더 열기」는 걷었다 (사용자 지시 2026-09-07). 그 자리에 **지금 옵션으로 저장될 위치**와
@@ -173,9 +177,12 @@ export function ConvertTool() {
     setBusy(true);
     setDone(0);
     setRows([]);
+    stopRef.current = false;
+    setStopping(false);
     const out: Row[] = [];
     try {
       for (let i = 0; i < items.length; i++) {
+        if (stopRef.current) break;
         try {
           const r = await api<{ results: { saved?: string; error?: string; ok: boolean }[]; ok: number }>(
             "/api/tools/convert",
@@ -213,16 +220,26 @@ export function ConvertTool() {
       const bad = out.length - ok;
       // ★첫 실패의 까닭을 토스트에도 싣는다 (위 ★주) — 숫자만으로는 왜 실패했는지 모른다
       const why = out.find((r) => r.error)?.error;
+      const rest = items.length - out.length;
       /* ★★**다 됐으면 「실패」라는 낱말을 꺼내지 않는다** (사용자 제보 2026-09-10: *"일괄변환에서
          변환 성공했는데 실패라고 뜸"*). 옛 문구는 언제나 「(실패 0)」을 달고 나와서, 한 장도
          안 깨진 판에서도 실패를 알리는 것으로 읽혔다. 실패가 있을 때만 그 칸을 낸다. */
-      toast(
-        bad ? t("tools.converted", { n: ok, f: bad }) + (why ? ` · ${why}` : "") : t("tools.convertedAll", { n: ok }),
-        bad ? "warn" : "ok",
-      );
+      if (rest > 0)
+        toast(
+          bad
+            ? t("tools.convertStoppedBad", { n: ok, f: bad, m: rest }) + (why ? ` · ${why}` : "")
+            : t("tools.convertStopped", { n: ok, m: rest }),
+          bad ? "warn" : "ok",
+        );
+      else
+        toast(
+          bad ? t("tools.converted", { n: ok, f: bad }) + (why ? ` · ${why}` : "") : t("tools.convertedAll", { n: ok }),
+          bad ? "warn" : "ok",
+        );
       if (ok) void useFiles.getState().reload();
     } finally {
       setBusy(false);
+      setStopping(false);
     }
   };
 
@@ -537,6 +554,26 @@ export function ConvertTool() {
           {Icon.refresh}
           {t("tools.runConvert", { n: items.length })}
         </button>
+        {/* ★★변환하는 동안만 선다 (사용자 지시 2026-11-17) — 지금 변환하는 한 장은 마치고 멈춘다.
+            모양은 자동 검열의 저장 취소와 같다 */}
+        {busy && (
+          <button
+            data-convert-stop
+            onClick={() => {
+              stopRef.current = true;
+              setStopping(true);
+            }}
+            disabled={stopping}
+            style={{
+              ...box,
+              padding: "var(--sp-2)",
+              color: stopping ? "var(--ink-ghost)" : "var(--err-ink)",
+              border: `1px solid ${stopping ? "var(--line)" : "var(--err)"}`,
+            }}
+          >
+            {stopping ? t("queue.cancelling") : t("queue.cancel")}
+          </button>
+        )}
       </div>
 
       {/* 끌고 있는 줄의 잔상 — 브라우저가 안 만들어 주므로 우리가 그린다 (useReorder 주석) */}

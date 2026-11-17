@@ -1211,6 +1211,9 @@ export const ko: Dict = {
     converted: "{n}장 변환 · {f}장 실패",
     /** 서버가 그 장의 결과를 안 줬을 때 — 까닭 없는 「실패」를 남기지 않는다 */
     noResult: "서버가 결과를 주지 않았습니다",
+    /** 변환 중에 취소했을 때 — 지금 변환하던 한 장까지 마친다 */
+    convertStopped: "{n}장 변환 후 취소했습니다. 남은 {m}장은 변환하지 않았습니다",
+    convertStoppedBad: "{n}장 변환 · {f}장 실패 후 취소했습니다. 남은 {m}장은 변환하지 않았습니다",
     up: "위로",
     down: "아래로",
     all: "전체",
@@ -1303,6 +1306,8 @@ export const ko: Dict = {
     scanning: "찾는 중 {n} / {total}",
     scanningOne: "찾는 중",
     saving: "저장 중 {n} / {total}",
+    /** 일괄 저장을 취소했을 때 — 못 간 장은 편집한 채로 검열 중 탭에 남는다 */
+    saveStopped: "{n}장 저장 후 취소했습니다. 남은 {m}장은 검열 중 탭에 있습니다",
   },
 
   act: {
