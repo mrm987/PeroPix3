@@ -1278,6 +1278,7 @@ export const ja: Dict = {
     scanningOne: "検出中",
     saving: "保存中 {n} / {total}",
     saveStopped: "{n}枚を保存してキャンセルしました。残りの{m}枚は検閲中タブにあります",
+    scanStopped: "{n}枚を検出してキャンセルしました。残りの{m}枚は検出していません",
   },
 
   act: {

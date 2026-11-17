@@ -1280,6 +1280,7 @@ export const en = {
     scanningOne: "Scanning",
     saving: "Saving {n} / {total}",
     saveStopped: "Cancelled after saving {n}. The other {m} are still in the Editing tab",
+    scanStopped: "Cancelled after scanning {n}. The other {m} were not scanned",
   },
 
   act: {

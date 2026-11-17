@@ -27,6 +27,25 @@ export function CensorSide() {
   const editable = c.tab !== "before";
   const curIm = c.cur();
   const painted = !!curIm && !isEmpty(c.paint[curIm.id]);
+  /** 전체 검열 · 일괄 저장을 멈추는 취소 (사용자 지시 2026-11-17). 지금 찾거나 저장하는 한 장은 마치고
+   *  다음 장 앞에서 멈춘다 — 생성 큐의 취소와 같은 규칙이다. 두 탭이 같은 버튼을 쓴다 */
+  const stopBtn = (
+    <button
+      key="stop"
+      data-censor-stop
+      onClick={() => c.stop()}
+      disabled={c.stopping}
+      style={{
+        ...box,
+        padding: "var(--sp-2)",
+        color: c.stopping ? "var(--ink-ghost)" : "var(--err-ink)",
+        // ★테두리는 통째로 준다 — `borderColor` 만 덮으면 풀릴 때 색이 빠진다 (`censor/ui.tsx` 의 ★★주)
+        border: `1px solid ${c.stopping ? "var(--line)" : "var(--err)"}`,
+      }}
+    >
+      {c.stopping ? t("queue.cancelling") : t("censor.cancel")}
+    </button>
+  );
 
   return (
     <div style={{ width: 250, flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -365,6 +384,9 @@ export function CensorSide() {
               {Icon.search}
               {t("censor.runAll")}
             </button>
+            {/* ★★찾는 동안만 선다 (사용자 지시 2026-11-17). 지금 찾는 한 장은 마치고 멈추고, 찾은 장은 남아
+                다음 「전체 검열」이 남은 장부터 찾는다 */}
+            {c.progress?.what === "scan" && stopBtn}
           </>
         )}
         {c.tab === "processing" && (
@@ -373,24 +395,9 @@ export function CensorSide() {
               {Icon.check}
               {t("censor.complete")}
             </button>
-            {/* ★★저장하는 동안에는 **저장을 멈추는** 취소다 (사용자 지시 2026-11-17). 지금 저장하는 한 장은 마치고
-                다음 장 앞에서 멈춘다 — 생성 큐의 취소와 같은 규칙이다. 그 밖에는 검열 중이던 판을 버리는 취소다 */}
+            {/* ★★저장하는 동안에는 **저장을 멈추는** 취소다 (`stopBtn`). 그 밖에는 검열 중이던 판을 버리는 취소다 */}
             {c.progress?.what === "save" ? (
-              <button
-                key="stop"
-                data-censor-stop
-                onClick={() => c.stopSave()}
-                disabled={c.stopping}
-                style={{
-                  ...box,
-                  padding: "var(--sp-2)",
-                  color: c.stopping ? "var(--ink-ghost)" : "var(--err-ink)",
-                  // ★테두리는 통째로 준다 — `borderColor` 만 덮으면 풀릴 때 색이 빠진다 (`censor/ui.tsx` 의 ★★주)
-                  border: `1px solid ${c.stopping ? "var(--line)" : "var(--err)"}`,
-                }}
-              >
-                {c.stopping ? t("queue.cancelling") : t("censor.cancel")}
-              </button>
+              stopBtn
             ) : (
               <button key="cancel" data-censor-cancel onClick={() => c.cancelProcessing()} disabled={c.busy} style={{ ...box, padding: "var(--sp-2)" }}>
                 {t("censor.cancel")}
