@@ -15,7 +15,7 @@
  *
  *  박스를 끄는 동안 일어나는 일은 `drawImage` 몇 번과 경로 채우기 하나뿐이다.
  */
-import { cloudScale, fadeStartOf, plateRGBA, prepRegion, regionCoverRows, regionReach } from "./steam.ts";
+import { cloudScale, fadeStartOf, plateRGBA, prepRegion, regionCoverRows, regionReach, THICK_CAP } from "./steam.ts";
 import { makeNoise } from "./noise.ts";
 import { methodIndex, rectEmpty, type Mask, type Rect } from "./censorMask.ts";
 import { drawBlurred } from "./canvasFilter.ts";
@@ -604,7 +604,8 @@ export class CensorRenderer {
     // 굵기를 먼저 대략 재어 격자 여유를 잡는다 — 조각 짧은 변의 최대의 반 (거리장으로 다시 잰다)
     let half = 0;
     for (const b of boxes) half = Math.max(half, Math.min(b[2] - b[0], b[3] - b[1]) / 2);
-    half = Math.max(1, half);
+    // ★자락은 상한으로 자른 굵기로 잰다 (`steam.THICK_CAP`) — 격자 여유도 그만큼만
+    half = Math.max(1, Math.min(half, THICK_CAP * scale));
     const k0 = cloudScale((2 * half) / scale);
     const pad = Math.ceil(regionReach(half, k0, ex));
     const x0 = rb.x0 - pad, y0 = rb.y0 - pad, W = rb.W + pad * 2, H = rb.H + pad * 2;

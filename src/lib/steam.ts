@@ -410,11 +410,23 @@ export function edt(inside: Uint8Array, w: number, h: number, target: number): F
   return out;
 }
 
+/** ★★**자락을 재는 굵기의 상한** (원본 px). 영역 구름은 경계 밖 자락 · 가장자리 흔들림 · 경계 안쪽의 옅어짐이 모두
+ *  굵기(R)에 비례하는데, 그대로 두면 넓게 칠할수록 안개가 칠한 곳 밖으로 점점 넓게 퍼진다 (사용자 지적 2026-11-19:
+ *  *"영역이 넓어질수록 칠한곳 이상으로 점점 넓어짐"*. 실측: 반지름 400 원은 칠한 경계 밖 380px 까지 10% 넘게 덮었다).
+ *  그래서 굵기가 이보다 두꺼운 영역은 **이 굵기의 영역과 같은 가장자리**를 갖는다 — 속은 다 덮고, 자락은 더 안 넓어진다.
+ *  지름 100px 이하(기본 붓 40px · 흔한 유두 상자)는 그대로다. */
+export const THICK_CAP = 50;
+
+/** 자락을 잴 굵기 — 굵기의 반 `R`(격자 px)을 상한(`THICK_CAP`, 원본 px)으로 자른다 */
+export const capThick = (R: number, gridPerImage: number) => Math.min(R, THICK_CAP * gridPerImage);
+
 export type RegionCloud = {
   w: number; h: number;
   /** 굵기의 반 (격자 px) */
   R: number;
-  /** 배율 (`cloudScale`) */
+  /** 자락을 재는 굵기의 반 (격자 px) — `R` 을 상한으로 자른 것 (`capThick`) */
+  Rc: number;
+  /** 배율 (`cloudScale(2·Rc)`) */
   k: number;
   /** 밖거리 − 안거리 (격자 px). 안이면 음수 */
   signed: Float32Array;
@@ -447,11 +459,13 @@ export function prepRegion(
     if (inside[i] && n > rMax) rMax = n;
   }
   const R = Math.max(1, rMax);
+  // ★자락은 상한으로 자른 굵기로 잰다 (`THICK_CAP`). 흐림 · 상자 타원 · 배율 · 노이즈 파장이 모두 이 값을 쓴다
+  const Rc = Math.max(1, capThick(R, gridPerImage));
   /* ★★거리장의 등고선 모서리를 둥글린다 (사용자 지적 2026-09-06: *"박스는 X 자로 줄어들어. 대각선 부분만 좀 더
      진하게 남아 있음"*). 상자 안쪽 거리는 「가장 가까운 변까지」라 등고선이 모서리가 뾰족한 작은 사각형들이고,
      같은 반지름의 원으로 보면 대각선 쪽이 더 깊어 속이 X 자로 남는다. 부호 있는 거리장을 굵기의 반(σ = R/2)
      으로 흐리면 등고선의 모서리가 둥글어져 상자도 원처럼 줄어든다. 곧은 변에서는 값이 그대로다 (경계 0 유지). */
-  blurField(signed, w, h, R / 2);
+  blurField(signed, w, h, Rc / 2);
   /* ★★**상자 모양이면 v2 타원 거리를 겹친다** (둘 중 큰 쪽). 흐림만으로는 정사각형의 속이 여전히 대각선 쪽이
      더 깊었고(같은 반지름에서 축 117 : 대각선 136), 흐림을 굵기만큼 키우면 변의 덮임이 떨어졌다(255 → 223).
      v2 의 타원(경계 상자에 내접, 짧은 변으로 정규화)을 max 로 겹치면 변 위는 그대로(255)고 모서리만 v2 처럼
@@ -464,7 +478,8 @@ export function prepRegion(
     }
     const bw = bx1 - bx0 + 1, bh = by1 - by0 + 1;
     if (n > 0 && n >= 0.95 * bw * bh && Math.max(bw, bh) <= 3 * Math.min(bw, bh)) {
-      const hw = bw / 2, hh = bh / 2, cx = bx0 + hw, cy = by0 + hh, Re = Math.min(hw, hh);
+      // ★타원의 깊이도 자른 굵기로 잰다 — 큰 상자의 모서리가 덜 가려지지 않게 (자락은 `signed` 가 정한다)
+      const hw = bw / 2, hh = bh / 2, cx = bx0 + hw, cy = by0 + hh, Re = Math.min(hw, hh, Rc);
       for (let y = 0; y < h; y++) {
         const dy = (y + 0.5 - cy) / hh;
         for (let x = 0; x < w; x++) {
@@ -476,22 +491,22 @@ export function prepRegion(
       }
     }
   }
-  const k = cloudScale((2 * R) / gridPerImage);
+  const k = cloudScale((2 * Rc) / gridPerImage);
   const ff = 1 + Math.min(50, Math.max(0, feather)) / 25;
   // 판에서는 ns = 판 긴 변/2 · ff. 판 긴 변 ≈ 구름 박스(2R·k) × (1+2·EXPAND) 의 1.5배로 본다
-  const ns = ((2 * R * k * (1 + 2 * EXPAND) * 1.5) / 2) * ff;
+  const ns = ((2 * Rc * k * (1 + 2 * EXPAND) * 1.5) / 2) * ff;
   const strength = 1 - Math.min(50, Math.max(0, feather)) / 62.5;
   /* ★노이즈는 픽셀마다 새로 셈하지 않고 **판과 같은 밭**을 읽는다 (`noiseField`, 씨앗·부드럽게마다 한 번 굽고
      캐시). 픽셀마다 세 옥타브를 돌리면 200×120 격자에 50ms 였다 — 손을 뗀 프레임이 튄다. 밭의 축척은
      `res/2·ff` 이므로 격자 px 를 그 비로 밭 px 로 옮겨 읽는다 (밭보다 넓으면 거울처럼 접어 이어 붙인다). */
   const res = 256;
   const field = noiseField(seed, feather, res);
-  return { w, h, R, k, signed, en: field.en, res, fieldScale: ((res / 2) * ff) / ns, strength, shift, start };
+  return { w, h, R, Rc, k, signed, en: field.en, res, fieldScale: ((res / 2) * ff) / ns, strength, shift, start };
 }
 
 /** 줄 `y0..y1` 의 덮임을 채운다 (배경 굽기가 몇 줄씩 나눠 부른다). `out` 은 `w*h` */
 export function regionCoverRows(c: RegionCloud, y0: number, y1: number, out: Uint8Array) {
-  const { w, R, k, signed, en, res, fieldScale, strength, shift, start } = c;
+  const { w, Rc: R, k, signed, en, res, fieldScale, strength, shift, start } = c;
   const kR = k * R;
   const amp = 0.25 * strength;
   const period = 2 * res;
