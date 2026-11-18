@@ -8,12 +8,16 @@ import type { LayerMeta } from "./model";
 import type { ComicGen, ComicMeta } from "./comic";
 import { canvasFrom } from "./pixels";
 
+function b64Blob(b64: string): Blob {
+  const bin = atob(b64.split(",").pop() ?? "");
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: "image/png" });
+}
+
 /** 바이트를 받는다 — `rel` 은 파일 관리의 그림 창구, `path` 는 떨군 파일 읽기, `data` 는 그대로 */
 async function blobOf(item: Dropped, base: string): Promise<Blob> {
-  if (item.data) {
-    const r = await fetch(`data:image/png;base64,${item.data.split(",").pop()}`);
-    return r.blob();
-  }
+  if (item.data) return b64Blob(item.data);
   if (item.rel) {
     /* ★쿼리를 하나 붙인다 — 같은 주소를 `<img>` 가 no-cors 로 캐시해 두면 뒤의 `fetch` 가 CORS 로 막힌다
        (`panels/ImageActions` 의 그 자리와 같은 이유) */
@@ -28,8 +32,7 @@ async function blobOf(item: Dropped, base: string): Promise<Blob> {
       body: JSON.stringify({ name: item.name, path: item.path }),
     });
     if (!r.data) throw new Error(item.name);
-    const b = await fetch(`data:image/png;base64,${r.data.split(",").pop()}`);
-    return b.blob();
+    return b64Blob(r.data);
   }
   throw new Error(item.name);
 }
