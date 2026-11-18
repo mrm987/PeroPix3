@@ -257,6 +257,12 @@ export function CensorStage() {
       return;
     }
     if (e.button !== 0) return;
+    // ★페인트통은 끌지 않는다 — 한 번 눌러 이어진 빈 곳을 채운다 (사용자 지시 2026-11-19)
+    if (c.tool === "fill") {
+      st.fillAt(pos);
+      paint();
+      return;
+    }
     const erase = c.tool === "erase";
     if (!st.strokeBegin()) return;
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
@@ -317,7 +323,7 @@ export function CensorStage() {
     ? "move"
     : !editable
       ? (hover >= 0 ? "pointer" : "default")
-      : c.tool === "pan" ? "default" : "none";
+      : c.tool === "pan" ? "default" : c.tool === "fill" ? "crosshair" : "none";
 
   if (!im) return null;
 
@@ -419,7 +425,8 @@ export function CensorStage() {
             `placeCursor` 가 DOM 에 바로 쓴다 — 리액트는 이 속성들을 다시 쓰지 않는다 */}
         {/* ★「이동」 도구에서는 붓을 안 낸다 — 칠하지 않는데 칠할 자리를 보여 주면 거짓말이다
             (사용자 지적 2026-09-20) */}
-        {editable && cursorOn && c.tool !== "pan" && (
+        {/* ★페인트통도 붓 미리보기를 안 낸다 — 붓 크기와 상관없이 이어진 빈 곳을 채운다 */}
+        {editable && cursorOn && c.tool !== "pan" && c.tool !== "fill" && (
           <rect
             ref={cursorRef}
             data-censor-brush

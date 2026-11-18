@@ -4,7 +4,7 @@ import { api, backendUrl } from "../lib/backend";
 import { toast } from "./toast";
 import { CensorRenderer, type CoverSettings, type Scene } from "../lib/censorRender.ts";
 import {
-  burnBoxes, clearMask, emptyRect, floodErase, isEmpty, makeMask, methodIndex, remap, restore, snapshot, stamp, stroke,
+  burnBoxes, clearMask, emptyRect, floodErase, floodPaint, isEmpty, makeMask, methodIndex, remap, restore, snapshot, stamp, stroke,
   toRenderBoxes, type Mask, type Patch, type Rect, type Shape,
 } from "../lib/censorMask.ts";
 import { fileMgrImg } from "../lib/imgUrl";
@@ -64,7 +64,7 @@ export type Tab = "before" | "processing" | "after";
  *  편집 대상이 박스 목록이 아니라 **칠한 칸의 격자**(`lib/censorMask`)가 되었기 때문이다.
  *  ★`pan` 은 그리지 않는다 — **확대한 그림을 끌어 옮기는** 도구다 (사용자 결정 2026-09-20).
  *    생성 쪽은 그냥 끌기로 옮기지만 여기서는 끌기가 이미 붓질이라, 도구를 골라서 가른다. */
-export type Tool = "brush" | "erase" | "pan";
+export type Tool = "brush" | "erase" | "pan" | "fill";
 /** 붓 지름의 천장 (px). 슬라이더와 Alt+휠이 같은 값을 본다 */
 export const BRUSH_MAX = 300;
 
@@ -325,6 +325,8 @@ type S = Saved & {
   strokeEnd: () => void;
   /** 그 자리와 이어진 덩어리를 통째로 지운다 (우클릭). 한 걸음으로 되돌린다 */
   eraseBlob: (at: { x: number; y: number }) => void;
+  /** 페인트통 — 누른 자리와 이어진 빈 곳을 지금 방식으로 채운다 (`floodPaint`). 한 번이 한 걸음이다 */
+  fillAt: (at: { x: number; y: number }) => void;
   undoPaint: () => void;
   clearPaint: () => void;
   /** 검열 방식을 바꾼다 — ★**검열 중·후에는 칠한 칸 전부**에 건다 */
@@ -836,6 +838,15 @@ export const useCensor = create<S>((set, get) => ({
     if (!m || !m.cells[at.y * m.w + at.x]) return;
     s.strokeBegin();
     floodErase(m, at.x, at.y, get().strokeDirty ?? undefined);
+    s.strokeEnd();
+  },
+
+  fillAt(at) {
+    const s = get();
+    const m = s.curMask();
+    if (!m || m.cells[at.y * m.w + at.x]) return;
+    s.strokeBegin();
+    floodPaint(m, at.x, at.y, methodIndex(s.method), get().strokeDirty ?? undefined);
     s.strokeEnd();
   },
 

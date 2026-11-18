@@ -260,6 +260,46 @@ export function floodErase(m: Mask, x: number, y: number, dirty?: Rect) {
   return n;
 }
 
+/** 페인트통 — 이 자리와 **이어진 빈 픽셀 전부**를 `v` 로 칠한다 (네 방향). 칠한 픽셀 수를 돌려준다.
+ *  ★★사용자 지시 2026-11-19: 붓으로 테두리를 그린 다음 그 안을 한 번에 채운다. 그림 색은 보지 않는다.
+ *    둘러싸이지 않은 자리를 누르면 이어진 바깥이 다 칠해진다 (되돌리기로 돌린다).
+ *  ★둘레를 이루는 칠한 픽셀의 **덮인 비율을 가득 채운다** — 원형 붓의 테두리 픽셀은 부분값이라, 그대로 두면
+ *    채운 자리와 테두리 사이에 옅은 줄이 남는다. 그 픽셀들도 `dirty` 에 든다 (되돌리면 함께 돌아온다).
+ *  누른 자리가 이미 칠해져 있거나 그림 밖이면 아무것도 안 한다 (0) */
+export function floodPaint(m: Mask, x: number, y: number, v: number, dirty?: Rect) {
+  const { w, h, cells, alpha } = m;
+  if (!v || x < 0 || y < 0 || x >= w || y >= h || cells[y * w + x]) return 0;
+  const stack = [y * w + x];
+  let n = 0;
+  let bx0 = x, by0 = y, bx1 = x + 1, by1 = y + 1;
+  // 가로 한 줄씩 — 이어진 빈 구간을 양쪽으로 넓혀 칠하고, 그 구간의 위아래를 다시 본다
+  while (stack.length) {
+    const p = stack.pop()!;
+    if (cells[p]) continue;
+    const py = (p / w) | 0, row = py * w;
+    let l = p, r = p;
+    while (l > row && !cells[l - 1]) l--;
+    while (r < row + w - 1 && !cells[r + 1]) r++;
+    for (let i = l; i <= r; i++) { cells[i] = v; alpha[i] = 255; }
+    n += r - l + 1;
+    if (l > row) alpha[l - 1] = 255;
+    if (r < row + w - 1) alpha[r + 1] = 255;
+    for (let i = l; i <= r; i++) {
+      if (py > 0) { const u = i - w; if (!cells[u]) stack.push(u); else alpha[u] = 255; }
+      if (py < h - 1) { const d = i + w; if (!cells[d]) stack.push(d); else alpha[d] = 255; }
+    }
+    const lx = l - row, rx = r - row + 1;
+    if (lx < bx0) bx0 = lx;
+    if (rx > bx1) bx1 = rx;
+    if (py < by0) by0 = py; else if (py + 1 > by1) by1 = py + 1;
+  }
+  // 덮인 비율을 채운 둘레 한 줄까지 손댄 자리다
+  if (dirty) grow(dirty, Math.max(0, bx0 - 1), Math.max(0, by0 - 1), Math.min(w, bx1 + 1), Math.min(h, by1 + 1));
+  grow(m.bounds, bx0, by0, bx1, by1);
+  m.rev++;
+  return n;
+}
+
 /** 칠한 자리의 **윤곽선** — SVG 경로(`d`), 그림 픽셀 좌표. 비어 있는 이웃과 맞닿은 변만 긋는다.
  *  ★★사용자 지시 2026-09-05: *"그리는 중에는 박스 경계선이 보이게 (어떻게 칠해서 연결되고
  *    있는지 확인할 수 있게)"*. 이어진 자리는 한 윤곽이 되므로, 어디가 붙었고 어디가 떨어졌는지

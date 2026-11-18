@@ -191,9 +191,9 @@ export function Censor() {
         e.preventDefault();
         return s.set({ tool: "pan" });
       }
-      if (s.tab !== "before" && (e.key === "1" || e.key === "2")) {
+      if (s.tab !== "before" && (e.key === "1" || e.key === "2" || e.key === "4")) {
         e.preventDefault();
-        return s.set({ tool: e.key === "1" ? "brush" : "erase" });
+        return s.set({ tool: e.key === "1" ? "brush" : e.key === "2" ? "erase" : "fill" });
       }
       // ★`code` 로 본다 — 한글 자판이 켜져 있으면 `key` 가 "ㅋ" 로 오는 수가 있다
       if (s.tab !== "before" && e.code === "KeyZ" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
