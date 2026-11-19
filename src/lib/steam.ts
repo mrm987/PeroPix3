@@ -410,26 +410,44 @@ export function edt(inside: Uint8Array, w: number, h: number, target: number): F
   return out;
 }
 
-/** ★★**자락을 재는 굵기의 상한** (원본 px). 영역 구름은 경계 밖 자락 · 가장자리 흔들림 · 경계 안쪽의 옅어짐이 모두
- *  굵기(R)에 비례하는데, 그대로 두면 넓게 칠할수록 안개가 칠한 곳 밖으로 점점 넓게 퍼진다 (사용자 지적 2026-11-19:
- *  *"영역이 넓어질수록 칠한곳 이상으로 점점 넓어짐"*. 실측: 반지름 400 원은 칠한 경계 밖 380px 까지 10% 넘게 덮었다).
- *  그래서 굵기가 이보다 두꺼운 영역은 **이 굵기의 영역과 같은 가장자리**를 갖는다 — 속은 다 덮고, 자락은 더 안 넓어진다.
- *  지름 100px 이하(기본 붓 40px · 흔한 유두 상자)는 그대로다. */
+/** ★★**속을 재는 굵기의 상한** (원본 px). 경계 안쪽의 옅어짐과 가장자리 흔들림이 굵기(R)에 비례해서, 두꺼운
+ *  영역은 칠한 안쪽이 듬성듬성 옅어졌다 (실측: 반지름 400 원의 안쪽 8% 가 90% 미만). 이보다 두꺼우면 이 굵기로 잰다. */
 export const THICK_CAP = 50;
 
-/** 자락을 잴 굵기 — 굵기의 반 `R`(격자 px)을 상한(`THICK_CAP`, 원본 px)으로 자른다 */
+/** 속을 잴 굵기 — 굵기의 반 `R`(격자 px)을 상한(`THICK_CAP`, 원본 px)으로 자른다 */
 export const capThick = (R: number, gridPerImage: number) => Math.min(R, THICK_CAP * gridPerImage);
+
+/** ★★**경계 밖 자락은 굵기와 상관없이 하나다** — 지름 40px 붓 한 획의 자락 (굵기의 반 20px, 원본 px).
+ *  사용자 지적 2026-11-19: *"한 획으로 원을 그렸을 때랑, 그 원 내부를 채웠을 때랑, 테두리 경계가 다름"*.
+ *  자락을 굵기로 재면 같은 바깥 경계라도 안을 채우는 순간 굵기가 늘어 안개가 더 멀리 간다
+ *  (실측: 40px 붓 고리 29px → 안을 채우면 65px, 14px 붓 고리 11px → 65px). 그래서 경계 밖은 칠한 경계까지의
+ *  거리만으로 정한다 — 가는 획은 전보다 넓게, 두꺼운 영역 · 큰 상자는 전보다 좁게, 기본 붓 한 획은 그대로다. */
+export const HALO_R = 20;
+
+/** 경계 밖 자락의 배율 (`cloudScale` 을 `HALO_R` 의 굵기로) */
+export const haloScale = () => cloudScale(2 * HALO_R);
+
+/** 구름이 칠한 경계 밖으로 뻗을 수 있는 최대 거리 — `gridPerImage` 배율의 px (격자를 이만큼 넓혀 잡는다) */
+export function haloReach(gridPerImage: number, shift = 0) {
+  return (FADE_END + 0.25) * haloScale() * HALO_R * gridPerImage + shift + 2;
+}
 
 export type RegionCloud = {
   w: number; h: number;
   /** 굵기의 반 (격자 px) */
   R: number;
-  /** 자락을 재는 굵기의 반 (격자 px) — `R` 을 상한으로 자른 것 (`capThick`) */
+  /** 속을 재는 굵기의 반 (격자 px) — `R` 을 상한으로 자른 것 (`capThick`) */
   Rc: number;
   /** 배율 (`cloudScale(2·Rc)`) */
   k: number;
-  /** 밖거리 − 안거리 (격자 px). 안이면 음수 */
+  /** 경계 밖 자락의 길이 단위 (격자 px) — `haloScale() · HALO_R` 을 격자로 옮긴 것. 굵기와 상관없다 */
+  halo: number;
+  /** 밖거리 − 안거리 (격자 px). 안이면 음수. 안은 흐린 값, 밖은 실제 거리 */
   signed: Float32Array;
+  /** 칠한 픽셀(1) — 안과 밖의 셈을 가른다. ★흐린 안쪽 값은 모서리에서 양수가 될 수 있어 부호로는 못 가른다 */
+  inside: Uint8Array;
+  /** 상자 모양이면 v2 타원의 덮임 셈(u = 타원 거리 / k), 아니면 null — 셈한 u 와 둘 중 큰 쪽을 쓴다 */
+  ell: Float32Array | null;
   /** 가장자리 노이즈 밭 (`noiseField` 의 `en`, res×res) — 판과 같은 밭을 읽는다 */
   en: Float32Array;
   res: number;
@@ -459,18 +477,26 @@ export function prepRegion(
     if (inside[i] && n > rMax) rMax = n;
   }
   const R = Math.max(1, rMax);
-  // ★자락은 상한으로 자른 굵기로 잰다 (`THICK_CAP`). 흐림 · 상자 타원 · 배율 · 노이즈 파장이 모두 이 값을 쓴다
+  // ★속은 상한으로 자른 굵기로 잰다 (`THICK_CAP`). 흐림 · 상자 타원 · 배율 · 노이즈 파장이 모두 이 값을 쓴다.
+  //   경계 밖 자락은 굵기와 상관없다 (`HALO_R`)
   const Rc = Math.max(1, capThick(R, gridPerImage));
   /* ★★거리장의 등고선 모서리를 둥글린다 (사용자 지적 2026-09-06: *"박스는 X 자로 줄어들어. 대각선 부분만 좀 더
      진하게 남아 있음"*). 상자 안쪽 거리는 「가장 가까운 변까지」라 등고선이 모서리가 뾰족한 작은 사각형들이고,
      같은 반지름의 원으로 보면 대각선 쪽이 더 깊어 속이 X 자로 남는다. 부호 있는 거리장을 굵기의 반(σ = R/2)
      으로 흐리면 등고선의 모서리가 둥글어져 상자도 원처럼 줄어든다. 곧은 변에서는 값이 그대로다 (경계 0 유지). */
   blurField(signed, w, h, Rc / 2);
+  // ★밖은 흐리지 않은 **실제 거리**로 되돌린다 — 경계 밖 자락은 칠한 경계까지의 거리만으로 정한다 (`HALO_R`).
+  //   흐린 값은 둥근 영역의 밖에서 거리를 부풀려(볼록한 꼴) 같은 바깥 경계라도 굵기마다 자락이 달라졌다
+  for (let i = 0; i < w * h; i++) if (!inside[i]) signed[i] = Math.sqrt(dOut[i]);
+  const k = cloudScale((2 * Rc) / gridPerImage);
   /* ★★**상자 모양이면 v2 타원 거리를 겹친다** (둘 중 큰 쪽). 흐림만으로는 정사각형의 속이 여전히 대각선 쪽이
      더 깊었고(같은 반지름에서 축 117 : 대각선 136), 흐림을 굵기만큼 키우면 변의 덮임이 떨어졌다(255 → 223).
      v2 의 타원(경계 상자에 내접, 짧은 변으로 정규화)을 max 로 겹치면 변 위는 그대로(255)고 모서리만 v2 처럼
      깎여 속이 타원으로 줄어든다 — 찾은 상자·사각 붓 한 점이 여기 든다. 상자 판정: 칠한 픽셀이 경계 상자의 95%
-     이상이고 비율 3 이내. 붓 획(둥근 끝·길쭉한 띠·ㄴ 자)은 여기 안 들어 거리장 그대로다. */
+     이상이고 비율 3 이내. 붓 획(둥근 끝·길쭉한 띠·ㄴ 자)은 여기 안 들어 거리장 그대로다.
+     ★겹치는 것은 **덮임의 셈(u) 위에서**다 — 타원의 u 는 v2 그대로 `타원 거리 / k` 다. 거리로 겹치면 모서리의 양수
+       거리가 경계 밖 자락의 셈(`HALO_R`)을 타서, 큰 상자일수록 모서리가 더 깎였다. */
+  let ell: Float32Array | null = null;
   {
     let bx0 = w, by0 = h, bx1 = -1, by1 = -1, n = 0;
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (inside[y * w + x]) {
@@ -478,20 +504,17 @@ export function prepRegion(
     }
     const bw = bx1 - bx0 + 1, bh = by1 - by0 + 1;
     if (n > 0 && n >= 0.95 * bw * bh && Math.max(bw, bh) <= 3 * Math.min(bw, bh)) {
-      // ★타원의 깊이도 자른 굵기로 잰다 — 큰 상자의 모서리가 덜 가려지지 않게 (자락은 `signed` 가 정한다)
-      const hw = bw / 2, hh = bh / 2, cx = bx0 + hw, cy = by0 + hh, Re = Math.min(hw, hh, Rc);
+      const hw = bw / 2, hh = bh / 2, cx = bx0 + hw, cy = by0 + hh;
+      ell = new Float32Array(w * h);
       for (let y = 0; y < h; y++) {
         const dy = (y + 0.5 - cy) / hh;
         for (let x = 0; x < w; x++) {
           const dx = (x + 0.5 - cx) / hw;
-          const se = Re * (Math.sqrt(dx * dx + dy * dy) - 1);
-          const i = y * w + x;
-          if (se > signed[i]) signed[i] = se;
+          ell[y * w + x] = Math.sqrt(dx * dx + dy * dy) / k;
         }
       }
     }
   }
-  const k = cloudScale((2 * Rc) / gridPerImage);
   const ff = 1 + Math.min(50, Math.max(0, feather)) / 25;
   // 판에서는 ns = 판 긴 변/2 · ff. 판 긴 변 ≈ 구름 박스(2R·k) × (1+2·EXPAND) 의 1.5배로 본다
   const ns = ((2 * Rc * k * (1 + 2 * EXPAND) * 1.5) / 2) * ff;
@@ -501,13 +524,15 @@ export function prepRegion(
      `res/2·ff` 이므로 격자 px 를 그 비로 밭 px 로 옮겨 읽는다 (밭보다 넓으면 거울처럼 접어 이어 붙인다). */
   const res = 256;
   const field = noiseField(seed, feather, res);
-  return { w, h, R, Rc, k, signed, en: field.en, res, fieldScale: ((res / 2) * ff) / ns, strength, shift, start };
+  const halo = haloScale() * HALO_R * gridPerImage;
+  return { w, h, R, Rc, k, halo, signed, inside, ell, en: field.en, res, fieldScale: ((res / 2) * ff) / ns, strength, shift, start };
 }
 
 /** 줄 `y0..y1` 의 덮임을 채운다 (배경 굽기가 몇 줄씩 나눠 부른다). `out` 은 `w*h` */
 export function regionCoverRows(c: RegionCloud, y0: number, y1: number, out: Uint8Array) {
-  const { w, Rc: R, k, signed, en, res, fieldScale, strength, shift, start } = c;
+  const { w, Rc: R, k, halo, signed, inside, ell, en, res, fieldScale, strength, shift, start } = c;
   const kR = k * R;
+  const ub = 1 / k;
   const amp = 0.25 * strength;
   const period = 2 * res;
   // 거울 접기 — 밭 밖으로 나가면 되돌아온다 (경계에서 값이 이어진다)
@@ -516,7 +541,11 @@ export function regionCoverRows(c: RegionCloud, y0: number, y1: number, out: Uin
     const fy = fold(Math.floor(y * fieldScale)) * res;
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
-      const u = (R + signed[i] - shift) / kR;
+      /* 안은 굵기로 (가운데 0 · 경계 1/k), 밖은 경계에서 이어 **경계까지의 거리**로 (`HALO_R` 의 ★★주).
+         경계에서 두 셈이 같은 값(1/k)이라 이어진다 */
+      const d = signed[i] - shift;
+      let u = inside[i] || d <= 0 ? (R + d) / kR : ub + d / halo;
+      if (ell && ell[i] > u) u = ell[i];
       // 노이즈로도 못 넘는 자리는 셈을 건너뛴다 — 깊은 속은 100%, 먼 밖은 0
       if (u >= FADE_END + amp + 0.01) { out[i] = 0; continue; }
       if (u < start - amp - 0.01) { out[i] = 255; continue; }
@@ -532,7 +561,3 @@ export function regionCoverRows(c: RegionCloud, y0: number, y1: number, out: Uin
   }
 }
 
-/** 구름이 영역 경계 밖으로 뻗을 수 있는 최대 거리 (격자 px) — 격자를 이만큼 넓혀 잡는다 */
-export function regionReach(R: number, k: number, shift = 0) {
-  return (FADE_END + 0.25) * k * R - R + shift + 2;
-}
