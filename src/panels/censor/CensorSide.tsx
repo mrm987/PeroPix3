@@ -177,6 +177,30 @@ export function CensorSide() {
           <ViewLine />
         </Sec>
 
+        {/* ★페인트통을 골랐을 때만 — 무엇으로 채울지와 허용치 (사용자 결정 2026-11-19) */}
+        {editable && c.tool === "fill" && (
+          <Sec label={t("censor.toolFill")} help={t("censor.fillHint")}>
+            <label
+              style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", fontSize: "var(--text-2xs)", color: "var(--ink-soft)", cursor: "pointer" }}
+            >
+              <input
+                type="checkbox"
+                data-censor-fill-color
+                checked={c.fillByColor}
+                onChange={(e) => c.tune({ fillByColor: e.target.checked })}
+              />
+              {t("censor.fillByColor")}
+            </label>
+            {c.fillByColor && (
+              <Line label={t("editor.tolerance")}>
+                <input type="range" data-censor-fill-tol min={0} max={255} value={c.fillTol}
+                  onChange={(e) => c.tune({ fillTol: Number(e.target.value) })} style={{ flex: 1 }} />
+                <span style={num}>{c.fillTol}</span>
+              </Line>
+            )}
+          </Sec>
+        )}
+
         {editable && (
           <>
             <Sec label={t("imgIn.brush")}>

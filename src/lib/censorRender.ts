@@ -179,11 +179,25 @@ export class CensorRenderer {
   private alphaCvs = new Map<string, { cv: HTMLCanvasElement; mask: Mask | null; rev: number }>();
   private padCv: HTMLCanvasElement | null = null;
   private cutCv: HTMLCanvasElement | null = null;
+  /** 원본 크기의 RGBA (`pixels`) — 처음 부를 때 한 번 그려 들고 있다 */
+  private rgba: Uint8ClampedArray | null = null;
 
   constructor(src: Src, w?: number, h?: number) {
     this.src = src;
     this.w = w ?? src.width;
     this.h = h ?? src.height;
+  }
+
+  /** 그림 원본 크기의 RGBA — 페인트통의 「그림 색으로 채우기」가 읽는다 (`censorMask.floodPaintColor`).
+   *  ★바탕은 `blob:` 주소의 그림이라 캔버스가 오염되지 않는다 (`store/censor.resolveSrc` 의 ★★주) */
+  pixels(): Uint8ClampedArray {
+    if (!this.rgba) {
+      const cv = c2d(this.w, this.h);
+      const g = cv.getContext("2d", { willReadFrequently: true })!;
+      g.drawImage(this.src, 0, 0, this.w, this.h);
+      this.rgba = g.getImageData(0, 0, cv.width, cv.height).data;
+    }
+    return this.rgba;
   }
 
   /** 설정이 바뀌면 재료를 버린다. ★모양만 바뀔 때는 **부르지 않는다** — 그게 빠른 이유다 */

@@ -300,6 +300,87 @@ export function floodPaint(m: Mask, x: number, y: number, v: number, dirty?: Rec
   return n;
 }
 
+/** 페인트통의 「그림 색으로 채우기」 — 누른 자리의 색과 채널마다 `tol` 이내로 **이어진 그림 픽셀**(네 방향)을 찾고,
+ *  그 **테두리 안을 꽉 메운 뒤**(구멍 메우기) 빈 픽셀을 `v` 로 칠한다. 칠한 픽셀 수를 돌려준다.
+ *  ★★사용자 결정 2026-11-19: 색만 따라 채우면 유두의 양감(밝은 자리 · 그늘)이 구멍으로 남는다. 테두리를 잡은 다음
+ *    안쪽은 색과 상관없이 전부 칠한다. 색 비교는 이미지 편집의 페인트통(`editor/model.floodFill`)과 같은 규칙이다.
+ *  ★이미 칠한 픽셀은 그대로 둔다 (방식도 덮인 비율도). 둘레의 칠한 픽셀은 `floodPaint` 처럼 덮인 비율을 가득 채운다.
+ *  `rgba` 는 그림 원본 크기(`m.w × m.h`)의 RGBA. 누른 자리가 이미 칠해져 있거나 그림 밖이면 0 */
+export function floodPaintColor(m: Mask, rgba: ArrayLike<number>, x: number, y: number, tol: number, v: number, dirty?: Rect) {
+  const { w, h, cells, alpha } = m;
+  if (!v || x < 0 || y < 0 || x >= w || y >= h || cells[y * w + x] || rgba.length < w * h * 4) return 0;
+  const i0 = (y * w + x) * 4;
+  const r0 = rgba[i0], g0 = rgba[i0 + 1], b0 = rgba[i0 + 2];
+  const near = (p: number) => {
+    const i = p * 4;
+    return Math.abs(rgba[i] - r0) <= tol && Math.abs(rgba[i + 1] - g0) <= tol && Math.abs(rgba[i + 2] - b0) <= tol;
+  };
+  // ① 색으로 이어진 영역 — 가로 한 줄씩
+  const reg = new Uint8Array(w * h);
+  const stack = [y * w + x];
+  let bx0 = x, by0 = y, bx1 = x + 1, by1 = y + 1;
+  while (stack.length) {
+    const p = stack.pop()!;
+    if (reg[p] || !near(p)) continue;
+    const py = (p / w) | 0, row = py * w;
+    let l = p, r = p;
+    while (l > row && !reg[l - 1] && near(l - 1)) l--;
+    while (r < row + w - 1 && !reg[r + 1] && near(r + 1)) r++;
+    for (let i = l; i <= r; i++) {
+      reg[i] = 1;
+      if (py > 0 && !reg[i - w]) stack.push(i - w);
+      if (py < h - 1 && !reg[i + w]) stack.push(i + w);
+    }
+    const lx = l - row, rx = r - row + 1;
+    if (lx < bx0) bx0 = lx;
+    if (rx > bx1) bx1 = rx;
+    if (py < by0) by0 = py; else if (py + 1 > by1) by1 = py + 1;
+  }
+  // ② 구멍 메우기 — 경계 상자의 테두리에서 「영역이 아닌 곳」을 네 방향으로 번져 나간다. 못 닿은 곳이 영역과 그 구멍이다
+  const bw = bx1 - bx0, bh = by1 - by0;
+  const out = new Uint8Array(bw * bh);
+  const st: number[] = [];
+  const seed = (lx: number, ly: number) => { const q = ly * bw + lx; if (!out[q] && !reg[(by0 + ly) * w + bx0 + lx]) { out[q] = 1; st.push(q); } };
+  for (let lx = 0; lx < bw; lx++) { seed(lx, 0); seed(lx, bh - 1); }
+  for (let ly = 0; ly < bh; ly++) { seed(0, ly); seed(bw - 1, ly); }
+  while (st.length) {
+    const q = st.pop()!;
+    const lx = q % bw, ly = (q - lx) / bw;
+    if (lx > 0) seed(lx - 1, ly);
+    if (lx < bw - 1) seed(lx + 1, ly);
+    if (ly > 0) seed(lx, ly - 1);
+    if (ly < bh - 1) seed(lx, ly + 1);
+  }
+  // ③ 칠한다 — 빈 픽셀만. 둘레의 칠한 픽셀은 덮인 비율을 가득 (`floodPaint` 의 ★주)
+  let n = 0;
+  for (let ly = 0; ly < bh; ly++) {
+    for (let lx = 0; lx < bw; lx++) {
+      if (out[ly * bw + lx]) continue;
+      const px = bx0 + lx, py = by0 + ly, i = py * w + px;
+      if (cells[i]) continue;
+      cells[i] = v;
+      alpha[i] = 255;
+      reg[i] = 2;
+      n++;
+    }
+  }
+  if (!n) return 0;
+  for (let py = by0; py < by1; py++) {
+    for (let px = bx0; px < bx1; px++) {
+      const i = py * w + px;
+      if (reg[i] !== 2) continue;
+      if (px > 0 && cells[i - 1] && reg[i - 1] !== 2) alpha[i - 1] = 255;
+      if (px < w - 1 && cells[i + 1] && reg[i + 1] !== 2) alpha[i + 1] = 255;
+      if (py > 0 && cells[i - w] && reg[i - w] !== 2) alpha[i - w] = 255;
+      if (py < h - 1 && cells[i + w] && reg[i + w] !== 2) alpha[i + w] = 255;
+    }
+  }
+  if (dirty) grow(dirty, Math.max(0, bx0 - 1), Math.max(0, by0 - 1), Math.min(w, bx1 + 1), Math.min(h, by1 + 1));
+  grow(m.bounds, bx0, by0, bx1, by1);
+  m.rev++;
+  return n;
+}
+
 /** 칠한 자리의 **윤곽선** — SVG 경로(`d`), 그림 픽셀 좌표. 비어 있는 이웃과 맞닿은 변만 긋는다.
  *  ★★사용자 지시 2026-09-05: *"그리는 중에는 박스 경계선이 보이게 (어떻게 칠해서 연결되고
  *    있는지 확인할 수 있게)"*. 이어진 자리는 한 윤곽이 되므로, 어디가 붙었고 어디가 떨어졌는지

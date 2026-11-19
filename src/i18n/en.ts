@@ -1253,6 +1253,8 @@ export const en = {
     toolHint: "Paint to cover, erase to uncover. Detected boxes can be erased the same way. The move tool drags a zoomed image around. The fill tool paints the empty area connected to where you click.",
     toolPan: "Move",
     toolFill: "Fill",
+    fillByColor: "Fill by image color",
+    fillHint: "On: finds the area connected to where you click with a similar color and paints everything inside its outline. Off: paints the empty area enclosed by what you painted.",
     keys: "Shortcuts",
     k_tool: "Switch tool",
     k_size: "Brush size",
