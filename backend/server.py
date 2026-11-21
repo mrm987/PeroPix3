@@ -75,6 +75,7 @@ import agentlog
 import migrate_terms
 import migrate_thumbs
 import plugins as plugins_mod
+import winaccept
 import nai
 import update as update_mod
 import vibe as vibe_mod
@@ -4285,6 +4286,8 @@ def main():
         # ★★접근 로그는 끈다 — 주소 앞머리에 **이번 실행의 열쇠**가 들어 있어 매 요청마다
         #   로그에 남고(제보로 오가는 파일이다), 썸네일 요청까지 전부 찍혀 정작 봐야 할
         #   오류가 묻힌다. 의미 있는 일은 우리가 `say()` 로 적는다.
+        # ★★윈도우의 Proactor 루프는 끊긴 연결 하나에 듣기를 통째로 멈춘다 (`winaccept` 머리 주석)
+        winaccept.install()
         uvicorn.run(app, host="127.0.0.1", port=CURRENT_PORT, log_level="info", access_log=False)
 
 
