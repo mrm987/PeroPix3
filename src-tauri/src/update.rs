@@ -20,11 +20,29 @@ fn stage_dir(root: &Path) -> PathBuf {
     root.join(STAGE)
 }
 
+/// 갈아 끼우기를 시작했다는 표식. `apply` 가 옮기기 전에 세우고 다 옮긴 뒤에 지운다.
+const APPLYING: &str = "applying";
+
+/// 지난 갈아 끼우기가 **중간에 끊겼나** (표식이 남아 있고 옮길 것도 남았다).
+///
+/// ★★끊긴 채로 두면 앱이 안 뜬다 (사용자 제보 2026-11-21). 3.7.12 에서 전체 업데이트를 받다 앱이 꺼진 뒤로
+///   `app/python` 에서 Pillow 의 `ImageFilter` 가 빠진 채 남아, 백엔드가 켤 때마다 import 에서 죽었다.
+///   예전에는 다음 실행의 `sweep` 이 비켜 놓은 옛것(`old/`)마저 지웠다. 백엔드가 안 뜨니 앱 안에서 다시 받을 수도 없다.
+///   그래서 껍데기가 켤 때 이것을 보고 마저 옮긴다 (`lib.rs` 의 `resume_update`).
+pub fn interrupted(root: &Path) -> bool {
+    stage_dir(root).join(APPLYING).exists() && staged(root)
+}
+
 /// 지난번 업데이트가 남긴 옛 파일을 치운다. **켤 때 한 번**, 조용히.
 ///
 /// ★그때는 못 지웠다 — 우리가 그 exe 위에서 돌고 있었기 때문이다. 지금은 새것으로 떠 있다.
 /// ★실패해도 아무 말 안 한다. 다음에 또 해 보면 된다 (남아 있어도 앱은 멀쩡히 돈다).
+/// ★갈아 끼우기가 끊긴 채면 아무것도 안 치운다. 마저 옮기는 것이 먼저다 (`interrupted`).
 pub fn sweep(root: &Path) {
+    if interrupted(root) {
+        return;
+    }
+    let _ = std::fs::remove_file(stage_dir(root).join(APPLYING));
     let _ = std::fs::remove_dir_all(stage_dir(root).join("old"));
     // 받아 둔 것을 다 옮겼으면 빈 껍데기만 남는다 — 비어 있을 때만 지운다
     let _ = std::fs::remove_dir(stage_dir(root).join("new"));
@@ -43,14 +61,18 @@ pub fn staged(root: &Path) -> bool {
 #[cfg(not(target_os = "macos"))]
 /// `.update/new/` 의 것들을 제자리로 옮긴다.
 ///
-/// ★한 항목이라도 실패하면 **거기서 멈춘다.** 이미 옮긴 것은 그대로 두는데, 그래도
-///   반쯤 갈린 상태가 아니다 — 옛것은 `.update/old/` 에 온전히 있고, 다음 실행에서
-///   같은 자리를 다시 시도한다. (되돌리기를 여기서 흉내 내면 그 코드가 더 위험하다.)
+/// ★한 항목이라도 실패하면 **거기서 멈춘다.** 이미 옮긴 것은 그대로 두고, 표식(`APPLYING`)이
+///   남아 다음에 켤 때 남은 것을 마저 옮긴다 (`interrupted`). 이 함수를 다시 부르면 그 일이 된다:
+///   옮긴 것은 `new/` 에서 빠졌으므로 남은 것만 돈다. (전체 되돌리기는 흉내 내지 않는다. 그 코드가 더 위험하다.)
 pub fn apply(root: &Path) -> std::io::Result<()> {
-    let new = stage_dir(root).join("new");
-    let old = stage_dir(root).join("old");
+    let stage = stage_dir(root);
+    let new = stage.join("new");
+    let old = stage.join("old");
     std::fs::create_dir_all(&old)?;
+    std::fs::write(stage.join(APPLYING), b"")?;
     move_tree(&new, root, &old)?;
+    // ★표식은 다 옮긴 직후에 지운다. 빈 폴더가 남아 `new/` 를 못 지워도 끊긴 것으로 보지 않게
+    let _ = std::fs::remove_file(stage.join(APPLYING));
     let _ = std::fs::remove_dir_all(&new);
     Ok(())
 }
@@ -82,6 +104,14 @@ fn move_tree(from: &Path, to: &Path, park: &Path) -> std::io::Result<()> {
             let _ = std::fs::remove_file(&spot);
             // ★★**이름 바꾸기**다 (복사가 아니다) — 돌고 있는 exe 도 이건 된다
             std::fs::rename(&target, &spot)?;
+            // ★★옛것을 비켜 놓은 뒤 새것을 못 놓으면 **그 파일이 빈다** (사용자 제보 2026-11-21:
+            //   `app/python` 의 파일 한 장이 빠져 앱이 아예 안 떴다). 옛것을 도로 놓고 멈춘다.
+            //   다른 프로그램이 새 파일을 쥐고 있으면 여기서 실패한다.
+            if let Err(err) = std::fs::rename(e.path(), &target) {
+                let _ = std::fs::rename(&spot, &target);
+                return Err(err);
+            }
+            continue;
         }
         std::fs::rename(e.path(), &target)?;
     }
@@ -267,7 +297,7 @@ mod mac_tests {
 
 #[cfg(all(test, not(target_os = "macos")))]
 mod apply_tests {
-    use super::{apply, stage_dir};
+    use super::{apply, interrupted, stage_dir, sweep};
     use std::path::{Path, PathBuf};
 
     fn put(p: &Path, body: &str) {
@@ -336,6 +366,71 @@ mod apply_tests {
             std::fs::read_to_string(root.join("workspaces/내작업/spec.json")).unwrap(),
             "사용자 것"
         );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// 새 파일 하나를 다른 프로그램이 쥐고 있는 것처럼 잠근다 (공유 없이 연다). 쥐고 있는 동안은 옮길 수 없다
+    #[cfg(windows)]
+    fn hold(p: &Path) -> std::fs::File {
+        use std::os::windows::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new().read(true).share_mode(0).open(p).unwrap()
+    }
+
+    /// ★★옛것을 비켜 놓은 뒤 새것을 못 놓으면 **그 파일이 비면 안 된다** (사용자 제보 2026-11-21:
+    ///   `app/python` 에서 파일 한 장이 빠져 백엔드가 켤 때마다 죽었다). 옛것이 제자리에 남아야 한다.
+    #[cfg(windows)]
+    #[test]
+    fn 새것을_못_놓으면_옛것이_제자리에_남는다() {
+        let root = app("hold");
+        let new = stage_dir(&root).join("new");
+        put(&new.join("app/python/python.exe"), "새 파이썬");
+        let held = hold(&new.join("app/python/python.exe"));
+
+        assert!(apply(&root).is_err(), "쥐고 있는 파일은 못 옮긴다");
+        assert_eq!(
+            std::fs::read_to_string(root.join("app/python/python.exe")).unwrap(),
+            "파이썬",
+            "옛것이 제자리에 있어야 한다"
+        );
+        drop(held);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// ★★끊긴 업데이트는 **다음에 켤 때 마저 옮긴다** (`interrupted` → `apply` 다시). 그 전에 `sweep` 이 아무것도 안 치운다.
+    #[cfg(windows)]
+    #[test]
+    fn 끊긴_업데이트는_다음에_켤_때_마저_한다() {
+        let root = app("resume");
+        let new = stage_dir(&root).join("new");
+        put(&new.join("PeroPix.exe"), "새 exe");
+        put(&new.join("app/backend/server.py"), "새 서버");
+        put(&new.join("app/python/python.exe"), "새 파이썬");
+        let held = hold(&new.join("app/python/python.exe"));
+        assert!(apply(&root).is_err());
+        drop(held);
+
+        assert!(interrupted(&root), "표식이 남아야 한다");
+        sweep(&root);
+        assert!(new.join("app/python/python.exe").exists(), "끊긴 동안 sweep 이 남은 새 파일을 지우면 안 된다");
+        assert!(interrupted(&root), "sweep 이 표식을 지우면 다음 실행이 마저 옮기지 못한다");
+
+        apply(&root).unwrap();
+        assert!(!interrupted(&root));
+        assert_eq!(std::fs::read_to_string(root.join("PeroPix.exe")).unwrap(), "새 exe");
+        assert_eq!(std::fs::read_to_string(root.join("app/backend/server.py")).unwrap(), "새 서버");
+        assert_eq!(std::fs::read_to_string(root.join("app/python/python.exe")).unwrap(), "새 파이썬");
+
+        sweep(&root);
+        assert!(!stage_dir(&root).exists(), "다 끝났으면 sweep 이 .update 를 치운다");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// 받아만 두고 아직 안 바꾼 판은 끊긴 것이 아니다 (켤 때 저절로 깔리면 안 된다. 「지금 다시 켜기」를 기다린다)
+    #[test]
+    fn 받아만_둔_판은_끊긴_것이_아니다() {
+        let root = app("staged");
+        put(&stage_dir(&root).join("new/app/backend/server.py"), "새 서버");
+        assert!(!interrupted(&root));
         let _ = std::fs::remove_dir_all(root);
     }
 

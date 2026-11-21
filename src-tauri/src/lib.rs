@@ -92,7 +92,7 @@ fn update_staged() -> bool {
 /// ★★차례가 곧 안전이다: **사이드카를 먼저 내린다** → 파일을 옮긴다 → 새 exe 를 띄운다 →
 ///   우리는 나간다. 파이썬이 살아 있으면 `python/` 안의 파일이 잡혀 있어 못 옮긴다.
 /// ★옮기다 실패하면 **그 자리에서 멈추고 그대로 둔다** — 옛것은 `.update/old/` 에 온전히
-///   있고, 다음에 켤 때 같은 자리를 다시 시도한다 (`update.rs` 머리 주석).
+///   있고, 다음에 켤 때 남은 것을 마저 옮긴다 (`resume_update`).
 #[tauri::command]
 fn apply_update(app: tauri::AppHandle) -> Result<(), String> {
     let root = backend::root();
@@ -102,7 +102,11 @@ fn apply_update(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(state) = app.try_state::<backend::Backend>() {
         state.kill();
     }
-    update::apply(&root).map_err(|e| format!("갈아 끼우지 못했습니다: {e}"))?;
+    update::apply(&root).map_err(|e| {
+        // ★제보로 오는 것은 로그뿐이다. 화면에만 띄우면 무엇이 막혔는지 남지 않는다
+        backend::log_line(&format!("[update] 갈아 끼우지 못했습니다: {e}"));
+        format!("갈아 끼우지 못했습니다: {e}")
+    })?;
     /* ★데우기는 **여기 없다** — 「설치 중」 단계 안에서 백엔드가 한다 (`backend/update.py`
        의 `warm`). 처음에는 여기서 했는데, 그러면 「다시 켜기」를 누른 뒤 12초가 조용히 흘러
        **누른 것이 안 먹은 것처럼** 보였다 (사용자 지적 2026-08-27). 이 자리는 즉시여야 한다. */
@@ -119,6 +123,37 @@ fn apply_update(app: tauri::AppHandle) -> Result<(), String> {
     update::relaunch(&root).map_err(|e| format!("다시 켜지 못했습니다: {e}"))?;
     app.exit(0);
     Ok(())
+}
+
+/// 지난 업데이트가 **중간에 끊겼으면** 창을 띄우기 전에 남은 파일을 마저 옮기고 새 판으로 다시 켠다 (`update::interrupted`).
+///
+/// ★★켜진 뒤에는 늦다. 파이썬이 `app/python` 을 쥐면 못 옮기고, 끊긴 판에서는 그 파이썬이 아예 안 뜰 수 있다
+///   (사용자 제보 2026-11-21). 그래서 자물쇠를 잡은 직후, 웹뷰도 백엔드도 아직 없을 때 한다.
+/// ★다 옮겼으면 자물쇠를 놓고 새 exe 를 띄운 뒤 `None` 을 돌려준다 (이 프로세스는 끝난다). 옮긴 것 중에
+///   지금 도는 exe 가 있을 수 있어서다. 못 옮겼으면 로그에 남기고 자물쇠를 돌려준다 (그대로 켠다).
+#[cfg(not(target_os = "macos"))]
+fn resume_update(lock: std::fs::File) -> Option<std::fs::File> {
+    let root = backend::root();
+    if !update::interrupted(&root) {
+        return Some(lock);
+    }
+    if let Err(e) = update::apply(&root) {
+        backend::log_line(&format!("[update] 끊긴 업데이트를 마저 하지 못했습니다: {e}"));
+        return Some(lock);
+    }
+    // ★★표식이나 빈 폴더를 못 지워 여전히 끊긴 것으로 보이면 다시 켜지 않는다. 다시 켜면 새로 뜬 쪽이
+    //   같은 판정을 받아 또 다시 켜고, 앱이 끝없이 켜졌다 꺼진다
+    if update::interrupted(&root) {
+        backend::log_line("[update] 업데이트 표식을 치우지 못했습니다. 그대로 켭니다");
+        return Some(lock);
+    }
+    backend::log_line("[update] 끊긴 업데이트를 마저 했습니다. 새 버전으로 다시 켭니다");
+    // ★새로 뜬 쪽이 「이 폴더의 PeroPix 가 이미 실행 중」으로 닫히지 않게 먼저 놓는다 (`apply_update` 와 같다)
+    drop(lock);
+    if let Err(e) = update::relaunch(&root) {
+        backend::log_line(&format!("[update] 다시 켜지 못했습니다: {e}"));
+    }
+    None
 }
 
 /// **백엔드만 다시 띄운다** — 플러그인을 설치·삭제·업데이트·켜고 끈 뒤 붙이려고 (사용자 지시 2026-09-08).
@@ -356,6 +391,10 @@ pub fn run() {
     let _ = START.set(Instant::now());
     let Some(lock) = backend::lock_app_dir() else {
         eprintln!("[app] 이 폴더의 PeroPix 가 이미 실행 중입니다 — 창을 안 띄웁니다");
+        return;
+    };
+    #[cfg(not(target_os = "macos"))]
+    let Some(lock) = resume_update(lock) else {
         return;
     };
     /* ★자물쇠는 앱이 끝날 때까지 들고 있어야 한다 (핸들을 닫으면 풀린다).
