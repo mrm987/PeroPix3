@@ -2,6 +2,7 @@ import { useI18n } from "../../i18n";
 import { api } from "../../lib/backend";
 import { toast } from "../../store/toast";
 import { Icon } from "../../components/Icon";
+import { ColorInput } from "../../components/ColorInput";
 import { BRUSH_MAX, useCensor, type Tool } from "../../store/censor";
 import { useCensorView, bumpZoom, setFit, setZoom } from "../../store/censorView";
 import { fitScale, percent } from "../../lib/zoomView";
@@ -283,11 +284,11 @@ export function CensorSide() {
             ))}
           </div>
           {c.method === "color" && (
-            <input
-              type="color"
+            <ColorInput
+              data-censor-color
               value={c.color}
-              onChange={(e) => c.tune({ color: e.target.value }, "draw")}
-              style={{ width: "100%", height: 26, borderRadius: "var(--r-2)" }}
+              onChange={(v) => c.tune({ color: v }, "draw")}
+              style={{ width: "100%", height: 26, padding: 0, border: "1px solid var(--line)", borderRadius: "var(--r-2)" }}
             />
           )}
           {c.method === "mosaic" && (

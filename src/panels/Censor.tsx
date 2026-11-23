@@ -184,7 +184,7 @@ export function Censor() {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable
-        || (el.tagName === "INPUT" && !/^(range|checkbox|radio|button|color)$/.test((el as HTMLInputElement).type)))) return;
+        || (el.tagName === "INPUT" && !/^(range|checkbox|radio|button)$/.test((el as HTMLInputElement).type)))) return;
       const s = useCensor.getState();
       // ★「선택」(3)은 검열 전 탭에서도 쓴다 — 거기서도 확대해서 박스를 볼 수 있어야 한다
       if (e.key === "3") {

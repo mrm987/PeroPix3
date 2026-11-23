@@ -49,7 +49,7 @@ export default function Editor() {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable
-        || (el.tagName === "INPUT" && !/^(range|checkbox|radio|button|color)$/.test((el as HTMLInputElement).type)))) return;
+        || (el.tagName === "INPUT" && !/^(range|checkbox|radio|button)$/.test((el as HTMLInputElement).type)))) return;
       const st = useEditor.getState();
       if (!st.doc()) return;
       if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ") {

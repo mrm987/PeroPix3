@@ -8,7 +8,8 @@ import { useWin } from "../lib/floatWin";
  *
  *  ★기본 색 창의 스포이드는 WebView2 가 처리하는데, 사용자 PC 에서 눌러도 아무 반응이 없었다 (여러 사용자 제보).
  *    게스트(GPU 꺼짐)에서는 동작해서 앱 쪽에서 고칠 길이 없다. 그래서 색 창을 통째로 우리가 그리고, 스포이드는
- *    **화면에 보이는 캔버스의 픽셀**을 읽는다 (`sampleAt`). 그래서 캔버스 밖(앱 밖 포함)의 색은 못 집는다.
+ *    **화면에 보이는 캔버스·그림(`<img>`)의 픽셀**을 읽는다 (`sampleAt`). 그 밖(앱 밖 포함)의 색은 못 집는다.
+ *  ★쓰는 곳: 이미지 편집의 색 칸 전부 · 자동검열의 단색 색 칸 (사용자 지시 2026-11-23). 앱에 기본 색 칸은 없다.
  *  ★배치는 기본 색 창과 같다: 위에 채도·명도 판, 아래 줄에 스포이드 · 지금 색 · 색상 막대, 맨 아래 RGB 칸.
  *  ★바뀔 때마다 `onChange` 를 부른다 (기본 색 창의 input 이벤트와 같다). 상자에는 `value` 를 단다 — 판정이 `.value` 로 읽는다.
  *  ★창은 `document.body` 에 띄운다 (`Dropdown` 과 같은 이유). 그래서 창을 품은 메뉴가 「밖을 누르면 닫기」를 하면
@@ -47,26 +48,70 @@ const hsvOf = (hex: string, keep?: Hsv): Hsv => {
   return x;
 };
 
-/** 그 자리에서 **보이는** 캔버스의 픽셀 — 맨 위 캔버스부터, 투명하면 그 아래로. 캔버스가 아예 없으면 `on: false` */
-function sampleAt(doc: Document, x: number, y: number): { hex: string | null; on: boolean } {
-  let on = false;
-  for (const el of doc.elementsFromPoint(x, y)) {
-    if (el.tagName !== "CANVAS") continue;
-    const cv = el as HTMLCanvasElement;
-    const r = cv.getBoundingClientRect();
-    if (!r.width || !r.height || !cv.width || !cv.height) continue;
-    const px = Math.floor(((x - r.left) / r.width) * cv.width);
-    const py = Math.floor(((y - r.top) / r.height) * cv.height);
-    if (px < 0 || py < 0 || px >= cv.width || py >= cv.height) continue;
-    on = true;
+/** `<img>` 의 픽셀을 읽을 사본 — 그 그림은 백엔드(다른 출처)에서 와서 그대로 그리면 캔버스가 더럽혀진다.
+ *  ★`cache: "no-store"` 로 새로 받는다. `<img>` 가 CORS 없이 받아 둔 캐시 항목을 다시 쓰면 조용히 실패한다
+ *    (`/api/pin` 으로 옮기게 된 이유와 같다). 최근 두 장만 든다 */
+const imgCopies = new Map<string, Promise<HTMLCanvasElement | null>>();
+function imgCopy(doc: Document, src: string): Promise<HTMLCanvasElement | null> {
+  let p = imgCopies.get(src);
+  if (!p) {
+    p = fetch(src, { cache: "no-store" })
+      .then((r) => (r.ok ? r.blob() : Promise.reject(r.status)))
+      .then((b) => createImageBitmap(b))
+      .then((bm) => {
+        const cv = doc.createElement("canvas");
+        cv.width = bm.width;
+        cv.height = bm.height;
+        cv.getContext("2d", { willReadFrequently: true })?.drawImage(bm, 0, 0);
+        bm.close();
+        return cv;
+      })
+      .catch(() => null);
+    imgCopies.set(src, p);
+    while (imgCopies.size > 2) imgCopies.delete(imgCopies.keys().next().value as string);
+  }
+  return p;
+}
+
+/** 그 자리에서 **보이는** 픽셀 — 캔버스와 그림(`<img>`)을 위의 것부터 보고, 투명하면 그 아래로.
+ *  ★`elementsFromPoint` 로 찾지 않는다 — 자동검열의 덮개 캔버스처럼 `pointer-events: none` 인 것이 빠진다.
+ *    대신 커서 아래 맨 위 요소와 **같은 틀**(부모가 그 요소를 품는다)에 든 캔버스·그림을 문서 차례의 역순(위가 먼저)으로 본다.
+ *  ★`on` — 커서 아래에 캔버스·그림이 하나라도 있었나 (투명한 자리를 누른 것과 밖을 누른 것을 가른다) */
+async function sampleAt(doc: Document, x: number, y: number): Promise<{ hex: string | null; on: boolean }> {
+  const top = doc.elementFromPoint(x, y);
+  if (!top) return { hex: null, on: false };
+  const hits = [...doc.querySelectorAll<HTMLCanvasElement | HTMLImageElement>("canvas, img")].filter((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && x >= r.left && x < r.right && y >= r.top && y < r.bottom && (el === top || !!el.parentElement?.contains(top));
+  });
+  for (const el of hits.reverse()) {
+    const r = el.getBoundingClientRect();
+    let src: HTMLCanvasElement | null = null;
+    let box = { l: r.left, t: r.top, w: r.width, h: r.height };
+    if (el.tagName === "CANVAS") src = el as HTMLCanvasElement;
+    else {
+      const im = el as HTMLImageElement;
+      if (!im.currentSrc || !im.naturalWidth) continue;
+      // object-fit: contain 이면 그림이 그려진 상자만
+      if (getComputedStyle(im).objectFit === "contain") {
+        const k = Math.min(r.width / im.naturalWidth, r.height / im.naturalHeight);
+        const w = im.naturalWidth * k, h = im.naturalHeight * k;
+        box = { l: r.left + (r.width - w) / 2, t: r.top + (r.height - h) / 2, w, h };
+      }
+      src = await imgCopy(doc, im.currentSrc);
+    }
+    if (!src || !src.width || !src.height) continue;
+    const px = Math.floor(((x - box.l) / box.w) * src.width);
+    const py = Math.floor(((y - box.t) / box.h) * src.height);
+    if (px < 0 || py < 0 || px >= src.width || py >= src.height) continue;
     try {
-      const d = cv.getContext("2d")?.getImageData(px, py, 1, 1).data;
-      if (d && d[3] > 0) return { hex: rgbToHex(d[0], d[1], d[2]), on };
+      const d = src.getContext("2d")?.getImageData(px, py, 1, 1).data;
+      if (d && d[3] > 0) return { hex: rgbToHex(d[0], d[1], d[2]), on: true };
     } catch {
-      /* 읽을 수 없는 캔버스(다른 출처 그림) — 아래 것을 본다 */
+      /* 읽을 수 없는 캔버스 — 아래 것을 본다 */
     }
   }
-  return { hex: null, on };
+  return { hex: null, on: hits.length > 0 };
 }
 
 /** 누른 뒤 따라오는 놓기·클릭을 먹는다 — 스포이드로 누른 것이 그 아래 버튼·붓에 닿지 않게 */
@@ -196,10 +241,15 @@ export function ColorInput({ value, onChange, style, ...rest }: Props) {
       e.preventDefault();
       e.stopImmediatePropagation();
     };
+    // ★읽기는 비동기다 (그림은 사본을 받아 와서 읽는다) — 늦게 온 답은 버린다
+    let live = true;
+    let seq = 0;
     const move = (e: PointerEvent) => {
+      const n = ++seq;
       if (inPop(e)) return setHover(null);
       block(e);
-      setHover({ x: e.clientX, y: e.clientY, hex: sampleAt(doc, e.clientX, e.clientY).hex });
+      const { clientX: x, clientY: y } = e;
+      void sampleAt(doc, x, y).then((got) => live && n === seq && setHover({ x, y, hex: got.hex }));
     };
     const down = (e: PointerEvent) => {
       if (inPop(e)) {
@@ -209,13 +259,15 @@ export function ColorInput({ value, onChange, style, ...rest }: Props) {
       }
       block(e);
       swallowRest(win);
-      const got = sampleAt(doc, e.clientX, e.clientY);
-      if (got.hex) set(hsvOf(got.hex, hsvRef.current));
-      // 캔버스의 빈(투명) 자리면 스포이드를 그대로 둔다 — 캔버스 밖이면 끈다
-      if (got.hex || !got.on) {
-        setPicking(false);
-        setHover(null);
-      }
+      void sampleAt(doc, e.clientX, e.clientY).then((got) => {
+        if (!live) return;
+        if (got.hex) set(hsvOf(got.hex, hsvRef.current));
+        // 캔버스·그림의 빈(투명) 자리면 스포이드를 그대로 둔다 — 그 밖이면 끈다
+        if (got.hex || !got.on) {
+          setPicking(false);
+          setHover(null);
+        }
+      });
     };
     const cur = doc.createElement("style");
     cur.textContent = "*{cursor:crosshair !important}";
@@ -223,6 +275,7 @@ export function ColorInput({ value, onChange, style, ...rest }: Props) {
     win.addEventListener("pointermove", move, true);
     win.addEventListener("pointerdown", down, true);
     return () => {
+      live = false;
       cur.remove();
       win.removeEventListener("pointermove", move, true);
       win.removeEventListener("pointerdown", down, true);
