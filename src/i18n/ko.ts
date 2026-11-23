@@ -888,6 +888,7 @@ export const ko: Dict = {
     bgChecker: "체커",
     bgColor: "색 고르기…",
     bgDefault: "기본",
+    eyedropper: "스포이드",
     layers: "레이어",
     layersHint: "위가 앞입니다. 점을 눌러 켜고 끄고, 끌어서 차례를 바꿉니다.",
     layerN: "레이어 {n}",

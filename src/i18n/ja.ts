@@ -862,6 +862,7 @@ export const ja: Dict = {
     bgChecker: "チェッカー",
     bgColor: "色を選ぶ…",
     bgDefault: "既定",
+    eyedropper: "スポイト",
     layers: "レイヤー",
     layersHint: "上が前面です。点で表示を切り替え、ドラッグで並べ替えます。",
     layerN: "レイヤー {n}",

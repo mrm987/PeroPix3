@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { Icon } from "../components/Icon";
+import { ColorInput } from "../components/ColorInput";
 import { useImageDrop } from "../lib/dropImages";
 import { percent } from "../lib/zoomView";
 import { FONTS, useUi } from "../store/ui";
@@ -280,7 +281,8 @@ function ToolOptions() {
   useEffect(() => {
     if (!bgOpen) return;
     const close = (e: PointerEvent) => {
-      if (bgRef.current?.contains(e.target as Node)) return;
+      // ★색 고르기 창은 body 에 뜬다 — 그 안을 누른 것은 메뉴 안을 누른 것이다 (`ColorInput`)
+      if (bgRef.current?.contains(e.target as Node) || (e.target as Element | null)?.closest?.("[data-color-pop]")) return;
       setBgOpen(false);
     };
     document.addEventListener("pointerdown", close, true);
@@ -319,7 +321,7 @@ function ToolOptions() {
           </Opt>
           {tool === "brush" && (
             <Opt label={t("editor.color")}>
-              <input type="color" data-editor-brush-color value={brushes.brush.color} onChange={(e) => setBrush("brush", { color: e.target.value })} style={colorBox} />
+              <ColorInput data-editor-brush-color value={brushes.brush.color} onChange={(c) => setBrush("brush", { color: c })} style={colorBox} />
             </Opt>
           )}
         </>
@@ -332,7 +334,7 @@ function ToolOptions() {
             <span style={num}>{brushes.bucket.tolerance}</span>
           </Opt>
           <Opt label={t("editor.color")}>
-            <input type="color" data-editor-brush-color value={brushes.brush.color} onChange={(e) => setBrush("brush", { color: e.target.value })} style={colorBox} />
+            <ColorInput data-editor-brush-color value={brushes.brush.color} onChange={(c) => setBrush("brush", { color: c })} style={colorBox} />
           </Opt>
         </>
       )}
@@ -362,7 +364,7 @@ function ToolOptions() {
             />
           </Opt>
           <Opt label={t("editor.color")}>
-            <input type="color" data-editor-text-color value={cur.color} onChange={(e) => setText({ color: e.target.value })} style={colorBox} />
+            <ColorInput data-editor-text-color value={cur.color} onChange={(c) => setText({ color: c })} style={colorBox} />
           </Opt>
           <button data-editor-text-bold onMouseDown={dropFocus} onClick={() => setText({ bold: !cur.bold })} style={{ ...box, ...(cur.bold ? on : {}), padding: "2px 8px", fontWeight: "var(--w-bold)" }}>
             {t("editor.bold")}
@@ -414,7 +416,7 @@ function ToolOptions() {
                 </button>
               ))}
               <label data-editor-bg-opt="color" style={{ ...menuRow, ...(isColor ? { background: "var(--accent-bg)", color: "var(--ink)" } : {}), cursor: "pointer" }}>
-                <input type="color" value={isColor ? bg : "#7a3d5a"} onChange={(e) => setBg(e.target.value)} style={{ width: 14, height: 14, padding: 0, border: "1px solid rgba(255,255,255,.18)", borderRadius: 3, background: "transparent" }} />
+                <ColorInput value={isColor ? bg : "#7a3d5a"} onChange={(c) => setBg(c)} style={{ width: 14, height: 14, padding: 0, border: "1px solid rgba(255,255,255,.18)", borderRadius: 3, background: "transparent" }} />
                 {t("editor.bgColor")}
               </label>
             </div>
@@ -574,7 +576,7 @@ function PanelOptions() {
         />
         <span style={num}>{Math.round(page.border)}</span>
       </Opt>
-      <input type="color" data-editor-border-color value={page.color} onChange={(e) => s.setComic({ color: e.target.value })} style={colorBox} data-tip={t("editor.borderColor")} />
+      <ColorInput data-editor-border-color value={page.color} onChange={(c) => s.setComic({ color: c })} style={colorBox} data-tip={t("editor.borderColor")} />
     </>
   );
 }
@@ -668,9 +670,9 @@ function BubbleOptions() {
         <input type="range" data-editor-bubble-stroke min={0} max={12} step={0.5} value={cur.stroke} onPointerDown={() => b && s.markBefore()} onChange={(e) => set({ stroke: Number(e.target.value) }, true)} style={{ width: 70 }} />
         <span style={num}>{cur.stroke}</span>
       </Opt>
-      <input type="color" data-editor-bubble-line value={cur.line} onChange={(e) => set({ line: e.target.value })} style={colorBox} data-tip={t("editor.lineColor")} />
-      <input type="color" data-editor-bubble-fill value={cur.fill} onChange={(e) => set({ fill: e.target.value })} style={colorBox} data-tip={t("editor.fillColor")} />
-      <input type="color" data-editor-bubble-color value={cur.color} onChange={(e) => set({ color: e.target.value })} style={colorBox} data-tip={t("editor.textColor")} />
+      <ColorInput data-editor-bubble-line value={cur.line} onChange={(c) => set({ line: c })} style={colorBox} data-tip={t("editor.lineColor")} />
+      <ColorInput data-editor-bubble-fill value={cur.fill} onChange={(c) => set({ fill: c })} style={colorBox} data-tip={t("editor.fillColor")} />
+      <ColorInput data-editor-bubble-color value={cur.color} onChange={(c) => set({ color: c })} style={colorBox} data-tip={t("editor.textColor")} />
     </>
   );
 }
@@ -763,19 +765,19 @@ function SfxOptions() {
       {m && (
         <>
           <Opt label={t("editor.sfxFill")}>
-            <input type="color" data-editor-sfx-fill value={m.fill} onChange={(e) => set({ fill: e.target.value })} style={colorBox} />
+            <ColorInput data-editor-sfx-fill value={m.fill} onChange={(c) => set({ fill: c })} style={colorBox} />
             <button data-editor-sfx-grad onMouseDown={dropFocus} onClick={() => set({ fill2: m.fill2 ? null : "#888888" })} style={{ ...box, ...(m.fill2 ? on : {}), display: "grid", padding: "3px 6px" }} data-tip={t("editor.sfxGradient")}>
               {Icon.gradient}
             </button>
-            {m.fill2 && <input type="color" data-editor-sfx-fill2 value={m.fill2} onChange={(e) => set({ fill2: e.target.value })} style={colorBox} />}
+            {m.fill2 && <ColorInput data-editor-sfx-fill2 value={m.fill2} onChange={(c) => set({ fill2: c })} style={colorBox} />}
           </Opt>
           <Opt label={t("editor.sfxInner")}>
             <input type="range" data-editor-sfx-inner min={0} max={30} value={Math.round(m.inner * 100)} onPointerDown={() => s.markBefore()} onChange={(e) => set({ inner: Number(e.target.value) / 100 }, true)} style={{ width: 60 }} />
-            <input type="color" data-editor-sfx-inner-color value={m.innerColor} onChange={(e) => set({ innerColor: e.target.value })} style={colorBox} />
+            <ColorInput data-editor-sfx-inner-color value={m.innerColor} onChange={(c) => set({ innerColor: c })} style={colorBox} />
           </Opt>
           <Opt label={t("editor.sfxOuter")}>
             <input type="range" data-editor-sfx-outer min={0} max={20} value={Math.round(m.outer * 100)} onPointerDown={() => s.markBefore()} onChange={(e) => set({ outer: Number(e.target.value) / 100 }, true)} style={{ width: 60 }} />
-            <input type="color" data-editor-sfx-outer-color value={m.outerColor} onChange={(e) => set({ outerColor: e.target.value })} style={colorBox} />
+            <ColorInput data-editor-sfx-outer-color value={m.outerColor} onChange={(c) => set({ outerColor: c })} style={colorBox} />
           </Opt>
         </>
       )}

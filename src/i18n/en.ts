@@ -864,6 +864,7 @@ export const en = {
     bgChecker: "Checker",
     bgColor: "Pick a color…",
     bgDefault: "default",
+    eyedropper: "Eyedropper",
     layers: "Layers",
     layersHint: "Top is front. Click the dot to show or hide, drag to reorder.",
     layerN: "Layer {n}",

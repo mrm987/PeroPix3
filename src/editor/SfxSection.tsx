@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { useI18n } from "../i18n";
 import { Icon } from "../components/Icon";
+import { ColorInput } from "../components/ColorInput";
 import { api } from "../lib/backend";
 import { undoToast } from "../store/toast";
 import { useUi } from "../store/ui";
@@ -145,7 +146,7 @@ export function SfxSection({ sel }: { sel: Layer | null }) {
             <button data-editor-sfx-vertical onMouseDown={dropFocus} onClick={() => patch({ vertical: !m.vertical })} style={{ ...box, ...(m.vertical ? on : {}), padding: "2px 8px" }}>
               {t("editor.vertical")}
             </button>
-            {m.shadow > 0 && <input type="color" data-editor-sfx-shadow-color value={m.shadowColor} onChange={(e) => patch({ shadowColor: e.target.value })} style={{ width: 24, height: 18, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "transparent" }} data-tip={t("editor.sfxShadowColor")} />}
+            {m.shadow > 0 && <ColorInput data-editor-sfx-shadow-color value={m.shadowColor} onChange={(c) => patch({ shadowColor: c })} style={{ width: 24, height: 18, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "transparent" }} data-tip={t("editor.sfxShadowColor")} />}
             <button
               data-editor-sfx-reroll
               onMouseDown={dropFocus}
