@@ -73,17 +73,28 @@ function imgCopy(doc: Document, src: string): Promise<HTMLCanvasElement | null> 
   return p;
 }
 
-/** 그 자리에서 **보이는** 픽셀 — 캔버스와 그림(`<img>`)을 위의 것부터 보고, 투명하면 그 아래로.
+/** 돋보기 한 변의 칸 수 — 가운데 칸이 집는 점이다 */
+const LOUPE_N = 11;
+/** 돋보기 한 칸의 화면 크기 (CSS px) */
+const LOUPE_CELL = 9;
+
+/** 커서 둘레 `LOUPE_N`×`LOUPE_N` 화면 픽셀의 **보이는** 색 — 캔버스와 그림(`<img>`)을 위의 것부터 보고, 투명하면 그 아래로.
+ *  가운데 칸이 집는 색이다 (돋보기에 보이는 것과 누르면 들어가는 것이 같다).
  *  ★`elementsFromPoint` 로 찾지 않는다 — 자동검열의 덮개 캔버스처럼 `pointer-events: none` 인 것이 빠진다.
  *    대신 커서 아래 맨 위 요소와 **같은 틀**(부모가 그 요소를 품는다)에 든 캔버스·그림을 문서 차례의 역순(위가 먼저)으로 본다.
  *  ★`on` — 커서 아래에 캔버스·그림이 하나라도 있었나 (투명한 자리를 누른 것과 밖을 누른 것을 가른다) */
-async function sampleAt(doc: Document, x: number, y: number): Promise<{ hex: string | null; on: boolean }> {
+async function sampleAt(doc: Document, x: number, y: number): Promise<{ hex: string | null; on: boolean; grid: Uint8ClampedArray }> {
+  const N = LOUPE_N, c = N >> 1;
+  const grid = new Uint8ClampedArray(N * N * 4);
   const top = doc.elementFromPoint(x, y);
-  if (!top) return { hex: null, on: false };
+  if (!top) return { hex: null, on: false, grid };
   const hits = [...doc.querySelectorAll<HTMLCanvasElement | HTMLImageElement>("canvas, img")].filter((el) => {
+    if (el.closest("[data-color-loupe]")) return false;
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0 && x >= r.left && x < r.right && y >= r.top && y < r.bottom && (el === top || !!el.parentElement?.contains(top));
   });
+  // 한 칸 = 화면의 기기 픽셀 하나
+  const step = 1 / ((doc.defaultView?.devicePixelRatio || 1));
   for (const el of hits.reverse()) {
     const r = el.getBoundingClientRect();
     let src: HTMLCanvasElement | null = null;
@@ -101,17 +112,41 @@ async function sampleAt(doc: Document, x: number, y: number): Promise<{ hex: str
       src = await imgCopy(doc, im.currentSrc);
     }
     if (!src || !src.width || !src.height) continue;
-    const px = Math.floor(((x - box.l) / box.w) * src.width);
-    const py = Math.floor(((y - box.t) / box.h) * src.height);
-    if (px < 0 || py < 0 || px >= src.width || py >= src.height) continue;
+    const cv = src;
+    // 칸마다 그 소스의 픽셀 위치 — 한 번에 읽으려고 둘레 상자를 먼저 잰다
+    const sx = (i: number) => Math.floor(((x + (i - c) * step - box.l) / box.w) * cv.width);
+    const sy = (j: number) => Math.floor(((y + (j - c) * step - box.t) / box.h) * cv.height);
+    const x0 = Math.max(0, sx(0)), y0 = Math.max(0, sy(0));
+    const x1 = Math.min(cv.width - 1, sx(N - 1)), y1 = Math.min(cv.height - 1, sy(N - 1));
+    if (x1 < x0 || y1 < y0) continue;
+    let d: Uint8ClampedArray;
     try {
-      const d = src.getContext("2d")?.getImageData(px, py, 1, 1).data;
-      if (d && d[3] > 0) return { hex: rgbToHex(d[0], d[1], d[2]), on: true };
+      const got = cv.getContext("2d")?.getImageData(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+      if (!got) continue;
+      d = got.data;
     } catch {
-      /* 읽을 수 없는 캔버스 — 아래 것을 본다 */
+      continue; // 읽을 수 없는 캔버스 — 아래 것을 본다
+    }
+    const w = x1 - x0 + 1;
+    for (let j = 0; j < N; j++) {
+      const py = sy(j);
+      if (py < y0 || py > y1) continue;
+      for (let i = 0; i < N; i++) {
+        const o = (j * N + i) * 4;
+        if (grid[o + 3]) continue; // 위의 것이 이미 덮었다
+        const px = sx(i);
+        if (px < x0 || px > x1) continue;
+        const k = ((py - y0) * w + (px - x0)) * 4;
+        if (!d[k + 3]) continue;
+        grid[o] = d[k];
+        grid[o + 1] = d[k + 1];
+        grid[o + 2] = d[k + 2];
+        grid[o + 3] = d[k + 3];
+      }
     }
   }
-  return { hex: null, on: hits.length > 0 };
+  const o = (c * N + c) * 4;
+  return { hex: grid[o + 3] ? rgbToHex(grid[o], grid[o + 1], grid[o + 2]) : null, on: hits.length > 0, grid };
 }
 
 /** 누른 뒤 따라오는 놓기·클릭을 먹는다 — 스포이드로 누른 것이 그 아래 버튼·붓에 닿지 않게 */
@@ -144,8 +179,8 @@ export function ColorInput({ value, onChange, style, ...rest }: Props) {
   const [hsv, setHsv] = useState<Hsv>(() => hsvOf(value));
   const [mode, setMode] = useState<"rgb" | "hex">("rgb");
   const [picking, setPicking] = useState(false);
-  /** 스포이드가 커서 아래에서 읽은 색 — 커서 옆 작은 원으로 보인다 */
-  const [hover, setHover] = useState<{ x: number; y: number; hex: string | null } | null>(null);
+  /** 스포이드가 커서 둘레에서 읽은 것 — 커서 자리에 돋보기로 보인다 (`Loupe`) */
+  const [hover, setHover] = useState<{ x: number; y: number; hex: string | null; grid: Uint8ClampedArray } | null>(null);
   const box = useRef<HTMLButtonElement>(null);
   const pop = useRef<HTMLDivElement>(null);
   const pipette = useRef<HTMLButtonElement>(null);
@@ -244,12 +279,27 @@ export function ColorInput({ value, onChange, style, ...rest }: Props) {
     // ★읽기는 비동기다 (그림은 사본을 받아 와서 읽는다) — 늦게 온 답은 버린다
     let live = true;
     let seq = 0;
+    // ★캔버스·그림 위에서는 커서를 숨기고 돋보기가 커서 자리를 대신한다 (가운데 칸이 집는 점). 그 밖에서는 십자 커서.
+    //   색 고르기 창 안은 평소 커서 그대로
+    const cur = doc.createElement("style");
+    const cursor = (c: "crosshair" | "none") => {
+      cur.textContent = `body *:not([data-color-pop]):not([data-color-pop] *){cursor:${c} !important}`;
+    };
+    cursor("crosshair");
+    doc.head.appendChild(cur);
     const move = (e: PointerEvent) => {
       const n = ++seq;
-      if (inPop(e)) return setHover(null);
+      if (inPop(e)) {
+        cursor("crosshair");
+        return setHover(null);
+      }
       block(e);
       const { clientX: x, clientY: y } = e;
-      void sampleAt(doc, x, y).then((got) => live && n === seq && setHover({ x, y, hex: got.hex }));
+      void sampleAt(doc, x, y).then((got) => {
+        if (!live || n !== seq) return;
+        cursor(got.on ? "none" : "crosshair");
+        setHover(got.on ? { x, y, hex: got.hex, grid: got.grid } : null);
+      });
     };
     const down = (e: PointerEvent) => {
       if (inPop(e)) {
@@ -269,9 +319,6 @@ export function ColorInput({ value, onChange, style, ...rest }: Props) {
         }
       });
     };
-    const cur = doc.createElement("style");
-    cur.textContent = "*{cursor:crosshair !important}";
-    doc.head.appendChild(cur);
     win.addEventListener("pointermove", move, true);
     win.addEventListener("pointerdown", down, true);
     return () => {
@@ -472,28 +519,67 @@ export function ColorInput({ value, onChange, style, ...rest }: Props) {
           </div>,
           win.document.body,
         )}
-      {picking &&
-        hover?.hex &&
-        createPortal(
-          <span
-            data-color-loupe
-            style={{
-              position: "fixed",
-              left: hover.x + 14,
-              top: hover.y + 14,
-              width: 22,
-              height: 22,
-              borderRadius: "50%",
-              background: hover.hex,
-              border: "2px solid #fff",
-              boxShadow: "0 0 0 1px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.35)",
-              pointerEvents: "none",
-              zIndex: 8001,
-            }}
-          />,
-          win.document.body,
-        )}
+      {picking && hover && createPortal(<Loupe x={hover.x} y={hover.y} hex={hover.hex} grid={hover.grid} />, win.document.body)}
     </>
+  );
+}
+
+/** 스포이드 돋보기 — **커서 자리에 가운데를 맞춘다.** 가운데 네모 칸이 누르면 집는 점이고, 테두리 고리가 그 색이다.
+ *  ★사용자 지적 2026-11-23: 커서가 안 보여 어느 지점의 색을 집는지 알 수 없었다 (그때는 커서 옆에 색 원만 띄웠다).
+ *  칸은 화면의 기기 픽셀 하나씩이다. 투명한 칸은 체커로 그린다. */
+function Loupe({ x, y, hex, grid }: { x: number; y: number; hex: string | null; grid: Uint8ClampedArray }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const N = LOUPE_N, C = LOUPE_CELL, D = N * C, RING = 4;
+  useLayoutEffect(() => {
+    const ctx = ref.current?.getContext("2d");
+    if (!ctx) return;
+    const img = ctx.createImageData(N, N);
+    for (let j = 0; j < N; j++) {
+      for (let i = 0; i < N; i++) {
+        const o = (j * N + i) * 4;
+        const a = grid[o + 3] / 255;
+        const bg = (i + j) & 1 ? 0x9a : 0x6a;
+        img.data[o] = grid[o] * a + bg * (1 - a);
+        img.data[o + 1] = grid[o + 1] * a + bg * (1 - a);
+        img.data[o + 2] = grid[o + 2] * a + bg * (1 - a);
+        img.data[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }, [grid, N]);
+  const mid = (N >> 1) * C;
+  return (
+    <div
+      data-color-loupe
+      style={{
+        position: "fixed",
+        left: x - D / 2 - RING,
+        top: y - D / 2 - RING,
+        // ★앱 전체가 border-box 다 — 그대로 두면 고리 두께만큼 안쪽이 줄어 가운데 칸이 커서에서 비켜난다
+        boxSizing: "content-box",
+        width: D,
+        height: D,
+        borderRadius: "50%",
+        overflow: "hidden",
+        border: `${RING}px solid ${hex ?? "#808080"}`,
+        boxShadow: "0 0 0 1px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.5), 0 4px 14px rgba(0,0,0,0.4)",
+        pointerEvents: "none",
+        zIndex: 8001,
+      }}
+    >
+      <canvas ref={ref} width={N} height={N} style={{ display: "block", width: D, height: D, imageRendering: "pixelated" }} />
+      {/* 칸 줄 */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: "linear-gradient(rgba(0,0,0,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.22) 1px, transparent 1px)",
+          backgroundSize: `${C}px ${C}px`,
+        }}
+      />
+      {/* 집는 칸 */}
+      <div style={{ position: "absolute", left: mid - 1, top: mid - 1, width: C + 2, height: C + 2, boxSizing: "border-box", border: "1px solid #fff", boxShadow: "0 0 0 1px #000" }} />
+    </div>
   );
 }
 
