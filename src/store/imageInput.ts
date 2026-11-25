@@ -7,6 +7,7 @@ import { t } from "../i18n";
 import { SIZE_PRESETS, modelCaps, useGen } from "./gen";
 import { api } from "../lib/backend";
 import { INFERENCE_MODEL, INFER_AUX, fitPlan, type FittedPlan } from "../lib/inference";
+import { sentModel } from "../lib/naiModels";
 
 /** 이미지 입력 — Vibe Transfer · Precise Reference · 베이스 이미지(i2i·인페인트).
  *
@@ -35,15 +36,21 @@ export type Vibe = {
   encoded_info_extracted?: number;
 };
 
+/** Precise Reference 의 갈래 — 공홈 `characterReferenceDescriptions` 의 값 그대로 `base_caption` 으로 나간다.
+ *  ★`_anyoutfit`·`_mainoutfit` 은 「Prefer same outfit」 스위치가 만든다. Character & Style 은 켜면 기본 갈래,
+ *    Character 는 켜면 `_mainoutfit` 이다 (공홈과 같다). Outfit 을 못 받는 모델에서는 서버가 기본 갈래로 되돌린다 */
+export type RefMode =
+  | "character&style" | "character&style_anyoutfit" | "character" | "character_mainoutfit" | "style" | "costume";
+
 export type PreciseRef = {
-  /** ★캔버스로 이미 다듬은 그림 (1472² · 1536×1024 · 1024×1536 중 하나, 검은 레터박스) */
+  /** ★캔버스로 이미 다듬은 그림 (1472² · 1536×1024 · 1024×1536 중 하나, 검은 레터박스). V4.5 가 이것을 보낸다 */
   image: string;
   /** 이 한 장을 쓰나 — 바이브와 같은 규칙이다 (없으면 켜진 것) */
   on?: boolean;
-  /** 미리보기용 원본 */
+  /** 넣은 그림 원본. 미리보기이고, ★V5 는 이것을 보낸다 (서버가 판에 맞춘다, `ModelCaps.char_ref_bucket`) */
   preview: string;
   name: string;
-  mode: "character&style" | "character" | "style";
+  mode: RefMode;
   strength: number;
   /** ★UI 값이 뒤집혀 나간다 — 서버가 `secondary = 1 - fidelity` 로 보낸다 */
   fidelity: number;
@@ -155,11 +162,14 @@ type S = {
 
   /** ★★**지금 생성에 실제로 실리는 것** — 앱에서 이 물음에 답하는 자리는 여기 하나다.
    *
-   *  거르는 것이 셋이다: **모델 능력**(V5 는 바이브도 레퍼런스도 없다) · **묶음 스위치**
+   *  거르는 것이 셋이다: **모델 능력**(V5 는 바이브가 없고, 레퍼런스는 인페인트에 안 실린다) · **묶음 스위치**
    *  (`vibeOn`·`refOn`) · **낱장 스위치**(`on`). 셋 중 하나만 빠져도 화면과 실제가 갈린다.
    *  ★보내는 쪽(`payload`) · 값을 매기는 쪽(`lib/costNow`·`GenerateFooter`) ·
    *    알리는 쪽(`ImageInputBadge`)이 전부 이것을 부른다. */
   riding: () => { vibes: Vibe[]; refs: PreciseRef[]; infer: InferRef | null };
+  /** 켜 둔 레퍼런스가 **인페인트라서** 빠지나 (그 모델이 인페인트에 레퍼런스를 못 받는다, `ModelCaps.char_ref_inpaint`).
+   *  화면이 막힌 이유를 적는 데 쓴다 */
+  refsMasked: () => boolean;
   /** ★생성 요청에 실을 조각. **단발·큐 두 경로가 같은 것을 쓴다** (하나의 정보에는 하나의 창구) */
   payload: () => Record<string, unknown>;
 };
@@ -457,11 +467,25 @@ export function makeImageInput(
     // ★능력표는 **백엔드와 같은 것**을 본다 (`backend/nai.py` 의 `caps`) — 거기서 지우는 것을
     //   여기서 세면 "보낸다고 해 놓고 안 나가는" 상태가 된다
     const cap = modelCaps(modelOf());
+    const infer = modelOf() === INFERENCE_MODEL && s.inferOn ? s.infer : null;
+    // ★★레퍼런스는 서버의 `riding_refs` 와 **같은 판정**이다: 그 모델이 받고, 인페인트(인퍼런스도 인페인트다)면
+    //   `char_ref_inpaint` 일 때만, Outfit 을 못 받는 모델에서는 Outfit 을 뺀다. 요금이 이 목록을 센다
+    const refs =
+      cap.char_ref && s.refOn && !get().refsMasked()
+        ? s.refs.filter((r) => inputOn(r) && (cap.outfit_refs || r.mode !== "costume"))
+        : [];
     return {
       vibes: cap.vibe && s.vibeOn ? s.vibes.filter(inputOn) : [],
-      refs: cap.char_ref && s.refOn ? s.refs.filter(inputOn) : [],
-      infer: modelOf() === INFERENCE_MODEL && s.inferOn ? s.infer : null,
+      refs,
+      infer,
     };
+  },
+
+  refsMasked() {
+    const s = get();
+    const cap = modelCaps(modelOf());
+    const infer = modelOf() === INFERENCE_MODEL && s.inferOn && !!s.infer;
+    return cap.char_ref && !cap.char_ref_inpaint && (infer || maskRides(s));
   },
 
   payload() {
@@ -512,10 +536,12 @@ export function makeImageInput(
         },
       };
     }
+    // ★V5 는 **원본**을 보내고 서버가 판에 맞춘다. V4.5 는 화면이 세 판에 얹어 둔 그림이다 (`ModelCaps.char_ref_bucket`)
+    const bucket = modelCaps(modelOf()).char_ref_bucket;
     return {
       vibe_transfer: ride.vibes,
       precise_references: ride.refs.map((r) => ({
-        image: r.image, mode: r.mode, strength: r.strength, fidelity: r.fidelity,
+        image: bucket ? r.preview : r.image, mode: r.mode, strength: r.strength, fidelity: r.fidelity,
       })),
       // ★사용자 토글이다 (8절). 꺼 두면 합이 1을 넘어도 값을 그대로 보낸다
       normalize_reference_strength: s.normalizeVibe,
@@ -548,6 +574,11 @@ export function payloadOfSnap(
   return tmp.getState().payload();
 }
 export type ImageInputStore = typeof useImageInput;
+
+/** ★★화면이 볼 **실제로 나가는 모델** — 그 한 벌에 레퍼런스가 실리면 Medium 은 High 다 (`lib/naiModels` 의 `sentModel`).
+ *  칸을 숨기는 것(`ModelCaps.fixed`)·Effort 토글이 이것을 본다. 보내는 것은 서버가 같은 규칙으로 바꾼다 */
+export const useSentModel = (model: string, store: ImageInputStore = useImageInput): string =>
+  sentModel(model, store((s) => s.riding().refs.length));
 
 /** 바이브 한 장을 목록 끝에 **값까지 갖춘 채로** 붙인다.
  *

@@ -394,7 +394,7 @@ function Sheet({
               {t("imgIn.base")}
             </button>
           )}
-          {/* ★모델이 못 하는 것은 안 낸다 — V5 에는 Vibe 도 Precise Reference 도 없다 */}
+          {/* ★모델이 못 하는 것은 안 낸다 — V5 에는 Vibe 가 없다 */}
           {cap.vibe && (vibeFile || !!m?.data) && (
             <button data-drop-vibe disabled={busy} onClick={asVibe} style={btn}>
               {t("imgIn.vibeAdd")}

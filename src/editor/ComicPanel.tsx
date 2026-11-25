@@ -121,7 +121,7 @@ function CutBar({ doc, view }: { doc: Doc; view: "common" | "cut" }) {
 /** 캔버스의 생성 옵션을 옵션 부품에 넘긴다 (사용자 결정 2026-09-28: 캔버스마다 따로). 부품은 생성 모드와 같은 것이다 */
 function useComicHost(doc: Doc): ParamsHost {
   const gen = useGen((s) => s.params);
-  return { params: cutParams(doc, gen), set: (k, v) => useEditor.getState().setComicGen(doc.id, k as keyof ComicGen, v as never) };
+  return { params: cutParams(doc, gen), set: (k, v) => useEditor.getState().setComicGen(doc.id, k as keyof ComicGen, v as never), input: useComicInput };
 }
 
 /** 「공통」 — 베이스 프롬프트(화풍) · 캐릭터 프롬프트(외형) · 배경 · 생성 옵션 (설계 8-1).

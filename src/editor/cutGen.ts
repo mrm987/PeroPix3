@@ -11,6 +11,7 @@
  *  ★그림이 생기는 자리라 `env`(화면 구조)를 남긴다 (데스크 지침 「그림이 생기는 모든 자리가 구조를 남겨야 한다」). */
 import { t } from "../i18n";
 import { anlasCost } from "../lib/anlas";
+import { sentModel } from "../lib/naiModels";
 import { compileBlocks } from "../lib/blocks";
 import { randomSeed, rounds } from "../lib/seedRounds";
 import { resolveShot } from "../lib/wildcards";
@@ -80,7 +81,8 @@ export function cutCost(doc: Doc, panels: Layer[], count: number, strength = 1, 
   for (const p of panels) {
     const s = sizeOf(p);
     const c = anlasCost({
-      model: params.model, width: s.w, height: s.h, steps: params.steps, opus, opusExhausted: !!usage?.isNegative,
+      // ★레퍼런스가 실리면 Medium 은 High 로 나간다 (`sentModel`)
+      model: sentModel(params.model, ride.refs.length), width: s.w, height: s.h, steps: params.steps, opus, opusExhausted: !!usage?.isNegative,
       uncachedVibes: ride.vibes.filter((v) => !v.encoded).length, activeVibes: ride.vibes.length, refCount: ride.refs.length,
       inpaint, strength, count,
     });

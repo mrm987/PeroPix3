@@ -26,6 +26,7 @@ import type { CharGroup } from "../lib/charGroups";
 import type { CharCard, StyleCard } from "../store/cards";
 import { PICK_BOTH, pickStyleOpts } from "../lib/styleOpts";
 import { PromptOptsBar } from "./PromptOpts";
+import { useSentModel } from "../store/imageInput";
 import { CharNo } from "./CharPositioner";
 
 /** 프롬프트 섹션들 — 스타일(공통) 하나 + 캐릭터 여럿.
@@ -727,7 +728,8 @@ export function SectionBody({
   const tab = useUi((u) => u.view.tab[id] ?? "p");
   const setTab = (sec: string, v: "p" | "u") => useUi.getState().setView("tab", sec, v);
   const ucFull = ucHasContent(uc);
-  const fixedModel = useGen((g) => !!modelCaps(g.params.model).fixed);
+  // ★실제로 나가는 모델로 본다 — 레퍼런스가 실리면 Medium 도 High 라 UC 가 나간다 (`useSentModel`)
+  const fixedModel = !!modelCaps(useSentModel(useGen((g) => g.params.model))).fixed;
   const showUc = tab === "u";
 
   return (

@@ -24,7 +24,7 @@ import { useUi } from "../store/ui";
 import { useGen } from "../store/gen";
 import { useLlm } from "../store/llm";
 import { usePrompt } from "../store/prompt";
-import { MAX_VIBES, useImageInput } from "../store/imageInput";
+import { MAX_VIBES, useImageInput, type RefMode } from "../store/imageInput";
 import { costNow, countNow } from "./costNow.ts";
 import { cardLocked } from "./sceneCards.ts";
 import { t } from "../i18n";
@@ -1340,9 +1340,13 @@ defineAction({
     + "★넣으면 레퍼런스 묶음이 켜진다 (바이브와는 동시에 못 쓴다 — NAI 제약).",
   args: {
     image: { type: "string", desc: "어느 그림 — `set_base_image` 와 같은 꼴", required: true },
-    mode: { type: "string", desc: '"character&style"(기본) · "character" · "style"' },
-    strength: { type: "number", desc: "Reference Strength (기본 1)" },
-    fidelity: { type: "number", desc: "Fidelity 0~1 (기본 1)" },
+    mode: {
+      type: "string",
+      desc: '"character&style"(기본) · "character" · "style". V5 는 더 있다: "costume"(의상만) · '
+        + '"character&style_anyoutfit"(의상은 따르지 않음) · "character_mainoutfit"(의상까지 따름)',
+    },
+    strength: { type: "number", desc: "Reference Strength (기본 1. V4.5 는 1 까지, V5 는 5 까지가 보통이다)" },
+    fidelity: { type: "number", desc: "Fidelity 0~1 (기본 1). V5 는 받지 않는다" },
   },
   confirm: "none",
   run: async (a) => {
@@ -1350,9 +1354,8 @@ defineAction({
     const got = await findImage(String(a.image ?? ""));
     if ("error" in got) return got;
     const { processReference } = await import("../store/imageInput");
-    const mode = ["character&style", "character", "style"].includes(String(a.mode ?? ""))
-      ? (String(a.mode) as "character&style" | "character" | "style")
-      : "character&style";
+    const modes: RefMode[] = ["character&style", "character&style_anyoutfit", "character", "character_mainoutfit", "style", "costume"];
+    const mode = modes.includes(String(a.mode ?? "") as RefMode) ? (String(a.mode) as RefMode) : "character&style";
     const s = useImageInput.getState();
     s.addRef({
       image: await processReference(got.data),

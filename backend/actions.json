@@ -511,11 +511,11 @@
         },
         "strength": {
           "type": "number",
-          "desc": "Reference Strength (기본 1)"
+          "desc": "Reference Strength (기본 1. V4.5 는 1 까지, V5 는 5 까지가 보통이다)"
         },
         "fidelity": {
           "type": "number",
-          "desc": "Fidelity 0~1 (기본 1)"
+          "desc": "Fidelity 0~1 (기본 1). V5 는 받지 않는다"
         }
       }
     },

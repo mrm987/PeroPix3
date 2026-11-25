@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import math
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
@@ -82,6 +83,81 @@ def preprocess_base_image(b64_image: str, width: int, height: int) -> str:
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
+#: V5 Precise Reference 판 — 공홈 번들 `b2fe159` 의 표 그대로다 (`[w, h]`, 전부 1MP 안팎 · 64 배수)
+REF_BUCKETS: list[tuple[int, int]] = [
+    (256, 4096), (256, 4032), (256, 3968), (256, 3904), (256, 3840), (256, 3776), (256, 3712), (256, 3648),
+    (256, 3584), (256, 3520), (256, 3456), (256, 3392), (256, 3328), (320, 3264), (320, 3200), (320, 3136),
+    (320, 3072), (320, 3008), (320, 2944), (320, 2880), (320, 2816), (320, 2752), (384, 2688), (384, 2624),
+    (384, 2560), (384, 2496), (384, 2432), (384, 2368), (448, 2304), (448, 2240), (448, 2176), (448, 2112),
+    (512, 2048), (512, 1984), (512, 1920), (512, 1856), (576, 1792), (576, 1728), (576, 1664), (640, 1600),
+    (640, 1536), (704, 1472), (704, 1408), (768, 1344), (768, 1280), (832, 1216), (896, 1152), (960, 1088),
+    (1024, 1024), (1088, 960), (1152, 896), (1216, 832), (1280, 768), (1344, 768), (1408, 704), (1472, 704),
+    (1536, 640), (1600, 640), (1664, 576), (1728, 576), (1792, 576), (1856, 512), (1920, 512), (1984, 512),
+    (2048, 512), (2112, 448), (2176, 448), (2240, 448), (2304, 448), (2368, 384), (2432, 384), (2496, 384),
+    (2560, 384), (2624, 384), (2688, 384), (2752, 320), (2816, 320), (2880, 320), (2944, 320), (3008, 320),
+    (3072, 320), (3136, 320), (3200, 320), (3264, 320), (3328, 256), (3392, 256), (3456, 256), (3520, 256),
+    (3584, 256), (3648, 256), (3712, 256), (3776, 256), (3840, 256), (3904, 256), (3968, 256), (4032, 256),
+    (4096, 256),
+]
+
+
+def ref_bucket(w: int, h: int) -> dict:
+    """그 크기의 그림이 갈 판과 덮어 맞출 크기 (공홈 `D.f` 를 그대로 옮겼다).
+
+    ★판은 **로그 비율이 가장 가까운 것**이다. 같으면 앞선 판이 남는다 (`t<n`).
+    ★덮어 맞춘다(cover). 짧은 쪽이 판에 닿게 키우고 넘친 쪽의 가운데를 자른다 — 레터박스가 아니다."""
+    a = math.log(max(w, 1) / max(h, 1))
+    bw, bh = REF_BUCKETS[0]
+    best = abs(a - math.log(bw / bh))
+    for x, y in REF_BUCKETS:
+        d = abs(a - math.log(x / y))
+        if d < best:
+            bw, bh, best = x, y, d
+    n = max(bw / w, bh / h)
+    rw = max(math.floor(w * n + 0.5), bw)
+    rh = max(math.floor(h * n + 0.5), bh)
+    return {"width": bw, "height": bh, "resize": (rw, rh),
+            "left": (rw - bw) // 2, "top": (rh - bh) // 2, "unchanged": (w, h) == (bw, bh)}
+
+
+def _drop_stealth(img: Image.Image) -> Image.Image | None:
+    """NAI 가 알파 LSB 에 심은 메타데이터를 지운 그림. 심긴 것이 없으면 None (공홈 `removeAlphaMetadata`).
+
+    ★공홈은 레퍼런스를 보내기 전에 이것부터 한다 — 알파 254 는 255 로, 1 은 0 으로."""
+    if img.mode != "RGBA":
+        return None
+    import numpy as np
+    from meta import _stealth_bits, _stealth_sig
+
+    px = np.array(img)
+    if not _stealth_sig(_stealth_bits(px[:, :, 3])):
+        return None
+    a = px[:, :, 3]
+    a[a == 254] = 255
+    a[a == 1] = 0
+    return Image.fromarray(px)
+
+
+def bucket_reference(b64: str) -> str:
+    """V5 Precise Reference 그림을 판에 맞춘다 (공홈 `bucketCharacterReferences` 갈래).
+
+    ★공홈 순서 그대로다: 알파 메타데이터 지우기 → 판 고르기 → **lanczos3** 로 덮어 맞추기 → 가운데 자르기 → PNG.
+      PIL 의 LANCZOS 가 같은 계열이다 (`preprocess_base_image` 와 같은 이유).
+    ★크기가 이미 판과 같으면 다시 굽지 않는다 (NAI 가 내는 832×1216 이 그렇다)."""
+    img = Image.open(io.BytesIO(base64.b64decode(b64)))
+    if img.mode in ("LA", "P", "PA"):
+        img = img.convert("RGBA")
+    elif img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGB")
+    clean = _drop_stealth(img)
+    b = ref_bucket(*img.size)
+    if b["unchanged"]:
+        return _png_b64(clean) if clean is not None else b64
+    out = (clean or img).resize(b["resize"], Image.LANCZOS)
+    out = out.crop((b["left"], b["top"], b["left"] + b["width"], b["top"] + b["height"]))
+    return _png_b64(out)
 
 
 def blend_mask_8px(b64_mask: str, width: int, height: int) -> Image.Image:

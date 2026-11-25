@@ -7,7 +7,7 @@ import { Icon } from "../components/Icon";
 import { Ratio } from "../components/Ratio";
 import { Help } from "../components/Tip";
 import { ImageInputPanel, INPUT_ZONE } from "./ImageInputPanel";
-import { useImageInput, type ImageInputStore } from "../store/imageInput";
+import { useImageInput, useSentModel, type ImageInputStore } from "../store/imageInput";
 import { fitPlan, planFor } from "../lib/inference";
 import { effortOf, highModel, withEffort } from "../lib/naiModels";
 import { flashStyle, useFlash, useUi } from "../store/ui";
@@ -79,8 +79,11 @@ export function OptionsPanel({ only, host, refs }: {
   /** ★★**이 모델에서 되는 것만 보여 준다** (사용자 지시 2026-08-21).
    *
    *  V5 는 스케줄러·Variety+ 가 아예 없다 — 서버가 무시하는 컨트롤을 남겨 두면 사용자는
-   *  켰다고 믿고 결과만 다르게 나온다. 능력표는 `lib/naiModels.ts` 하나다. */
-  const cap = modelCaps(p.model);
+   *  켰다고 믿고 결과만 다르게 나온다. 능력표는 `lib/naiModels.ts` 하나다.
+   *  ★★**실제로 나가는 모델**로 본다 — Precise Reference 가 실리면 Medium 은 High 로 나간다 (`useSentModel`).
+   *    그동안은 High 의 칸(스텝·샘플러·CFG Rescale)이 다시 보이고 Effort 는 High 에 선다 (공홈과 같다). */
+  const sent = useSentModel(p.model, refs ?? useImageInput);
+  const cap = modelCaps(sent);
   /** 인퍼런스가 실리면 그 참조의 크기. 해상도 목록이 결과 크기로 바뀐다 (설계 문서 3번 「해상도」) */
   const inferSize = useImageInput((s) => s.riding().infer?.size ?? null);
   /** 씬·큰 그림을 끌고 있다. 이미지 입력의 베이스·Inference 칸이 받는다 (`ImageInputPanel` 의 `DropSlot`) */
@@ -117,14 +120,20 @@ export function OptionsPanel({ only, host, refs }: {
                   Medium 은 별도 모델 id 다 (`withEffort`). 고정되는 칸(스텝·샘플러·CFG Rescale)은 아래에서 숨는다 */}
               {effortOf(p.model) && (
                 <Group label={t("options.effort")} help={t("options.effortHint")}>
-                  <div data-effort={effortOf(p.model)} style={{ display: "flex", border: "1px solid var(--line)", borderRadius: "var(--r-2)", overflow: "hidden", alignSelf: "flex-start" }}>
+                  <div data-effort={effortOf(sent)} style={{ display: "flex", border: "1px solid var(--line)", borderRadius: "var(--r-2)", overflow: "hidden", alignSelf: "flex-start" }}>
                     {(["medium", "high"] as const).map((e, i) => {
-                      const on = effortOf(p.model) === e;
+                      const on = effortOf(sent) === e;
+                      // ★레퍼런스가 실리는 동안 Medium 은 못 고른다 (공홈 `effortForcedByPreciseReference`). 고른 값은 그대로 두어
+                      //   레퍼런스를 빼면 Medium 으로 돌아간다. ★`disabled` 를 쓰지 않는다 — 툴팁이 뜨려면 커서를 받아야 한다
+                      const locked = e === "medium" && sent !== p.model;
                       return (
                         <button
                           key={e}
                           data-effort-pick={e}
-                          onClick={() => !on && set("model", withEffort(p.model, e))}
+                          data-effort-locked={locked ? "" : undefined}
+                          aria-disabled={locked || undefined}
+                          data-tip={locked ? t("options.effortRefs") : undefined}
+                          onClick={() => !on && !locked && set("model", withEffort(p.model, e))}
                           style={{
                             padding: "var(--sp-1) var(--sp-4)",
                             fontSize: "var(--text-xs)",
@@ -132,7 +141,8 @@ export function OptionsPanel({ only, host, refs }: {
                             borderLeft: i ? "1px solid var(--line)" : "none",
                             background: on ? "var(--accent)" : "transparent",
                             color: on ? "var(--accent-on)" : "var(--ink-soft)",
-                            cursor: on ? "default" : "pointer",
+                            opacity: locked ? 0.45 : 1,
+                            cursor: on || locked ? "default" : "pointer",
                           }}
                         >
                           {t(e === "medium" ? "options.effortMedium" : "options.effortHigh")}

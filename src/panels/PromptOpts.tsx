@@ -1,6 +1,7 @@
 import { useI18n } from "../i18n";
 import { Icon } from "../components/Icon";
 import { modelCaps, useGen, type ParamsHost } from "../store/gen";
+import { useImageInput, useSentModel } from "../store/imageInput";
 import type { StyleOpts } from "../lib/styleOpts";
 
 /** 프롬프트 칸 **하단에 붙는 띠** — 프롬프트의 일부가 되는 설정들.
@@ -54,7 +55,8 @@ export function PromptOptsBar({ uc, target, host }: {
   const setLive = host?.set ?? setGen;
   /* ★카드를 고칠 때도 **고를 수 있는 값은 지금 모델이 정한다** — 카드는 모델을 안 들고
      다니기 때문이다 (모델은 카드의 관심사가 아니다). */
-  const cap = modelCaps(live.model);
+  // ★실제로 나가는 모델로 본다 — 레퍼런스가 실리면 Medium 도 High 라 UC 프리셋을 고를 수 있다 (`useSentModel`)
+  const cap = modelCaps(useSentModel(live.model, host?.input ?? useImageInput));
   const p = target ? { ...live, ...target.value } : live;
   const set = <K extends keyof StyleOpts>(k: K, v: StyleOpts[K]) =>
     target ? target.onChange({ [k]: v } as StyleOpts) : setLive(k, v as never);

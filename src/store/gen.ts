@@ -76,7 +76,12 @@ export type GenParams = {
 
 /** 생성 옵션을 **어느 값에서 읽고 어디에 쓰나**. 옵션 부품(`OptionsPanel`·`PromptOptsBar`·`SeedRow`)이 받고, 없으면 생성 모드(`useGen`)다.
  *  ★만화 캔버스는 자기 값을 준다 (사용자 결정 2026-09-28: 생성 옵션은 캔버스마다 따로, `editor/cutGen` 의 `cutParams`) */
-export type ParamsHost = { params: GenParams; set: <K extends keyof GenParams>(k: K, v: GenParams[K]) => void };
+export type ParamsHost = {
+  params: GenParams;
+  set: <K extends keyof GenParams>(k: K, v: GenParams[K]) => void;
+  /** 이 값과 함께 나가는 참조 그림 한 벌 — 실제로 나가는 모델이 그것을 본다 (`useSentModel`). 없으면 생성 모드 것 */
+  input?: import("./imageInput").ImageInputStore;
+};
 
 /** 모델 목록·능력표는 **`lib/naiModels.ts` 하나**다 (그 파일 머리 주석).
  *  화면이 「이 모델에서 되는 것만」 보이게 하는 근거라, 여기 사본을 두지 않는다. */

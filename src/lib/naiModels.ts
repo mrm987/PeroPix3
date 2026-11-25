@@ -17,6 +17,17 @@ export type ModelCaps = {
   vibe: boolean;
   /** Precise Reference (`director_reference_*`) */
   char_ref: boolean;
+  /** 인페인트(마스크를 싣는 생성)에도 레퍼런스가 실리나 (공홈 `charRefInpainting`) */
+  char_ref_inpaint: boolean;
+  /** ★레퍼런스를 **원본 그대로** 보내고 서버가 1MP 판에 덮어 맞추나 (공홈 `bucketCharacterReferences`, V5).
+   *  거짓이면 화면이 세 판에 얹어 둔 그림을 보낸다 (`store/imageInput` 의 `processReference`, V4.5) */
+  char_ref_bucket: boolean;
+  /** Fidelity 를 받나 (`characterReferenceFidelity`). 거짓이면 칸을 숨기고 서버가 1 로 보낸다 */
+  char_ref_fidelity: boolean;
+  /** Strength 슬라이더 끝 (`characterReferenceStrengthMax`). 칸에 적으면 넘겨 넣을 수 있다 */
+  char_ref_strength_max: number;
+  /** Outfit 레퍼런스와 「Prefer same outfit」 (`outfitReferences`) */
+  outfit_refs: boolean;
   /** 스케줄러를 고를 수 있나 — 거짓이면 서버가 karras 로 덮어쓴다 */
   noise_schedule: boolean;
   cfg_rescale: boolean;
@@ -52,6 +63,11 @@ export type ModelCaps = {
 const V45: ModelCaps = {
   vibe: true,
   char_ref: true,
+  char_ref_inpaint: true,
+  char_ref_bucket: false,
+  char_ref_fidelity: true,
+  char_ref_strength_max: 1,
+  outfit_refs: false,
   noise_schedule: true,
   cfg_rescale: true,
   cfg_delay: true,
@@ -68,11 +84,16 @@ const V45: ModelCaps = {
   quality_presets: ["standard", "none"],
 };
 
-/** ★★V5 에서 **꺼진 것들**. 공홈 FAQ: 바이브·정밀 참조는 "post-launch additions" 다. */
+/** ★★V5 에서 **꺼진 것들**. 공홈 FAQ: 바이브·정밀 참조는 "post-launch additions" 다.
+ *  ★정밀 참조는 2026-11 에 들어왔다 (번들 `b2fe159`). 바이브는 아직 없다. */
 const V5: ModelCaps = {
   ...V45,
   vibe: false,
-  char_ref: false,
+  char_ref_inpaint: false,
+  char_ref_bucket: true,
+  char_ref_fidelity: false,
+  char_ref_strength_max: 5,
+  outfit_refs: true,
   noise_schedule: false,
   cfg_delay: false,
   transparency: true,
@@ -145,6 +166,10 @@ const HIGH_OF: Record<string, string> = Object.fromEntries(Object.entries(MEDIUM
 
 /** 모델 칸에 보일 값 — Medium 이면 그 High 쪽 */
 export const highModel = (model: string): string => HIGH_OF[model] ?? model;
+/** ★★**실제로 나가는 모델** — Precise Reference 가 실리면 Medium 은 High 로 나간다 (공홈 `effortForcedByPreciseReference`:
+ *  「Precise Reference needs High effort」). `refs` 는 실리는 레퍼런스 수다 (`store/imageInput` 의 `riding`).
+ *  ★보내는 쪽은 서버가 같은 규칙으로 바꾼다 (`backend/nai.py` 의 `EFFORT_HIGH`). 화면은 이것으로 요금·칸·Effort 를 맞춘다 */
+export const sentModel = (model: string, refs: number): string => (refs > 0 ? highModel(model) : model);
 /** 그 모델의 Effort — 짝이 없으면 null (토글을 안 낸다) */
 export const effortOf = (model: string): "medium" | "high" | null =>
   HIGH_OF[model] ? "medium" : MEDIUM_OF[model] ? "high" : null;

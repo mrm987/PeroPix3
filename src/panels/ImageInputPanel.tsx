@@ -6,11 +6,13 @@ import { ValueBox } from "../components/ValueBox";
 import {
   MAX_VIBES,
   fileToBase64,
+  inputOn,
   processReference,
   pushVibe,
   useImageInput,
   type BaseMode,
   type ImageInputStore,
+  type RefMode,
 } from "../store/imageInput";
 import { canFocus } from "../lib/focused";
 import { INFERENCE_MODEL, INFER_AUX } from "../lib/inference";
@@ -162,7 +164,7 @@ export function ImageInputPanel({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-5)" }}>
       {/* ★★**그 모델이 지원하는 것만 보여 준다** (사용자 지시 2026-08-21).
-          V5 는 Vibe Transfer 도 Precise Reference 도 없다 (공홈 FAQ: "post-launch additions").
+          V5 는 Vibe Transfer 가 없다 (공홈 FAQ: "post-launch additions". Precise Reference 는 2026-11 에 들어왔다).
           담아 둔 그림은 **지우지 않는다** — 모델을 되돌리면 그대로 돌아온다. 보내는 쪽도
           같은 능력표로 막으므로(`backend/nai.py` `caps`) 숨은 값이 몰래 나가지 않는다. */}
       {cap.vibe && (
@@ -242,7 +244,18 @@ export function ImageInputPanel({
 
       {cap.char_ref && (
       <Section label={t("imgIn.ref")} help={t("imgIn.refHint")} on={s.refOn} onToggle={s.setRefOn} data-sec="ref">
-        {s.refs.map((r, i) => (
+        {/* ★켜 둔 것이 안 나가는 까닭은 **지금 상태**라 적어 둔다 (공홈도 같은 두 줄을 띄운다).
+            인페인트에 레퍼런스를 못 받는 모델(V5) · Outfit 을 못 받는 모델(V4.5) */}
+        {s.refOn && s.refs.some(inputOn) && s.refsMasked() && (
+          <span data-ref-masked style={note}>{t("imgIn.refMasked")}</span>
+        )}
+        {!cap.outfit_refs && s.refs.some((r) => inputOn(r) && r.mode === "costume") && (
+          <span data-ref-outfit-skip style={note}>{t("imgIn.refOutfitSkip")}</span>
+        )}
+        {s.refs.map((r, i) => {
+          // ★드롭다운에는 **갈래**가 보인다. 「Prefer same outfit」 이 만드는 두 값은 그 갈래로 보인다 (공홈과 같다)
+          const kind = r.mode === "character&style_anyoutfit" ? "character&style" : r.mode === "character_mainoutfit" ? "character" : r.mode;
+          return (
           <Card
             key={i}
             src={`data:image/png;base64,${r.preview}`}
@@ -253,27 +266,48 @@ export function ImageInputPanel({
             data-ref={i}
           >
             <select
-              value={r.mode}
+              value={kind}
               data-ref-mode={i}
-              onChange={(e) => s.patchRef(i, { mode: e.target.value as typeof r.mode })}
+              onChange={(e) => s.patchRef(i, { mode: e.target.value as RefMode })}
               style={box}
             >
               <option value="character&style">{t("imgIn.modeCharStyle")}</option>
               <option value="character">{t("imgIn.modeChar")}</option>
               <option value="style">{t("imgIn.modeStyle")}</option>
+              {/* ★Outfit 은 받는 모델에서만 고른다. 고른 채 모델을 바꿨으면 그 값이 보이게 남긴다 (위에서 빠진다고 알린다) */}
+              {(cap.outfit_refs || r.mode === "costume") && <option value="costume">{t("imgIn.modeCostume")}</option>}
             </select>
-            {/* ★값을 누르면 직접 입력이 된다. 슬라이더는 0~1 이지만 **1 을 넘겨 넣을 수 있다**
+            {/* ★켜면 Character & Style 은 기본 갈래, Character 는 `character_mainoutfit` 이다 (공홈 그대로) */}
+            {cap.outfit_refs && (kind === "character&style" || kind === "character") && (
+              <Check
+                label={t("imgIn.sameOutfit")}
+                checked={r.mode === "character&style" || r.mode === "character_mainoutfit"}
+                onChange={(v) =>
+                  s.patchRef(i, {
+                    mode: kind === "character&style"
+                      ? (v ? "character&style" : "character&style_anyoutfit")
+                      : (v ? "character_mainoutfit" : "character"),
+                  })
+                }
+                data-ref-outfit={i}
+              />
+            )}
+            {/* ★값을 누르면 직접 입력이 된다. 슬라이더 끝은 모델이 정하고(V4.5 1 · V5 5) **넘겨 넣을 수 있다**
                 (v2 `.clickable-value`, index.html:18833-18866). 그쪽도 슬라이더만 클램프하고
-                실제 값은 그대로 두었다 */}
+                실제 값은 그대로 두었다. ★끝이 1 보다 크면 가운데가 1 이다 (공홈 `midpoint: 1`) */}
             <Slide
               label={t("imgIn.refStrength")}
               value={r.strength}
               min={0}
-              max={1}
+              max={cap.char_ref_strength_max}
+              mid={cap.char_ref_strength_max > 1 ? 1 : undefined}
               step={0.05}
               editable
               onChange={(x) => s.patchRef(i, { strength: x })}
+              data-ref-strength={i}
             />
+            {/* ★Fidelity 를 못 받는 모델(V5)은 칸을 안 낸다. 서버가 1 로 보낸다 */}
+            {cap.char_ref_fidelity && (
             <Slide
               label={t("imgIn.fidelity")}
               value={r.fidelity}
@@ -283,8 +317,10 @@ export function ImageInputPanel({
               editable
               onChange={(x) => s.patchRef(i, { fidelity: x })}
             />
+            )}
           </Card>
-        ))}
+          );
+        })}
         <Pick
           label={t("imgIn.refAdd")}
           data-add="ref"
@@ -584,6 +620,9 @@ const box: React.CSSProperties = {
   fontSize: "var(--text-xs)",
 };
 
+/** 켜 둔 것이 안 나가는 까닭 한 줄 (지금 상태를 말하는 줄) */
+const note: React.CSSProperties = { fontSize: "var(--text-2xs)", color: "var(--ink-faint)", lineHeight: 1.45 };
+
 /** 썸네일 위의 마스크. **칠한 자리만** 편집기와 같은 빨강으로 얹는다.
  *
  *  ★마스크는 순흑백 PNG 라(검정=유지) 그대로 얹으면 그림을 통째로 덮는다. 흰 칸만
@@ -854,6 +893,7 @@ function Slide({
   min,
   max,
   step,
+  mid,
   onChange,
   editable,
   help,
@@ -863,6 +903,8 @@ function Slide({
   value: number;
   min: number;
   max: number;
+  /** ★손잡이 가운데에 올 값 — 있으면 앞 절반이 `min`~`mid`, 뒤 절반이 `mid`~`max` 다 (공홈 슬라이더의 `midpoint`) */
+  mid?: number;
   step: number;
   onChange: (v: number) => void;
   /** 값을 눌러 **슬라이더 범위 밖의 수**를 직접 넣을 수 있게 한다 (v2 `.clickable-value`) */
@@ -870,6 +912,12 @@ function Slide({
   /** 그 값이 무엇을 하는지 — 라벨 옆 `?` 에 든다 */
   help?: string;
 } & Record<string, unknown>) {
+  const split = mid !== undefined && mid > min && mid < max;
+  const toPos = (v: number) => (v <= mid! ? ((v - min) / (mid! - min)) * 100 : 100 + ((v - mid!) / (max - mid!)) * 100);
+  const fromPos = (t: number) => {
+    const v = t <= 100 ? min + (t / 100) * (mid! - min) : mid! + ((t - 100) / 100) * (max - mid!);
+    return Number((Math.round(v / step) * step).toFixed(4));
+  };
   return (
     <label
       {...rest}
@@ -879,6 +927,18 @@ function Slide({
         {label}
         {help && <Help tip={help} />}
       </span>
+      {split ? (
+        <input
+          type="range"
+          // ★0~200 자리를 값으로 옮긴다 (공홈과 같은 식). 값은 `step` 으로 반올림한다
+          value={toPos(Math.min(max, Math.max(min, value)))}
+          min={0}
+          max={200}
+          step={1}
+          onChange={(e) => onChange(fromPos(Number(e.target.value)))}
+          style={{ flex: 1 }}
+        />
+      ) : (
       <input
         type="range"
         // ★손잡이는 범위 안에 묶는다. 값이 1 을 넘어도 슬라이더는 끝에 선다 (v2 와 같다)
@@ -889,6 +949,7 @@ function Slide({
         onChange={(e) => onChange(Number(e.target.value))}
         style={{ flex: 1 }}
       />
+      )}
       {editable ? (
         <ValueBox value={value} step={step} onCommit={onChange} />
       ) : (
@@ -992,7 +1053,7 @@ function Pick({
 export function ImageInputBadge() {
   const t = useI18n((s) => s.t);
   const s = useImageInput();
-  // ★모델을 바꾸면 딸려 바뀐다 — V5 로 가면 바이브·레퍼런스가 통째로 빠진다
+  // ★모델을 바꾸면 딸려 바뀐다 — V5 로 가면 바이브가 통째로 빠진다
   useGen((g) => g.params.model);
   const ride = s.riding();
   // ★인퍼런스가 실리면 베이스는 안 나간다 (`payload`). 세지 않는다

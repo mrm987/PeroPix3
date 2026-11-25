@@ -10,6 +10,7 @@
  */
 
 import { anlasCost, type Cost } from "./anlas.ts";
+import { sentModel } from "./naiModels.ts";
 import { useGen } from "../store/gen";
 import { useImageInput } from "../store/imageInput";
 import { useSub } from "../store/sub";
@@ -52,7 +53,8 @@ export function costNow(rounds = 1): Cost {
   const size = img.costSize();
   const usage = (sub?.tier ?? 0) >= 3 ? (sub?.usage ?? null) : null;
   return anlasCost({
-    model: params.model,
+    // ★레퍼런스가 실리면 Medium 은 High 로 나간다 (`sentModel`)
+    model: sentModel(params.model, ride.refs.length),
     width: size.width,
     height: size.height,
     steps: params.steps,
