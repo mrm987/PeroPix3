@@ -7,7 +7,6 @@ import {
   MAX_VIBES,
   fileToBase64,
   inputOn,
-  processReference,
   pushVibe,
   useImageInput,
   type BaseMode,
@@ -108,8 +107,7 @@ export function ImageInputPanel({
       return;
     }
     s.addRef({
-      image: await processReference(r.data),
-      preview: r.data,
+      image: r.data,
       name: r.name,
       mode: "character&style",
       strength: 1,
@@ -249,7 +247,7 @@ export function ImageInputPanel({
         {s.refOn && s.refs.some(inputOn) && s.refsMasked() && (
           <span data-ref-masked style={note}>{t("imgIn.refMasked")}</span>
         )}
-        {!cap.outfit_refs && s.refs.some((r) => inputOn(r) && r.mode === "costume") && (
+        {!s.refCaps().outfit_refs && s.refs.some((r) => inputOn(r) && r.mode === "costume") && (
           <span data-ref-outfit-skip style={note}>{t("imgIn.refOutfitSkip")}</span>
         )}
         {s.refs.map((r, i) => {
@@ -258,7 +256,7 @@ export function ImageInputPanel({
           return (
           <Card
             key={i}
-            src={`data:image/png;base64,${r.preview}`}
+            src={`data:image/png;base64,${r.image}`}
             name={r.name}
             on={r.on !== false}
             onToggle={() => s.patchRef(i, { on: r.on === false })}
@@ -325,11 +323,9 @@ export function ImageInputPanel({
           label={t("imgIn.refAdd")}
           data-add="ref"
           onFile={async (f) => {
-            const raw = await fileToBase64(f);
-            // ★보내는 그림은 다듬은 것, 보여 주는 그림은 원본이다
+            // ★원본 그대로 넣는다. 모델에 맞게 다듬는 것은 서버다 (`PreciseRef.image`)
             s.addRef({
-              image: await processReference(raw),
-              preview: raw,
+              image: await fileToBase64(f),
               name: f.name,
               mode: "character&style",
               strength: 1,

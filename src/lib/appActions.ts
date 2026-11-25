@@ -1353,13 +1353,11 @@ defineAction({
     const { findImage } = await import("./findImage.ts");
     const got = await findImage(String(a.image ?? ""));
     if ("error" in got) return got;
-    const { processReference } = await import("../store/imageInput");
     const modes: RefMode[] = ["character&style", "character&style_anyoutfit", "character", "character_mainoutfit", "style", "costume"];
     const mode = modes.includes(String(a.mode ?? "") as RefMode) ? (String(a.mode) as RefMode) : "character&style";
     const s = useImageInput.getState();
     s.addRef({
-      image: await processReference(got.data),
-      preview: got.data,
+      image: got.data,
       name: got.name,
       mode,
       strength: typeof a.strength === "number" ? a.strength : 1,

@@ -16,6 +16,7 @@ import { useWs } from "../store/workspace";
 import { imgUrl } from "../lib/imgUrl";
 import { Icon } from "../components/Icon";
 import { anlasCost, MAX_PER_IMAGE } from "../lib/anlas";
+import { sentModel } from "../lib/naiModels";
 import { useCurrentSub } from "../store/sub";
 import { currentAccountId } from "../store/accounts";
 import { useAnlasMeter } from "../store/anlasMeter";
@@ -222,15 +223,25 @@ export function EnhanceDialog({
   /** ★값을 **누르기 전에** 보여 준다 (사용자 지적 2026-08-14).
    *  강화는 i2i 라 강도가 값에 들어간다. 배율을 올리면 크기가 커져 값도 뛴다.
    *  ★배치는 크기가 장마다 달라 **장마다 세서 더한다** — 한 장 값에 장 수를 곱하면 어긋난다. */
-  const each = targets.map((f) => {
+  /** ★★함께 실려 나가는 참조 그림 — **보내는 조각 그대로** 센다 (아래 `enqueue` 가 같은 것을 싣는다).
+   *  예전에는 레퍼런스·바이브를 0 으로 세서, 실려 나가는데 요금에는 없었다 (2026-11-25 공홈 대조로 찾음) */
+  const carried = (input ? input() : useImageInput.getState().payload()) as {
+    vibe_transfer?: { encoded?: string }[];
+    precise_references?: unknown[];
+  };
+  const refN = carried.precise_references?.length ?? 0;
+  const vibes = carried.vibe_transfer ?? [];
+  const each = targets.map((f, i) => {
     const d = sizes?.[f];
     const [w, h] = d ? enhanceTargetSize(d[0], d[1], scaleOf(f)) : [params.width, params.height];
     return anlasCost({
       // ★steps 도 **그 그림의 것**이다 — 요청에 그 값이 나가므로(`metaJob`) 화면 값으로 세면
       //   표시 비용과 실제 청구가 어긋난다 (v2 는 사이드바 steps 로 세어 어긋나 있었다)
-      // ★모델도 **그 그림의 것**이다 — V5 는 배율이 1.5 라 이걸 빼면 표시가 실제의 2/3 가 된다
-      model: modelOf(f), width: w, height: h, steps: stepsOf(f), opus,
-      uncachedVibes: 0, activeVibes: 0, refCount: 0,
+      // ★모델도 **그 그림의 것**이다 — V5 는 배율이 1.5 라 이걸 빼면 표시가 실제의 2/3 가 된다.
+      //   레퍼런스가 실리면 Medium 은 High 로 나간다 (`sentModel`)
+      model: sentModel(modelOf(f), refN), width: w, height: h, steps: stepsOf(f), opus,
+      // ★바이브 인코딩은 **처음 한 번**만 든다 — 첫 장이 구운 것을 다음 장이 캐시에서 쓴다. 4장 초과분은 장마다다
+      uncachedVibes: i === 0 ? vibes.filter((v) => !v.encoded).length : 0, activeVibes: vibes.length, refCount: refN,
       strength: useStrength, count: 1,
     });
   });
@@ -294,12 +305,12 @@ export function EnhanceDialog({
       const [w0, h0] = d0 ? enhanceTargetSize(d0[0], d0[1], scaleOf(targets[0])) : target;
       useAnlasMeter.getState().arm(cost.total, {
         width: w0, height: h0, steps: stepsOf(targets[0]), opus,
-        refs: 0, vibes: 0, inpaint: false, count: targets.length, from: "enhance",
+        refs: refN, vibes: vibes.length, inpaint: false, count: targets.length, from: "enhance",
       });
       await useQueue.getState().enqueue(
         {
           ...useGen.getState().params,
-          ...(input ? input() : useImageInput.getState().payload()),
+          ...carried,
           prompt, negative_prompt: uc, characters: chars,
           /* ★열쇠 짝은 낱말표 그대로다 (`shared/terms.json`): `tab`=탭 이름 ·
              `set`=세트 이름 · `scene_group_id`=그 세트의 id. 개명 뒤에도 여기가 옛 짝

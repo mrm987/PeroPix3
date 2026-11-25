@@ -19,9 +19,6 @@ export type ModelCaps = {
   char_ref: boolean;
   /** 인페인트(마스크를 싣는 생성)에도 레퍼런스가 실리나 (공홈 `charRefInpainting`) */
   char_ref_inpaint: boolean;
-  /** ★레퍼런스를 **원본 그대로** 보내고 서버가 1MP 판에 덮어 맞추나 (공홈 `bucketCharacterReferences`, V5).
-   *  거짓이면 화면이 세 판에 얹어 둔 그림을 보낸다 (`store/imageInput` 의 `processReference`, V4.5) */
-  char_ref_bucket: boolean;
   /** Fidelity 를 받나 (`characterReferenceFidelity`). 거짓이면 칸을 숨기고 서버가 1 로 보낸다 */
   char_ref_fidelity: boolean;
   /** Strength 슬라이더 끝 (`characterReferenceStrengthMax`). 칸에 적으면 넘겨 넣을 수 있다 */
@@ -49,8 +46,9 @@ export type ModelCaps = {
   opus_usage_limit: boolean;
   /** Anlas 배율 — ★V5 는 같은 해상도·스텝에서 V4.5 의 1.5배다 */
   anlas_multiplier: number;
-  /** 요금 식의 **스텝 항에만** 곱하는 계수 — V5 Full Medium 이 `1/1.06521739` 다 (공홈 번들 `b0f9d00`) */
-  anlas_step_factor: number;
+  /** 요금을 **따로 세는 식** — 있으면 `(C_BASE·px + C_STEP·px·steps) / divisor` 이고 올림하지 않는다.
+   *  V5 Full Medium 이 `{ steps: 23, divisor: 1.75 }` 다 (공홈 번들 `b2fe159` 2026-11-25. 그 전 `b0f9d00` 은 스텝 항에 `1/1.06521739`) */
+  anlas_formula: { steps: number; divisor: number } | null;
   /** 보내기 직전에 덮는 설정 (공홈 `fixedSettings`) — 있으면 스텝·샘플러·UC 프리셋이 고정이고
    *  사용자 UC·캐릭터 UC 가 나가지 않는다. 화면은 그 칸을 숨긴다. 덮는 것은 서버다 (`backend/nai.py` `build_payload`) */
   fixed: { steps: number; sampler: string; uc_preset_id: string } | null;
@@ -64,7 +62,6 @@ const V45: ModelCaps = {
   vibe: true,
   char_ref: true,
   char_ref_inpaint: true,
-  char_ref_bucket: false,
   char_ref_fidelity: true,
   char_ref_strength_max: 1,
   outfit_refs: false,
@@ -79,7 +76,7 @@ const V45: ModelCaps = {
   cfg_delay_sigma: 58,
   opus_usage_limit: false,
   anlas_multiplier: 1,
-  anlas_step_factor: 1,
+  anlas_formula: null,
   fixed: null,
   quality_presets: ["standard", "none"],
 };
@@ -90,7 +87,6 @@ const V5: ModelCaps = {
   ...V45,
   vibe: false,
   char_ref_inpaint: false,
-  char_ref_bucket: true,
   char_ref_fidelity: false,
   char_ref_strength_max: 5,
   outfit_refs: true,
@@ -110,7 +106,7 @@ const V5: ModelCaps = {
 const V5_MEDIUM: ModelCaps = {
   ...V5,
   cfg_rescale: false,
-  anlas_step_factor: 1 / 1.06521739,
+  anlas_formula: { steps: 23, divisor: 1.75 },
   fixed: { steps: 14, sampler: "k_euler_ancestral", uc_preset_id: "heavy" },
 };
 
@@ -142,6 +138,24 @@ export const CAPS_FALLBACK: ModelCaps = {
 };
 
 export const baseModel = (model: string): string => BASE_MODEL[model] ?? model;
+
+/** 인페인트에서 **실제로 그리는 모델** (공홈 `el()`) — 서버 `INPAINT_MODEL` 과 같은 표다 (`test_caps_parity.py`).
+ *  ★V5 Curated 는 V4.5 Curated 인페인트로 간다. 그래서 그 인페인트의 레퍼런스는 V4.5 규칙을 따른다 (`refCaps`) */
+const INPAINT_MODEL: Record<string, string> = {
+  "nai-diffusion-5-full": "nai-diffusion-5-full-inpainting",
+  "nai-diffusion-5-full-medium": "nai-diffusion-5-full-medium-inpainting",
+  "nai-diffusion-5-curated": "nai-diffusion-4-5-curated-inpainting",
+  "nai-diffusion-4-5-full": "nai-diffusion-4-5-full-inpainting",
+  "nai-diffusion-4-5-curated": "nai-diffusion-4-5-curated-inpainting",
+  "custom": "custom",
+};
+const INPAINT_MODEL_DEFAULT = "nai-diffusion-4-5-curated-inpainting";
+export const inpaintModel = (model: string): string =>
+  model.endsWith("-inpainting") ? model : (INPAINT_MODEL[model] ?? INPAINT_MODEL_DEFAULT);
+
+/** ★★레퍼런스 규칙을 볼 능력 — 인페인트(마스크가 실리는 생성)면 **그 인페인트 모델**의 것이다 (서버 `nai.ref_model`).
+ *  공홈은 인페인트 요청을 인페인트 모델 이름으로 조립하므로 그 모델의 능력으로 거른다 */
+export const refCaps = (model: string, masked: boolean): ModelCaps => caps(masked ? inpaintModel(model) : model);
 
 /** 그 모델의 능력. 인페인트 모델도 원본으로 되돌려 조회한다. */
 export const caps = (model: string): ModelCaps => MODEL_CAPS[baseModel(model)] ?? CAPS_FALLBACK;

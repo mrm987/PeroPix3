@@ -6,7 +6,7 @@ import { useImageDrop, type Dropped } from "../lib/dropImages";
 import { DROP_ACCEPT, readDrop, vibeFromCachePng, type DropRead } from "../lib/dropImport";
 import { hasMeta } from "../lib/metaApply";
 import { isNaiVibeFile } from "../lib/naiVibeFile";
-import { MAX_VIBES, processReference, pushVibe, useImageInput } from "../store/imageInput";
+import { MAX_VIBES, pushVibe, useImageInput } from "../store/imageInput";
 import { INFERENCE_MODEL } from "../lib/inference";
 import { vibeDefaults } from "../lib/vibeDefaults";
 import { fitSizeToBase, modelCaps, useGen } from "../store/gen";
@@ -226,9 +226,8 @@ function Sheet({
     try {
       useImageInput.getState().setRefOn(true);
       useImageInput.getState().addRef({
-        // ★보내는 것은 **다듬은 판**, 보여 주는 것은 원본이다 (`processReference` 의 ★주)
-        image: await processReference(m.data),
-        preview: m.data,
+        // ★원본 그대로 넣는다. 모델에 맞게 다듬는 것은 서버다 (`PreciseRef.image`)
+        image: m.data,
         name,
         mode: "character&style",
         strength: 1,

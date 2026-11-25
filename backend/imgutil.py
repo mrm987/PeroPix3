@@ -140,24 +140,67 @@ def _drop_stealth(img: Image.Image) -> Image.Image | None:
     return Image.fromarray(px)
 
 
+def _open_ref(b64: str) -> tuple[Image.Image, Image.Image | None]:
+    """레퍼런스 그림을 연다. 둘째 값은 알파 메타데이터를 지운 그림이다 (없었으면 None)."""
+    img = Image.open(io.BytesIO(base64.b64decode(b64)))
+    if img.mode in ("LA", "P", "PA"):
+        img = img.convert("RGBA")
+    elif img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGB")
+    return img, _drop_stealth(img)
+
+
 def bucket_reference(b64: str) -> str:
     """V5 Precise Reference 그림을 판에 맞춘다 (공홈 `bucketCharacterReferences` 갈래).
 
     ★공홈 순서 그대로다: 알파 메타데이터 지우기 → 판 고르기 → **lanczos3** 로 덮어 맞추기 → 가운데 자르기 → PNG.
       PIL 의 LANCZOS 가 같은 계열이다 (`preprocess_base_image` 와 같은 이유).
     ★크기가 이미 판과 같으면 다시 굽지 않는다 (NAI 가 내는 832×1216 이 그렇다)."""
-    img = Image.open(io.BytesIO(base64.b64decode(b64)))
-    if img.mode in ("LA", "P", "PA"):
-        img = img.convert("RGBA")
-    elif img.mode not in ("RGB", "RGBA"):
-        img = img.convert("RGB")
-    clean = _drop_stealth(img)
+    img, clean = _open_ref(b64)
     b = ref_bucket(*img.size)
     if b["unchanged"]:
         return _png_b64(clean) if clean is not None else b64
     out = (clean or img).resize(b["resize"], Image.LANCZOS)
     out = out.crop((b["left"], b["top"], b["left"] + b["width"], b["top"] + b["height"]))
     return _png_b64(out)
+
+
+#: V4.5 Precise Reference 판 — 공홈 `validDirectorSizes` 그대로다. ★차례가 곧 비율 차가 같을 때의 우선순위다
+REF_CANVASES: list[tuple[int, int]] = [(1024, 1536), (1536, 1024), (1472, 1472)]
+
+
+def _js_round(x: float) -> int:
+    """JS `Math.round` (.5 는 위로). 파이썬 `round` 는 짝수 쪽이라 한 픽셀씩 어긋난다"""
+    return math.floor(x + 0.5)
+
+
+def letterbox_reference(b64: str, transparent: bool = False) -> str:
+    """V4.5 Precise Reference 그림을 세 판 중 하나에 얹는다 (공홈 `resizeCharacterReferences` 갈래).
+
+    ★공홈 순서 그대로다: 알파 메타데이터 지우기 → 판 = 가로세로 비율의 **차가 가장 작은 것**(같으면 앞선 판) →
+      판 안에 들어가게 **lanczos3** 로 줄이기 → 가운데에 얹기 → 남는 곳은 검정 (투명 배경 모델이면 투명) → PNG.
+    ★예전에는 화면이 캔버스로 했다 (v2 `processPreciseReferenceImage`): 판을 가로·세로·정사각으로만 갈라
+      거의 정사각인 세로 그림이 1024×1536 으로 갔고, 줄이는 방식도 달랐다. 공홈은 2026-10 부터 이것이다."""
+    img, clean = _open_ref(b64)
+    img = clean or img
+    w, h = img.size
+    n = w / h
+    s, o = REF_CANVASES[0]
+    for x, y in REF_CANVASES:
+        if abs(x / y - n) < abs(s / o - n):
+            s, o = x, y
+    if n > s / o:
+        c, hh = s, _js_round(s / n)
+    else:
+        c, hh = _js_round(o * n), o
+    f = img if (c, hh) == (w, h) else img.resize((c, hh), Image.LANCZOS)
+    canvas = Image.new("RGBA", (s, o), (0, 0, 0, 0))
+    canvas.alpha_composite(f.convert("RGBA"), (_js_round((s - c) / 2), _js_round((o - hh) / 2)))
+    if transparent:
+        return _png_b64(canvas)
+    bg = Image.new("RGBA", (s, o), (0, 0, 0, 255))
+    bg.alpha_composite(canvas)
+    return _png_b64(bg.convert("RGB"))
 
 
 def blend_mask_8px(b64_mask: str, width: int, height: int) -> Image.Image:

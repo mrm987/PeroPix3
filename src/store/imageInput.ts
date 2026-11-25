@@ -7,7 +7,7 @@ import { t } from "../i18n";
 import { SIZE_PRESETS, modelCaps, useGen } from "./gen";
 import { api } from "../lib/backend";
 import { INFERENCE_MODEL, INFER_AUX, fitPlan, type FittedPlan } from "../lib/inference";
-import { sentModel } from "../lib/naiModels";
+import { refCaps, sentModel, type ModelCaps } from "../lib/naiModels";
 
 /** 이미지 입력 — Vibe Transfer · Precise Reference · 베이스 이미지(i2i·인페인트).
  *
@@ -43,12 +43,11 @@ export type RefMode =
   | "character&style" | "character&style_anyoutfit" | "character" | "character_mainoutfit" | "style" | "costume";
 
 export type PreciseRef = {
-  /** ★캔버스로 이미 다듬은 그림 (1472² · 1536×1024 · 1024×1536 중 하나, 검은 레터박스). V4.5 가 이것을 보낸다 */
+  /** ★넣은 그림 **원본**. 다듬는 것은 서버다 (`backend/imgutil` 의 `letterbox_reference`·`bucket_reference`) —
+   *  모델마다 다듬는 방식이 다르고, 인페인트면 그리는 모델이 바뀐다 (`refCaps`). 넣을 때 다듬어 두면 모델을 바꿨을 때 틀린다 */
   image: string;
   /** 이 한 장을 쓰나 — 바이브와 같은 규칙이다 (없으면 켜진 것) */
   on?: boolean;
-  /** 넣은 그림 원본. 미리보기이고, ★V5 는 이것을 보낸다 (서버가 판에 맞춘다, `ModelCaps.char_ref_bucket`) */
-  preview: string;
   name: string;
   mode: RefMode;
   strength: number;
@@ -170,6 +169,8 @@ type S = {
   /** 켜 둔 레퍼런스가 **인페인트라서** 빠지나 (그 모델이 인페인트에 레퍼런스를 못 받는다, `ModelCaps.char_ref_inpaint`).
    *  화면이 막힌 이유를 적는 데 쓴다 */
   refsMasked: () => boolean;
+  /** 레퍼런스 규칙을 볼 능력 — 인페인트면 그 인페인트 모델의 것이다 (`lib/naiModels` 의 `refCaps`) */
+  refCaps: () => ModelCaps;
   /** ★생성 요청에 실을 조각. **단발·큐 두 경로가 같은 것을 쓴다** (하나의 정보에는 하나의 창구) */
   payload: () => Record<string, unknown>;
 };
@@ -469,10 +470,12 @@ export function makeImageInput(
     const cap = modelCaps(modelOf());
     const infer = modelOf() === INFERENCE_MODEL && s.inferOn ? s.infer : null;
     // ★★레퍼런스는 서버의 `riding_refs` 와 **같은 판정**이다: 그 모델이 받고, 인페인트(인퍼런스도 인페인트다)면
-    //   `char_ref_inpaint` 일 때만, Outfit 을 못 받는 모델에서는 Outfit 을 뺀다. 요금이 이 목록을 센다
+    //   `char_ref_inpaint` 일 때만, Outfit 을 못 받는 모델에서는 Outfit 을 뺀다. 요금이 이 목록을 센다.
+    //   ★능력은 `refCaps` 의 것이다 — V5 Curated 인페인트는 V4.5 규칙으로 실린다
+    const rcap = get().refCaps();
     const refs =
-      cap.char_ref && s.refOn && !get().refsMasked()
-        ? s.refs.filter((r) => inputOn(r) && (cap.outfit_refs || r.mode !== "costume"))
+      rcap.char_ref && s.refOn && !get().refsMasked()
+        ? s.refs.filter((r) => inputOn(r) && (rcap.outfit_refs || r.mode !== "costume"))
         : [];
     return {
       vibes: cap.vibe && s.vibeOn ? s.vibes.filter(inputOn) : [],
@@ -483,9 +486,16 @@ export function makeImageInput(
 
   refsMasked() {
     const s = get();
-    const cap = modelCaps(modelOf());
-    const infer = modelOf() === INFERENCE_MODEL && s.inferOn && !!s.infer;
-    return cap.char_ref && !cap.char_ref_inpaint && (infer || maskRides(s));
+    const masked = (modelOf() === INFERENCE_MODEL && s.inferOn && !!s.infer) || maskRides(s);
+    const rcap = get().refCaps();
+    return masked && modelCaps(modelOf()).char_ref && !(rcap.char_ref && rcap.char_ref_inpaint);
+  },
+
+  refCaps() {
+    const s = get();
+    // ★인퍼런스도 인페인트다 (`server._apply_inference` 가 그 모델의 인페인트로 보낸다)
+    const masked = (modelOf() === INFERENCE_MODEL && s.inferOn && !!s.infer) || maskRides(s);
+    return refCaps(modelOf(), masked);
   },
 
   payload() {
@@ -536,12 +546,10 @@ export function makeImageInput(
         },
       };
     }
-    // ★V5 는 **원본**을 보내고 서버가 판에 맞춘다. V4.5 는 화면이 세 판에 얹어 둔 그림이다 (`ModelCaps.char_ref_bucket`)
-    const bucket = modelCaps(modelOf()).char_ref_bucket;
     return {
       vibe_transfer: ride.vibes,
       precise_references: ride.refs.map((r) => ({
-        image: bucket ? r.preview : r.image, mode: r.mode, strength: r.strength, fidelity: r.fidelity,
+        image: r.image, mode: r.mode, strength: r.strength, fidelity: r.fidelity,
       })),
       // ★사용자 토글이다 (8절). 꺼 두면 합이 1을 넘어도 값을 그대로 보낸다
       normalize_reference_strength: s.normalizeVibe,
@@ -609,31 +617,5 @@ export function fileToBase64(file: File): Promise<string> {
     r.onload = () => resolve(String(r.result).split(",")[1]);
     r.onerror = reject;
     r.readAsDataURL(file);
-  });
-}
-
-/** ★Precise Reference 는 **보내기 전에 캔버스로 다듬는다** — NAI 웹과 같은 결과를 얻으려면
- *  세 가지 판(1472² · 1536×1024 · 1024×1536) 중 하나에 비율을 지켜 얹고 남는 자리는 검게 채운다
- *  (v2 `processPreciseReferenceImage`, index.html:18497). 서버가 아니라 **여기서** 해야 한다. */
-export function processReference(base64: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const [tw, th] =
-        img.width > img.height ? [1536, 1024] : img.width < img.height ? [1024, 1536] : [1472, 1472];
-      const c = document.createElement("canvas");
-      c.width = tw;
-      c.height = th;
-      const ctx = c.getContext("2d")!;
-      ctx.fillStyle = "#000000";
-      ctx.fillRect(0, 0, tw, th);
-      const scale = Math.min(tw / img.width, th / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      ctx.drawImage(img, (tw - w) / 2, (th - h) / 2, w, h);
-      resolve(c.toDataURL("image/png").split(",")[1]);
-    };
-    img.onerror = () => reject(new Error("그림을 읽지 못했습니다"));
-    img.src = base64.startsWith("data:") ? base64 : "data:image/png;base64," + base64;
   });
 }

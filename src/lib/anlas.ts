@@ -119,9 +119,12 @@ export function anlasCost(i: CostInput): Cost {
 
   // ★★모델 배율 — **V5 는 1.5배**다 (공홈 `Jg(model)===v5 && (M *= 1.5)`, 2026-08-21).
   //   식은 v4/v4.5/XL 과 같고 **곱하기 하나만** 다르다. 배율을 빼면 V5 표시가 실제의 2/3 가 된다.
-  //   ★Medium 은 **스텝 항에만** `anlas_step_factor`(1/1.06521739)가 곱해진다 — ceil 안이다 (공홈 번들 `b0f9d00`).
+  //   ★Medium 은 **식이 따로다** (공홈 번들 `b2fe159` 2026-11-25): 화면 스텝과 무관하게 23 스텝으로 세고
+  //     1.75 로 나누며 **올림하지 않는다** (`ModelCaps.anlas_formula`). 832x1216 이면 15 다.
+  //     그 전 번들(`b0f9d00`)은 스텝 항에만 1/1.06521739 를 곱하고 올림했다 (17). 되돌리지 말 것.
   const mult = cap.anlas_multiplier;
-  const perSample = Math.ceil(C_BASE * px + C_STEP * px * steps * cap.anlas_step_factor) * mult;
+  const f = cap.anlas_formula;
+  const perSample = (f ? (C_BASE * px + C_STEP * px * f.steps) / f.divisor : Math.ceil(C_BASE * px + C_STEP * px * steps)) * mult;
   // 강도 계수 — 베이스 그림이 있을 때만 걸린다. 바닥은 2 다
   const y = i.strength < 1 ? i.strength : 1;
   // ★공홈의 `I` — **언제나 계산한다.** 무료는 값을 0 으로 만드는 것이 아니라 장 수(`v`)에서
