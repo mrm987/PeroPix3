@@ -56,7 +56,7 @@ RECORDS_NAME = "records.jsonl"
 #:    곁파일을 옮길 때만 쓴다 (`migrate_records`) — 옮긴 뒤에는 워크스페이스 휴지통으로 간다.
 ENV_NAME = "records-env.jsonl"
 #: 색인에서 빼고 `records.db` 로 보내는 필드
-HEAVY_KEYS = ("resolved", "env", "inference")
+HEAVY_KEYS = ("resolved", "env")
 #: ★★**별표의 이력** (사용자 결정 2026-08-28). 별표는 `workspace.json` 한 곳에만 적혀서, 그 파일이
 #:  덮어써지면(실사고 2026-08-28: 다른 워크스페이스의 spec 이 이 이름으로 저장됐다) 되살릴 재료가
 #:  없었다. 저장할 때 별표 목록이 **바뀌었을 때만** 한 줄 덧붙인다 — 되돌릴 때는 마지막 줄을 본다.
@@ -954,7 +954,7 @@ class Store:
         return [r for r in recs if alive(str(r.get("file") or ""))]
 
     def heavy_of(self, ws: str, file: str) -> dict:
-        """그 그림의 **무거운 것**(`HEAVY_KEYS`: `resolved`·`env`·`inference`). 없으면 빈 것.
+        """그 그림의 **무거운 것**(`HEAVY_KEYS`: `resolved`·`env`). 없으면 빈 것.
 
         ★색인에서 열쇠를 찾고(같은 경로가 여러 번 적혔으면 마지막 것), `records.db` 에서 그 한 장만
           꺼낸다 (`recordsdb` 머리 주석).

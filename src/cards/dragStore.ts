@@ -19,7 +19,7 @@ export type DragDir = "apply" | "save" | "image";
 /** ★`blocklib` = 블록 저장소 → 블록 목록. 카드와 **같은 판을 쓴다** — 끄는 방식·존 판정이
  *  같아야 하나만 고치면 둘 다 고쳐진다 (드래그 구현을 두 벌 두지 않는다)
  *  ★`imageInput` = 미저장 그림. 파일이 없어 카드 그림(경로로 굳힌다)은 못 되고, 이미지 입력의
- *    베이스·Inference 칸만 받는다. 그 칸들은 `image` 도 함께 받는다 (`useDropZone` 의 `kind` 목록) */
+ *    베이스 칸만 받는다. 그 칸은 `image` 도 함께 받는다 (`useDropZone` 의 `kind` 목록) */
 export type ZoneKind = CardKind | "image" | "blocklib" | "keep" | "imageInput" | "charGroup";
 
 /** 생성된 이미지 한 장 — 썸네일로 넣을 때 끌고 다니는 것.

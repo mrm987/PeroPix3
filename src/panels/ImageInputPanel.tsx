@@ -14,7 +14,6 @@ import {
   type RefMode,
 } from "../store/imageInput";
 import { canFocus } from "../lib/focused";
-import { INFERENCE_MODEL, INFER_AUX } from "../lib/inference";
 import { fitSizeToBase, modelCaps, useGen } from "../store/gen";
 import { flashStyle, useFlashAt } from "../store/ui";
 import { toast } from "../store/toast";
@@ -57,11 +56,6 @@ export function ImageInputPanel({
   const model = own ?? genModel;
   const cap = modelCaps(model);
   const [cache, setCache] = useState(false);
-  // ★인퍼런스의 결과 크기는 해상도 칸을 따라 바뀐다. 그 값을 들어야 다시 그린다
-  useGen((g) => g.params.width);
-  useGen((g) => g.params.height);
-  const ride = s.riding();
-  const plan = s.inferPlan();
 
   /** ★서버에 구워 둔 인코딩이 있으면 「구워 둠」이 뜨고 비용에서도 빠진다.
    *
@@ -123,14 +117,6 @@ export function ImageInputPanel({
     s.setBase(r.data, r.name);
     await fitSizeToBase(r.data);
   };
-  const addInferPath = async (path: string) => {
-    const r = await readDropped(path).catch(() => null);
-    if (!r?.data) {
-      toast(t("imgIn.dropBad"), "warn");
-      return;
-    }
-    s.setInfer(r.data, r.name);
-  };
   /** 씬·큰 그림에서 끌어온 한 장의 바이트와 이름. 저장된 그림은 원본을 받아 오고,
    *  미저장은 끌 때 실어 온 data URL 이 곧 그림 전체다 (`SceneLane` 의 `takeSrc`) */
   const dragged = async (img: DragImage, unsaved: boolean) =>
@@ -146,14 +132,6 @@ export function ImageInputPanel({
       s.setBase(g.data, g.name);
       // ★해상도를 그림에 맞춘다. 밖에서 떨군 그림을 베이스로 걸 때와 같다 (`app/DropImport` 의 `asBase`)
       await fitSizeToBase(g.data);
-    } catch (e) {
-      toast(String(e), "warn");
-    }
-  };
-  const dropInfer = async (img: DragImage, unsaved: boolean) => {
-    try {
-      const g = await dragged(img, unsaved);
-      s.setInfer(g.data, g.name);
     } catch (e) {
       toast(String(e), "warn");
     }
@@ -337,86 +315,9 @@ export function ImageInputPanel({
       </Section>
       )}
 
-      {/* ★★인퍼런스는 V5 Full 에서만 뜬다 (사용자 결정 2026-09-29, 설계 `docs/inference-design.md`).
-          한 장만 받고 그림 전체를 쓴다. 배치는 앱이 정하고, 결과 크기는 해상도 칸의 목록에서 고른다 */}
-      {!refsOnly && model === INFERENCE_MODEL && (
-      <DropSlot id="infer" label={t("imgIn.dropInfer")} onImage={dropInfer}>
-      <Section
-        label={t("imgIn.inference")}
-        help={t("imgIn.inferenceHint")}
-        on={s.inferOn}
-        onToggle={s.setInferOn}
-        data-sec="inference"
-      >
-        {s.infer ? (
-          <Card
-            src={`data:image/png;base64,${s.infer.image}`}
-            name={s.infer.name}
-            onRemove={s.clearInfer}
-            data-infer
-          >
-            {plan && (
-              <span
-                data-infer-out={`${plan.crop.w}x${plan.crop.h}`}
-                style={{ fontSize: "var(--text-2xs)", color: "var(--ink-dim)", fontVariantNumeric: "tabular-nums" }}
-              >
-                {t("imgIn.inferOut", { w: plan.crop.w, h: plan.crop.h })}
-              </span>
-            )}
-            {/* ★보조 프롬프트는 켜고 끄기만 한다. 글은 고칠 수 없고, 무엇이 들어가는지 그대로 보인다 (사용자 지시 2026-09-29) */}
-            <Check
-              label={t("imgIn.inferAux")}
-              checked={s.inferAux}
-              onChange={s.setInferAux}
-              data-infer-aux={s.inferAux ? "on" : "off"}
-            />
-            <code
-              data-infer-aux-text
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "var(--text-2xs)",
-                lineHeight: 1.5,
-                padding: "var(--sp-1) var(--sp-2)",
-                borderRadius: "var(--r-1)",
-                background: "var(--bg)",
-                color: "var(--ink-soft)",
-                wordBreak: "break-word",
-                opacity: s.inferAux ? 1 : 0.45,
-              }}
-            >
-              {INFER_AUX}
-            </code>
-          </Card>
-        ) : (
-          <Pick
-            label={t("imgIn.inferAdd")}
-            data-add="inference"
-            onFile={async (f) => s.setInfer(await fileToBase64(f), f.name)}
-            onPath={addInferPath}
-          />
-        )}
-      </Section>
-      </DropSlot>
-      )}
-
       {!refsOnly && (
-      // ★인퍼런스가 실리는 동안에는 받지 않는다. 흐려 둔 칸이 물들면 받는 자리로 읽힌다
-      <DropSlot id="base" label={t("imgIn.dropBase")} off={!!ride.infer} onImage={dropBase}>
+      <DropSlot id="base" label={t("imgIn.dropBase")} onImage={dropBase}>
       <Section label={t("imgIn.base")} data-sec="base" flashKey="base">
-        {/* ★인퍼런스가 실리는 동안에는 베이스가 안 나간다 (둘 다 인페인트 경로다). 감추지 않고 흐리게 두고 이유를 적는다 */}
-        {ride.infer && (
-          <span data-base-blocked style={{ fontSize: "var(--text-2xs)", color: "var(--ink-faint)", lineHeight: 1.45 }}>
-            {t("imgIn.inferNoBase")}
-          </span>
-        )}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "var(--sp-2)",
-            ...(ride.infer ? { opacity: 0.45, pointerEvents: "none" as const } : null),
-          }}
-        >
         {s.baseImage ? (
           <Card
             src={`data:image/png;base64,${s.baseImage}`}
@@ -520,7 +421,6 @@ export function ImageInputPanel({
             />
           </>
         )}
-        </div>
       </Section>
       </DropSlot>
       )}
@@ -723,18 +623,15 @@ export const INPUT_ZONE = "image-input";
 
 /** 씬·큰 그림에서 끌어온 그림을 받는 칸 (저장된 그림 `image` · 미저장 `imageInput`).
  *  ★받는 자리는 그 절 전체다. 표시는 앱의 공통 양식이고(`cards/DropVeil`), 어둠 위로 올리는 것은
- *    이 칸이 아니라 묶음 전체다 (`OptionsPanel` 의 `opt-img` 에 `spot`).
- *  ★`off` 면 안 받는다. */
+ *    이 칸이 아니라 묶음 전체다 (`OptionsPanel` 의 `opt-img` 에 `spot`). */
 function DropSlot({
   id,
   label,
-  off,
   onImage,
   children,
 }: {
   id: string;
   label: string;
-  off?: boolean;
   onImage: (img: DragImage, unsaved: boolean) => void;
   children: React.ReactNode;
 }) {
@@ -746,9 +643,9 @@ function DropSlot({
     onDrop: (d) => d.img && onImage(d.img, d.kind === "imageInput"),
   });
   return (
-    <div ref={off ? undefined : z.ref} style={{ position: "relative" }}>
+    <div ref={z.ref} style={{ position: "relative" }}>
       {children}
-      {!off && z.active && <DropVeil over={z.over} label={label} name={`input-${id}`} />}
+      {z.active && <DropVeil over={z.over} label={label} name={`input-${id}`} />}
     </div>
   );
 }
@@ -1052,8 +949,7 @@ export function ImageInputBadge() {
   // ★모델을 바꾸면 딸려 바뀐다 — V5 로 가면 바이브가 통째로 빠진다
   useGen((g) => g.params.model);
   const ride = s.riding();
-  // ★인퍼런스가 실리면 베이스는 안 나간다 (`payload`). 세지 않는다
-  const n = (s.baseImage && !ride.infer ? 1 : 0) + ride.vibes.length + ride.refs.length + (ride.infer ? 1 : 0);
+  const n = (s.baseImage ? 1 : 0) + ride.vibes.length + ride.refs.length;
   if (!n) return null;
   return (
     <span
@@ -1098,13 +994,12 @@ function inputTip(
     for (const it of list.slice(0, TIP_MAX)) out.push(t("imgIn.sumItem", { name: it.name }));
     if (list.length > TIP_MAX) out.push(t("imgIn.sumMore", { n: list.length - TIP_MAX }));
   };
-  if (s.baseImage && !ride.infer) {
-    // ★베이스 그림에는 켜고 끄는 스위치가 없어 걸려 있으면 언제나 나간다 (인퍼런스가 실릴 때만 빼고)
+  if (s.baseImage) {
+    // ★베이스 그림에는 켜고 끄는 스위치가 없다 — 걸려 있으면 언제나 나간다
     out.push(t("imgIn.sumBase", { mode: t(s.baseMode === "inpaint" ? "imgIn.inpaint" : "imgIn.i2i") }));
     if (s.baseName) out.push(t("imgIn.sumItem", { name: s.baseName }));
   }
   group(t("imgIn.vibe"), ride.vibes);
   group(t("imgIn.ref"), ride.refs);
-  group(t("imgIn.inference"), ride.infer ? [ride.infer] : []);
   return out.join("\n");
 }

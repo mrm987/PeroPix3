@@ -709,10 +709,6 @@ class GenBody(BaseModel):
     #   자를 그림은 `base_image` 다 — **파일 경로를 받지 않는다** (사용자 지적 2026-08-20:
     #   갤러리·드롭 그림에는 워크스페이스 경로가 없어 기능이 통째로 막혀 있었다).
     inpaint_rect: dict | None = None
-    #: ★★인퍼런스 (설계 `docs/inference-design.md`). 화면이 정한 배치를 싣는다 (`src/lib/inference.ts`):
-    #:  `{image, name, pick:[w,h], canvas:[W,H], ref:[x,y,w,h], keep:[..], crop:[..]}`.
-    #:  서버는 그 숫자대로 캔버스·마스크를 그리고 결과 칸만 잘라 남긴다 (`_inference_of`).
-    inference: dict | None = None
     # ★화면이 결과를 묶는 **진짜 키**. 폴더는 사람이 읽을 수 있게 이름을 그대로 쓰지만,
     #   이름은 바뀌므로 이름으로 묶으면 이름을 고치는 순간 결과가 화면에서 사라진다.
     #   (옛 레코드에는 없다 — 클라이언트가 id 우선·이름 폴백으로 읽는다)
@@ -1484,7 +1480,7 @@ async def list_workspaces():
 #: 목록에서 빼는 무거운 항목 — 화면은 목록에서 이것들을 안 읽는다.
 #: ★2026-08-22 부터 이 값들은 애초에 색인에 없다 (`workspace.ENV_NAME`). 여기는 **안전망**으로
 #:   남긴다 — 쪼개기 전에 적힌 줄이나 옛 백업을 되돌린 파일이 섞여도 화면으로 새지 않는다.
-HEAVY_REC = ("resolved", "env", "inference")
+HEAVY_REC = ("resolved", "env")
 
 
 def _light(rec: dict) -> dict:
@@ -1612,11 +1608,6 @@ async def gallery_base(ws: str, file: str):
     ★강도·노이즈는 페이로드의 **본이름 그대로** 읽는다 (`strength`·`noise`).
       인페인트는 마스크가 함께 있어야 그 모드로 돌아간다."""
     heavy = await asyncio.to_thread(store.heavy_of, ws, file)
-    # ★★인퍼런스로 뽑은 그림은 **베이스가 없다.** 보낸 페이로드의 `image` 는 참조를 붙인 넓은 캔버스라,
-    #   그것을 베이스로 되살리면 다음 생성이 캔버스 전체를 인페인트한다. 참조와 해상도 칸 값을 돌려준다
-    inf = heavy.get("inference")
-    if isinstance(inf, dict) and inf.get("image"):
-        return {"image": "", "inference": {k: inf.get(k) for k in ("image", "name", "pick", "aux")}}
     par = (heavy.get("resolved") or {}).get("parameters") or {}
     img = par.get("image")
     if not isinstance(img, str) or not img:
@@ -1913,81 +1904,6 @@ def _quality_preset_of(body: GenBody) -> str:
     return "standard" if body.quality_tags else "none"
 
 
-#: 인퍼런스가 기본 프롬프트에 넣는 태그 (NAI 공식 문서의 기법, 설계 문서 2번)
-INFERENCE_TAG = "reference inset"
-
-
-def _rect(v, W: int, H: int) -> tuple[int, int, int, int]:
-    """`[x, y, w, h]` 를 캔버스 안의 정수 사각형으로. 벗어나면 400 이다 (화면이 계산한 값이라 벗어날 일이 없다)"""
-    try:
-        x, y, w, h = (int(n) for n in v)
-    except (TypeError, ValueError):
-        raise HTTPException(400, "인퍼런스 배치가 잘못되었습니다")
-    if w <= 0 or h <= 0 or x < 0 or y < 0 or x + w > W or y + h > H:
-        raise HTTPException(400, "인퍼런스 배치가 캔버스를 벗어났습니다")
-    return x, y, w, h
-
-
-def _inference_of(body: GenBody) -> dict | None:
-    """실어 온 인퍼런스를 검사해 쓸 모양으로. 없거나 강화면 None.
-
-    ★강화는 건너뛴다. 강화 창도 이미지 입력 조각을 싣지만(`EnhanceDialog`), 강화의 베이스는 원본 파일이다."""
-    inf = body.inference
-    if not inf or body.enhance_from:
-        return None
-    if not isinstance(inf, dict) or not isinstance(inf.get("image"), str) or not inf["image"]:
-        raise HTTPException(400, "인퍼런스 참조 그림이 없습니다")
-    try:
-        W, H = (int(n) for n in inf.get("canvas") or ())
-    except (TypeError, ValueError):
-        raise HTTPException(400, "인퍼런스 캔버스 크기가 잘못되었습니다")
-    if W <= 0 or H <= 0 or W % 64 or H % 64 or W * H > nai.UPSCALE_MAX_PX:
-        raise HTTPException(400, "인퍼런스 캔버스 크기가 잘못되었습니다")
-    crop = _rect(inf.get("crop"), W, H)
-    x, y, w, h = crop
-    aux = inf.get("aux")
-    return {"image": inf["image"], "canvas": (W, H), "ref": _rect(inf.get("ref"), W, H),
-            "keep": _rect(inf.get("keep"), W, H), "crop": crop,
-            # 보조 프롬프트 (화면의 `INFER_AUX`). 끄면 안 온다
-            "aux": aux.strip() if isinstance(aux, str) and aux.strip() else None,
-            # 중간 그림은 크기가 다를 수 있어 비율로 자른다 (`imgutil.preview_jpeg`)
-            "frac": (x / W, y / H, (x + w) / W, (y + h) / H)}
-
-
-def _apply_inference(req: nai.GenRequest, inf: dict) -> None:
-    """요청을 인퍼런스로 바꾼다: 캔버스·마스크 · 캔버스 크기 · `reference inset` · 보조 프롬프트 · 캐릭터 좌표.
-
-    ★보조 프롬프트는 켜 두었을 때만 온다. 글은 화면 한 곳(`lib/inference` 의 `INFER_AUX`)에 있다 (사용자 지시 2026-09-29).
-    ★프롬프트·UC·프리셋은 그 밖에 건드리지 않는다 (사용자 결정 2026-09-29, 설계 문서 4번 3).
-    ★캐릭터 좌표는 **결과 칸 기준**으로 온다 (배치 판이 해상도 칸의 비율을 쓴다). 캔버스 좌표로 옮긴다.
-      좌표를 안 쓰는 캐릭터가 하나뿐이면 결과 칸 가운데에 둔다 (실험이 그렇게 쟀다, 설계 문서 6번).
-      여럿이면 좌표 없이 둔다. 마스크가 결과 칸만 열어 두므로 거기 그려진다."""
-    W, H = inf["canvas"]
-    req.base_image, req.base_mask = imgutil.inference_canvas(inf["image"], (W, H), inf["ref"], inf["keep"])
-    req.base_mode = "inpaint"
-    req.base_inpaint_strength = 1.0
-    req.base_noise = 0.0
-    req.width, req.height = W, H
-    # 베이스 프롬프트 맨 앞에 `reference inset` · 보조 프롬프트 차례로 (이미 있으면 안 넣는다)
-    head = [t for t in (INFERENCE_TAG, inf.get("aux")) if t and t not in req.prompt]
-    if head:
-        req.prompt = ", ".join(head + ([req.prompt] if req.prompt.strip() else []))
-    cx, cy, cw, ch = inf["crop"]
-    lone = len([c for c in req.characters if (c.prompt or "").strip()]) == 1
-    for c in req.characters:
-        if not c.use_coord and not lone:
-            continue
-        at = c.center if c.use_coord and c.center else {"x": 0.5, "y": 0.5}
-        c.center = {"x": round((cx + float(at.get("x", 0.5)) * cw) / W, 4),
-                    "y": round((cy + float(at.get("y", 0.5)) * ch) / H, 4)}
-        c.use_coord = True
-
-
-def _inference_record(inf: dict) -> dict:
-    """레코드에 남기는 인퍼런스 (참조 원본 · 이름 · 해상도 칸 값 · 배치)"""
-    return {k: inf.get(k) for k in ("image", "name", "pick", "canvas", "ref", "keep", "crop", "aux")}
-
-
 def _req_of(body: GenBody) -> nai.GenRequest:
     return nai.GenRequest(
         prompt=body.prompt,
@@ -2064,10 +1980,6 @@ async def _generate_one(body: GenBody) -> dict:
         req.width = nai.align64(math.floor(w * sc))
         req.height = nai.align64(math.floor(h * sc))
 
-    inf = _inference_of(body)
-    if inf:
-        _apply_inference(req, inf)
-
     # ★타일 인페인트 — **잘라낸 조각만** 보내고 결과를 원본 자리에 되붙인다.
     #   정본은 `docs/naia-bgcomp-survey.md` 5절. 없던 것은 「원본 해상도를 지킨 채 일부만
     #   고치는 것」이다: 지금 경로는 원본 전체를 보내고 NAI 가 요청 크기로 **줄여서** 그려
@@ -2140,7 +2052,7 @@ async def _generate_one(body: GenBody) -> dict:
                 img, step = item
                 try:
                     # ★줄이는 것도 여기서 한다 — 받는 쪽은 아무것도 안 기다려야 한다
-                    small = await asyncio.to_thread(imgutil.preview_jpeg, img, 85, inf["frac"] if inf else None)
+                    small = await asyncio.to_thread(imgutil.preview_jpeg, img)
                 except Exception as e:
                     print(f"[스트림] 중간 그림을 줄이지 못했습니다 (건너뜀): {e}")
                     continue
@@ -2195,10 +2107,6 @@ async def _generate_one(body: GenBody) -> dict:
         finally:
             tile_src.close()
 
-    # ★인퍼런스는 결과 칸만 남긴다. 합성(위)은 칠한 자리 밖에만 섞이는 띠를 두므로 결과 칸은 NAI 가 그린 그대로다
-    if inf:
-        png = imgutil.crop_png(png, *inf["crop"])
-
     # 저장 자리·이름은 `store.store_output` 하나가 정한다 (그 메서드 주석)
     # ★옛 워크스페이스가 `jpg` 를 들고 있으면 **PNG 로 떨어뜨린다** — 조용히 투명을
     #   잃는 형식으로 저장하지 않는다 (사용자 결정 2026-08-23)
@@ -2252,8 +2160,6 @@ async def _generate_one(body: GenBody) -> dict:
                 #     **다른 그림의 구조**가 붙는다. 그래서 뽑을 때 것을 왕복시킨다
                 #     (구조뿐이라 작다. `resolved` 는 base64 가 들어 있어 여전히 안 보낸다).
                 "env": shot_env,
-                # ★인퍼런스도 같은 이유로 왕복시킨다 (「파일로 저장」한 그림에서 설정 불러오기가 참조를 되살린다)
-                "inference": _inference_record(body.inference) if inf else None,
                 "workspace": body.workspace}
 
     # ★씬 번호는 탐색기에서 순서를 만들고, **씬 이름**은 그 파일이 무엇인지 알려 준다
@@ -2282,8 +2188,6 @@ async def _generate_one(body: GenBody) -> dict:
             "resolved": recordsdb.recorded(payload),
             # ★위에서 한 번 정한 것을 쓴다 (`shot_env` 의 ★주) — 미저장으로 돌려준 것과 같아야 한다
             "env": shot_env,
-            # ★인퍼런스였으면 참조와 배치를 남긴다. 「설정 불러오기」가 이것으로 인퍼런스 칸을 되살린다 (`gallery_base`)
-            "inference": _inference_record(body.inference) if inf else None,
         },
     )
     return {"ok": True, "file": rel, "seed": seed, "bytes": len(data), "ts": ts,
@@ -2400,8 +2304,6 @@ class SavePreviewBody(BaseModel):
     #: ★뽑을 때의 화면 구조 — 생성 응답으로 나갔던 것이 그대로 돌아온다 (`_generate_one` 의 ★주).
     #:  저장 시점의 화면에서 새로 짜면 그 사이 프롬프트를 고쳤을 때 다른 그림의 구조가 붙는다.
     env: dict | None = None
-    #: ★인퍼런스였으면 그 참조와 배치. 생성 응답으로 나갔던 것이 그대로 돌아온다 (`env` 와 같다)
-    inference: dict | None = None
 
 
 @app.post("/api/save-preview")
@@ -2441,7 +2343,6 @@ async def save_preview(body: SavePreviewBody):
         "seed": body.seed,
         # ★뽑을 때의 화면 구조 (위 `env` 의 ★주) — 이것이 있어야 「설정 불러오기」가 카드를 되살린다
         "env": body.env,
-        "inference": body.inference,
     }
     store.append_record(body.workspace, rec)
     # ★레코드를 통째로 돌려준다 — 화면이 목록을 다시 읽지 않고 한 줄만 얹으면 된다 (업스케일과 같다).

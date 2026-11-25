@@ -1540,7 +1540,7 @@ export const useWs = create<S>((set, get) => ({
       return usePreviews.getState().add({
         workspace: current, scene_group: tab.name, scene_group_id: tab.id, cell: cell.name, cell_id: cell.id,
         seed: it.seed, enhance_of: it.enhance_of, tab: tabName, cell_no: 1, exclude_slot_number: o.excludeNo,
-        env: it.env ?? null, inference: it.inference ?? null, b64: it.preview.b64, fmt: it.preview.fmt,
+        env: it.env ?? null, b64: it.preview.b64, fmt: it.preview.fmt,
       }).file;
     };
     const first = seat(file);

@@ -7,7 +7,6 @@ import { DROP_ACCEPT, readDrop, vibeFromCachePng, type DropRead } from "../lib/d
 import { hasMeta } from "../lib/metaApply";
 import { isNaiVibeFile } from "../lib/naiVibeFile";
 import { MAX_VIBES, pushVibe, useImageInput } from "../store/imageInput";
-import { INFERENCE_MODEL } from "../lib/inference";
 import { vibeDefaults } from "../lib/vibeDefaults";
 import { fitSizeToBase, modelCaps, useGen } from "../store/gen";
 import { useUi } from "../store/ui";
@@ -212,14 +211,6 @@ function Sheet({
     leave();
   };
 
-  /** 인퍼런스 참조로 (V5 Full 에서만 낸다, 설계 `docs/inference-design.md`) */
-  const asInfer = () => {
-    if (!m?.data) return;
-    useImageInput.getState().setInfer(m.data, name);
-    useUi.getState().reveal("left", "base", false);
-    leave();
-  };
-
   const asRef = async () => {
     if (!m?.data || busy) return;
     setBusy(true);
@@ -402,11 +393,6 @@ function Sheet({
           {cap.char_ref && !vibeFile && !!m?.data && (
             <button data-drop-ref disabled={busy} onClick={() => void asRef()} style={btn}>
               {t("imgIn.ref")}
-            </button>
-          )}
-          {model === INFERENCE_MODEL && !vibeFile && !!m?.data && (
-            <button data-drop-infer disabled={busy} onClick={asInfer} style={btn}>
-              {t("imgIn.inference")}
             </button>
           )}
           {/* ★★**갤러리에 그대로 넣는다** (사용자 지시 2026-08-25: *"현재는 설정 적용 후 한 번

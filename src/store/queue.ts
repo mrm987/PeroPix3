@@ -213,14 +213,12 @@ export function runningPendingId(groupId: string | null | undefined): string | n
   return lanes ? null : (mine[0]?.id ?? null);
 }
 
-/** 대기 칸에 적어 둘 **생성될 그림의 값** — 시드 · 결과 크기 · 저장 여부. 항목에 있으면 항목, 없으면 공통 값.
- *  ★인퍼런스는 캔버스로 나가고 결과는 잘라 낸 자리다 (`imageInput.payload` 의 `inference.crop`). */
+/** 대기 칸에 적어 둘 **생성될 그림의 값** — 시드 · 결과 크기 · 저장 여부. 항목에 있으면 항목, 없으면 공통 값. */
 function pendingLooks(base: Record<string, unknown>, it: Record<string, unknown>): Pick<Pending, "seed" | "size" | "unsaved"> {
   const pick = <T,>(k: string) => (it[k] ?? base[k]) as T | undefined;
   const seed = pick<number>("seed");
-  const crop = (pick<{ crop?: number[] }>("inference"))?.crop;
-  const w = crop?.[2] ?? pick<number>("width");
-  const h = crop?.[3] ?? pick<number>("height");
+  const w = pick<number>("width");
+  const h = pick<number>("height");
   return {
     seed: typeof seed === "number" ? seed : undefined,
     size: w && h ? { w, h } : undefined,

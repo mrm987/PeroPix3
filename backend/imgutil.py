@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import base64
 import io
-import json
 import math
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageFilter
 
 
 def ensure_png_base64(b64: str, force_reencode: bool = False) -> str:
@@ -423,7 +422,7 @@ def size_of_base64(b64: str) -> tuple[int, int]:
         return img.size
 
 
-def preview_jpeg(raw: bytes, quality: int = 85, crop: tuple[float, float, float, float] | None = None) -> bytes:
+def preview_jpeg(raw: bytes, quality: int = 85) -> bytes:
     """**형식만 바꿔 가볍게 한다** — 그리는 중인 중간 그림을 앱으로 흘릴 때 쓴다
     (`server.py` 의 `image_step`, 사용자 지시 2026-08-26).
 
@@ -438,15 +437,10 @@ def preview_jpeg(raw: bytes, quality: int = 85, crop: tuple[float, float, float,
       (실측 1024², b64 기준: JPEG q85 40KB·2ms / WebP q80 12KB·18~97ms). 여기서 아껴야 하는
       것은 **한 프레임에 드는 시간**이라 작은 쪽이 아니라 빠른 쪽을 고른다.
     ★품질을 아끼는 자리다 — **보고 버리는 그림**이라 원본에 손대지 않는다 (완성본은 그대로 PNG).
-    ★`crop` 은 **비율로 적은 자리** `(x0, y0, x1, y1)` 다. 인퍼런스는 결과 칸만 흘린다 (`server._inference_of`).
-      중간 그림의 크기가 요청 크기와 다를 수 있어 픽셀로 받지 않는다.
     """
     with Image.open(io.BytesIO(raw)) as im:
         im.load()
         out = im.convert("RGB")
-    if crop:
-        w, h = out.size
-        out = out.crop((round(crop[0] * w), round(crop[1] * h), round(crop[2] * w), round(crop[3] * h)))
     buf = io.BytesIO()
     out.save(buf, format="JPEG", quality=quality)
     return buf.getvalue()
@@ -456,52 +450,3 @@ def _png_b64(img: Image.Image) -> str:
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode("utf-8")
-
-
-def inference_canvas(ref_b64: str, canvas: tuple[int, int], ref: tuple[int, int, int, int],
-                     keep: tuple[int, int, int, int]) -> tuple[str, str]:
-    """인퍼런스의 캔버스와 마스크 (설계 `docs/inference-design.md` 4번).
-
-    ★배치는 **화면이 정한 숫자 그대로**다 (`src/lib/inference.ts` 의 `planFor`). 여기서 다시 계산하면
-      요금·결과 크기 표시와 실제가 갈린다.
-    ★흰 바탕에 참조를 `ref` 자리로 줄여 붙이고, `keep`(참조 칸 전체, 옆 여백 포함)만 검게 칠한 마스크를 만든다.
-      흰 곳이 다시 그려진다. 테두리는 두르지 않는다 (두르면 결과에 검은 틀이 따라 그려진다, 6-2).
-    ★투명한 참조는 **흰 바탕에 눕힌다.** 캔버스가 흰 바탕이라 검게 깔리면 칸 경계가 생긴다."""
-    W, H = canvas
-    with Image.open(io.BytesIO(base64.b64decode(ref_b64))) as src:
-        src.load()
-        im = src.convert("RGBA")
-    flat = Image.new("RGB", im.size, "white")
-    flat.paste(im, mask=im.getchannel("A"))
-    x, y, w, h = ref
-    out = Image.new("RGB", (W, H), "white")
-    out.paste(flat.resize((w, h), Image.LANCZOS), (x, y))
-    mask = Image.new("RGB", (W, H), "white")
-    kx, ky, kw, kh = keep
-    ImageDraw.Draw(mask).rectangle([kx, ky, kx + kw - 1, ky + kh - 1], fill="black")
-    return _png_b64(out), _png_b64(mask)
-
-
-def crop_png(png: bytes, x: int, y: int, w: int, h: int) -> bytes:
-    """다 만든 그림에서 한 자리만 잘라 낸다 (인퍼런스의 결과 칸).
-
-    ★tEXt 청크를 물려준다 (`paste_tile` 과 같은 이유). 그리고 NAI 메타데이터(`Comment`)의 `width`·`height` 를
-      **잘라 낸 크기**로 고친다. 그대로 두면 그림과 적힌 크기가 달라 다른 도구가 잘못 읽는다."""
-    with Image.open(io.BytesIO(png)) as im:
-        im.load()
-        info = dict(im.info)
-        out = im.crop((x, y, x + w, y + h))
-        if out.mode not in ("RGB", "RGBA"):
-            out = out.convert("RGB")
-    c = info.get("Comment")
-    if isinstance(c, str):
-        try:
-            d = json.loads(c)
-        except ValueError:
-            d = None
-        if isinstance(d, dict):
-            d["width"], d["height"] = w, h
-            info["Comment"] = json.dumps(d, ensure_ascii=False)
-    buf = io.BytesIO()
-    out.save(buf, format="PNG", pnginfo=_pnginfo_of(info))
-    return buf.getvalue()

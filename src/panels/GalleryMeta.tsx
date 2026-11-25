@@ -228,27 +228,10 @@ export async function applyRecordedBase(
     strength?: number;
     noise?: number;
     inpaint_strength?: number;
-    /** 인퍼런스로 뽑은 그림의 참조와 그때 해상도 칸 값 · 보조 프롬프트 (서버 `gallery_base`). 이때는 베이스가 없다 */
-    inference?: { image?: string; name?: string; pick?: number[]; aux?: string | null };
   } | null,
   name: string,
 ) {
   const im = useImageInput.getState();
-  // ★★인퍼런스 칸을 되살린다. 보낸 캔버스(참조를 붙인 넓은 그림)가 베이스로 돌아오면 안 된다 (설계 문서 3번)
-  const inf = got?.inference;
-  if (inf?.image) {
-    if (im.baseImage) im.clearBase();
-    im.setInfer(inf.image, inf.name || name);
-    // 보조 프롬프트도 그때대로 (그 스위치가 생기기 전 그림은 없이 뽑혔다)
-    im.setInferAux(!!inf.aux);
-    // 해상도 칸은 캔버스 크기가 아니라 **그때 고른 값**이다 (결과 크기 목록의 줄)
-    if (inf.pick?.length === 2)
-      useGen.setState({ params: { ...useGen.getState().params, width: inf.pick[0], height: inf.pick[1] } });
-    useUi.getState().reveal("left", "base", false);
-    return;
-  }
-  // ★없으면 비운다 (베이스·바이브와 같은 규칙). 이 그림에 없던 참조가 섞이면 재현이 어긋난다
-  if (im.infer) im.clearInfer();
   if (!got?.image) {
     if (im.baseImage) im.clearBase();
     return;

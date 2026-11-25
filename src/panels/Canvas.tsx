@@ -473,13 +473,10 @@ function SceneActions({ floated, pad }: { floated?: boolean; pad?: boolean }) {
         }
         /* ★★베이스 이미지도 **그때 것**을 되살린다 (사용자 지시 2026-08-22). 그림에는 안 남고
              보낸 페이로드 기록에만 있다 (`GalleryMeta` 의 `applyRecordedBase` ★주).
-           ★미저장 그림은 i2i 베이스를 안 들고 있다 (생성 응답에 페이로드가 안 실린다) — 인퍼런스만
-             들고 있어 그것만 되살린다 (서버 `gallery_base` 와 같은 모양). 없으면 베이스를 건드리지 않는다. */
+           ★미저장 그림에는 레코드가 없어 가져올 것도 없다 — `loadEnv` 와 같은 규칙이다. */
         loadBase={
           un
-            ? (un.inference as { image?: string } | null | undefined)?.image
-              ? async () => ({ image: "", inference: un.inference as { image?: string; name?: string; pick?: number[]; aux?: string | null } })
-              : undefined
+            ? undefined
             : async () =>
                 await api<{ image?: string }>(
                   `/api/workspaces/${encodeURIComponent(ws)}/base?file=${encodeURIComponent(file)}`,
@@ -930,7 +927,7 @@ function ScenePreview() {
                싱글 캔버스를 걷을 때 이 출발점이 씬 칸의 것과 함께 사라져 있었다
                (사용자 지적 2026-08-18). 고스트는 `DragLayer` 가 작게 그리므로 화면을 안 가린다.
              ★미저장은 이미지 입력 칸으로만 끈다 (`kind: "imageInput"`) — 파일이 없어 커버로 쓸 수 없다
-               (받는 쪽이 경로를 쓴다). 베이스·Inference 는 바이트를 그대로 받는다. */
+               (받는 쪽이 경로를 쓴다). 베이스는 바이트를 그대로 받는다. */
           onPointerMove={panMove}
           onPointerUp={panUp}
           onPointerDown={

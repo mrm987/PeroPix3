@@ -48,8 +48,6 @@ export type PreviewTake = Rec & {
    *  ★이것이 없으면 나중에 저장한 그림에서 「설정 불러오기」를 눌렀을 때 캐릭터 카드가
    *    통째로 사라지고 `#1`·`#2` 로 다시 만들어진다 (사용자 지적 2026-08-24). */
   env?: Record<string, unknown> | null;
-  /** 인퍼런스였으면 그 참조와 배치. `env` 와 같은 이유로 들고 있다가 되돌린다 (설정 불러오기가 참조를 되살린다) */
-  inference?: Record<string, unknown> | null;
   /** 별표 — 저장된 그림은 `selection.starred` 에 경로로 적히지만 이것에는 경로가 없어 여기 든다.
    *  「저장」하면 `saveTake` 가 새 경로로 옮겨 적는다. */
   starred?: boolean;
@@ -92,7 +90,6 @@ export const usePreviews = create<S>((set, get) => ({
       ws: String(m.workspace ?? ""),
       preview: { b64: String(m.b64 ?? ""), fmt: String(m.fmt ?? "png") },
       env: (m.env as Record<string, unknown>) ?? null,
-      inference: (m.inference as Record<string, unknown>) ?? null,
       save: {
         tab: (m.tab as string) ?? null,
         cell_no: m.cell_no == null ? null : Number(m.cell_no),
@@ -146,7 +143,6 @@ export const usePreviews = create<S>((set, get) => ({
         seed: it.seed,
         // ★뽑을 때의 구조를 그대로 돌려보낸다 (위 `env` 의 ★주)
         env: it.env ?? null,
-        inference: it.inference ?? null,
       }),
     });
     // ★파일이 된 **뒤에** 미리보기를 버린다. 먼저 버리면 저장이 실패했을 때 그림이 사라진다
