@@ -361,8 +361,8 @@ export const ko: Dict = {
     run: "인핸스 실행",
     button: "인핸스",
     targets: "대상",
-    excluded: "이미 강화한 {n}장 제외",
-    noTarget: "고른 것이 전부 이미 강화한 그림입니다",
+    excluded: "이미 인핸스한 {n}장 제외",
+    noTarget: "고른 것이 전부 이미 인핸스한 그림입니다",
     scaleAdjusted: "{n}장은 {s}배를 쓸 수 없어 낮은 배율로 나갑니다",
     measuring: "크기 읽는 중…",
     /** 강화는 그 그림의 메타데이터로 돈다. 없는 그림은 지금 화면 값으로 떨어진다 */
@@ -1475,7 +1475,7 @@ export const ko: Dict = {
   slots: {
     blockTags: "태그",
     picked: "{n}장 선택",
-    enhanceSkip: "아직 강화 안 한 것만 돌리기",
+    enhanceSkip: "아직 인핸스하지 않은 것만 돌리기",
     cardLabel: "SCENE CARD",
     numberHint: "파일 이름 앞에 붙는 번호입니다 (001-001.png)",
     seedReuse: "이 시드로 고정 (랜덤 끔)",
