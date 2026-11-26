@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { uniqueName } from "../lib/uniqueName";
+import { moveTo } from "../lib/moveTo";
+import { useReorder } from "../lib/useReorder";
+import { DropLine } from "../components/DropLine";
 import { useI18n } from "../i18n";
 import { SectionCard } from "../blocks/SectionCard";
 import { DestName, LineChecklist, LineHead, SceneCells } from "../panels/SceneCells";
@@ -201,6 +204,10 @@ function PoseBody({
   const chars = usePrompt((s) => s.chars).filter((c) => c.on);
   const cols = columnsOf(card);
   const patch = (i: number, p: Partial<PoseCard["cells"][number]>) => onChange({ cells: cells.map((x, k) => (k === i ? { ...x, ...p } : x)) });
+  /* ★씬 차례는 이름 앞 손잡이로 끌어 바꾼다 — 앱의 차례 바꾸기 하나(`useReorder` · `moveTo` · `DropLine`)이고,
+     이미지 편집의 효과 줄처럼 잔상은 안 그린다 (줄이 커서 띄우면 놓을 곳을 가린다) */
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const { register, handleProps, dragIdx, overIdx } = useReorder(cells.length, (from, to) => onChange({ cells: moveTo(cells, from, to) }), { within: listRef });
   const retarget = (col: LineDef, dest: string) =>
     col.id
       ? onChange({ lines: (card.lines ?? []).map((l) => (l.id === col.id ? { ...l, dest } : l)) })
@@ -231,59 +238,71 @@ function PoseBody({
           style={{ color: "var(--ink-faint)", display: "grid", padding: "0 2px" }}
         />
       </div>
-      {cells.map((c, i) => (
-        <div key={i} style={{ display: "flex", flexDirection: "column", gap: 3, padding: "var(--sp-2) 10px" }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <input
-              data-card-editor-cell
-              value={c.name}
-              onChange={(e) => patch(i, { name: e.target.value })}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                background: "transparent",
-                border: "none",
-                padding: 0,
-                fontSize: "var(--text-2xs)",
-                fontWeight: "var(--w-semi)",
-                color: "var(--ink-soft)",
-              }}
-            />
-            {/* ★마지막 한 칸은 못 뺀다 — 씬이 없는 세트는 이 카드가 할 일이 없다 */}
-            {cells.length > 1 && (
-              <button
-                data-card-editor-delcell={i}
-                onClick={() => onChange({ cells: cells.filter((_, k) => k !== i) })}
-                data-tip={t("cards.removeScene")}
-                style={{ color: "var(--ink-faint)", display: "grid", padding: "0 2px" }}
-              >
-                {Icon.close12}
-              </button>
-            )}
-          </span>
-          {/* ★★칸은 씬 표와 **같은 부품**이다 (`SceneCells`) — 칩 클릭·휠 가중치·자동완성·서랍 드롭이 여기서도 같게 먹는다 */}
-          <div style={{ border: "1px solid var(--line)", borderRadius: "var(--r-1)", overflow: "hidden" }}>
-            <SceneCells
-              id={`${card.id}:${i}`}
-              zone={`cardedit-${card.id}-${i}`}
-              set={card}
-              cell={c}
-              onChange={(p) => patch(i, p)}
-              vert
-              expanded
-              label={
-                cols.length > 1 || cols[0].dest !== "base"
-                  ? (col) => (
-                      <span style={{ width: 62, flexShrink: 0, padding: "5px 4px", fontSize: "var(--text-2xs)", color: "var(--ink-faint)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        <DestName dest={col.dest} />
-                      </span>
-                    )
-                  : undefined
-              }
-            />
-          </div>
-        </div>
-      ))}
+      <div ref={listRef} data-card-editor-cells style={{ display: "flex", flexDirection: "column" }}>
+        {cells.map((c, i) => (
+          <Fragment key={i}>
+            <DropLine on={dragIdx != null && overIdx === i} />
+            <div ref={register(i)} data-card-editor-row={i} style={{ display: "flex", flexDirection: "column", gap: 3, padding: "var(--sp-2) 10px", opacity: dragIdx === i ? 0.35 : 1 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                {/* 하나뿐이면 바꿀 차례가 없다 */}
+                {cells.length > 1 && (
+                  <span data-card-editor-grip={i} {...handleProps(i)} style={{ ...handleProps(i).style, display: "grid", color: "var(--ink-faint)" }}>
+                    {Icon.grip}
+                  </span>
+                )}
+                <input
+                  data-card-editor-cell
+                  value={c.name}
+                  onChange={(e) => patch(i, { name: e.target.value })}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    background: "transparent",
+                    border: "none",
+                    padding: 0,
+                    fontSize: "var(--text-2xs)",
+                    fontWeight: "var(--w-semi)",
+                    color: "var(--ink-soft)",
+                  }}
+                />
+                {/* ★마지막 한 칸은 못 뺀다 — 씬이 없는 세트는 이 카드가 할 일이 없다 */}
+                {cells.length > 1 && (
+                  <button
+                    data-card-editor-delcell={i}
+                    onClick={() => onChange({ cells: cells.filter((_, k) => k !== i) })}
+                    data-tip={t("cards.removeScene")}
+                    style={{ color: "var(--ink-faint)", display: "grid", padding: "0 2px" }}
+                  >
+                    {Icon.close12}
+                  </button>
+                )}
+              </span>
+              {/* ★★칸은 씬 표와 **같은 부품**이다 (`SceneCells`) — 칩 클릭·휠 가중치·자동완성·서랍 드롭이 여기서도 같게 먹는다 */}
+              <div style={{ border: "1px solid var(--line)", borderRadius: "var(--r-1)", overflow: "hidden" }}>
+                <SceneCells
+                  id={`${card.id}:${i}`}
+                  zone={`cardedit-${card.id}-${i}`}
+                  set={card}
+                  cell={c}
+                  onChange={(p) => patch(i, p)}
+                  vert
+                  expanded
+                  label={
+                    cols.length > 1 || cols[0].dest !== "base"
+                      ? (col) => (
+                          <span style={{ width: 62, flexShrink: 0, padding: "5px 4px", fontSize: "var(--text-2xs)", color: "var(--ink-faint)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            <DestName dest={col.dest} />
+                          </span>
+                        )
+                      : undefined
+                  }
+                />
+              </div>
+            </div>
+          </Fragment>
+        ))}
+        <DropLine on={dragIdx != null && overIdx === cells.length} />
+      </div>
       {!cells.length && (
         <span style={{ padding: "var(--sp-3) 10px", fontSize: "var(--text-2xs)", color: "var(--ink-faint)" }}>
           {t("cards.editNoCells")}
