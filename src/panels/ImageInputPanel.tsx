@@ -136,6 +136,16 @@ export function ImageInputPanel({
       toast(String(e), "warn");
     }
   };
+  /** ★꺼 둔 섹션에 놓아도 켠다. 밖에서 떨군 그림을 레퍼런스로 넣을 때와 같다 (`app/DropImport` 의 `asRef`) */
+  const dropRef = async (img: DragImage, unsaved: boolean) => {
+    try {
+      const g = await dragged(img, unsaved);
+      s.setRefOn(true);
+      s.addRef({ image: g.data, name: g.name, mode: "character&style", strength: 1, fidelity: 1 });
+    } catch (e) {
+      toast(String(e), "warn");
+    }
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-5)" }}>
@@ -219,6 +229,7 @@ export function ImageInputPanel({
       )}
 
       {cap.char_ref && (
+      <DropSlot id="ref" label={t("imgIn.dropRef")} onImage={dropRef}>
       <Section label={t("imgIn.ref")} help={t("imgIn.refHint")} on={s.refOn} onToggle={s.setRefOn} data-sec="ref">
         {/* ★켜 둔 것이 안 나가는 까닭은 **지금 상태**라 적어 둔다 (공홈도 같은 두 줄을 띄운다).
             인페인트에 레퍼런스를 못 받는 모델(V5) · Outfit 을 못 받는 모델(V4.5) */}
@@ -313,6 +324,7 @@ export function ImageInputPanel({
           onPath={addRefPath}
         />
       </Section>
+      </DropSlot>
       )}
 
       {!refsOnly && (

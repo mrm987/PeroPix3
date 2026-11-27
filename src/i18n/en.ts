@@ -456,6 +456,7 @@ export const en = {
     refMasked: "This model does not take Precise Reference while inpainting. The image is generated without the references.",
     refOutfitSkip: "Outfit references aren't supported by this model and will be skipped.",
     dropBase: "Use as the base image",
+    dropRef: "Use as a reference",
     strength: "Strength",
     refStrength: "Reference Strength",
     info: "Information Extracted",

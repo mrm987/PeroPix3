@@ -454,6 +454,7 @@ export const ja: Dict = {
     refMasked: "このモデルはインペイントで Precise Reference を受け付けません。リファレンスなしで生成されます。",
     refOutfitSkip: "このモデルは Outfit リファレンスに対応していません。そのリファレンスは除外されます。",
     dropBase: "ベース画像に",
+    dropRef: "レファレンスに",
     strength: "Strength",
     refStrength: "Reference Strength",
     info: "Information Extracted",

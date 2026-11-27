@@ -467,6 +467,7 @@ export const ko: Dict = {
     refOutfitSkip: "이 모델은 Outfit 레퍼런스를 받지 않습니다. 그 레퍼런스는 빠집니다.",
     /** 씬·큰 그림을 끌어 이 칸 위에 올렸을 때 (`ImageInputPanel` 의 `DropSlot`) */
     dropBase: "베이스 이미지로",
+    dropRef: "레퍼런스로",
     strength: "Strength",
     refStrength: "Reference Strength",
     info: "Information Extracted",
